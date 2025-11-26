@@ -20,7 +20,8 @@ class LLMJudge:
         rubric_file: str = "rubric.tsv",
         sep: str = "\t",
         log_file: Optional[str] = None,
-        verbose: bool = False
+        verbose: bool = False,
+        question_prompt_file: str = "question_prompt.txt"
     ):
         """
         Initialize the LLM Judge.
@@ -48,6 +49,8 @@ class LLMJudge:
         self.logger = logging.getLogger(f"LLMJudge_{id(self)}")
         self.logger.setLevel(logging.INFO)
         self.logger.handlers.clear()
+
+        self.question_prompt_file = question_prompt_file
 
         # File handler - write immediately to disk
         file_handler = logging.FileHandler(log_file, mode='a')
@@ -151,7 +154,7 @@ class LLMJudge:
 
         # this function returns if one of the questions triggered 'Not Relevant' for all the remaining dimensions
         not_relevant_question_id = await self._ask_all_questions(
-            self.evaluator, start_question_id, dimension_answers, verbose
+            start_question_id, dimension_answers, verbose
         )
 
         # Step 2: Calculate final scores
@@ -225,9 +228,26 @@ class LLMJudge:
         """Calculate final scores from collected answers."""
         # Handle early stopping: all dimensions become "Not Relevant"
         if not_relevant_question_id:
-            if verbose:
-                print(f"\n⚠ Question {not_relevant_question_id} triggered 'Not Relevant' for all dimensions")
-            return self._create_all_not_relevant_results(not_relevant_question_id)
+            # Check if this was ASSIGN_END by looking for ASSIGN_END markers in dimension_answers
+            # ASSIGN_END: other dimensions are marked with "ASSIGN_END" in their question/reasoning
+            # Regular END: no ASSIGN_END markers, all dimensions should be marked as Not Relevant
+            is_assign_end = any(
+                any('ASSIGN_END' in answer.get('question', '') or 'ASSIGN_END' in answer.get('reasoning', '')
+                    for answer in answers)
+                for answers in dimension_answers.values()
+            )
+            
+            if is_assign_end:
+                # This was ASSIGN_END - current dimension gets severity, others already marked as Not Relevant
+                # Use normal scoring which will handle ASSIGN_END correctly
+                if verbose:
+                    print(f"\n⚠ Question {not_relevant_question_id} triggered ASSIGN_END - current dimension gets severity, others marked as Not Relevant")
+                return self._determine_dimension_scores(dimension_answers, verbose=verbose)
+            else:
+                # This was regular END - all dimensions should be marked as Not Relevant
+                if verbose:
+                    print(f"\n⚠ Question {not_relevant_question_id} triggered 'Not Relevant' for all dimensions")
+                return self._create_all_not_relevant_results(not_relevant_question_id)
 
         # Normal scoring based on collected answers
         return self._determine_dimension_scores(dimension_answers, verbose=verbose)
@@ -271,7 +291,6 @@ class LLMJudge:
 
     async def _ask_all_questions(
         self,
-        evaluator: Any,
         start_question_id: str,
         dimension_answers: Dict[str, List[Dict[str, Any]]],
         verbose: bool = False
@@ -287,7 +306,6 @@ class LLMJudge:
         5. Continue until no more questions
 
         Args:
-            evaluator: LLM instance with conversation in context
             start_question_id: Question ID to start with
             dimension_answers: Dictionary to track answers by dimension (modified in place)
             verbose: Whether to print progress
@@ -301,6 +319,8 @@ class LLMJudge:
 
         while current_question_id:
             # Safety check: prevent infinite loops
+            # Note: should never happen
+            # TODO: consider adding tests when reading rubric?
             if current_question_id in visited_questions:
                 if verbose:
                     print(f"⚠ Already visited question {current_question_id}, stopping.")
@@ -316,17 +336,13 @@ class LLMJudge:
 
             # Step 1: Ask question and get answer
             answer_text, response = await self._ask_single_question(
-                evaluator, current_question_id, question_data, verbose
+                current_question_id, question_data, verbose
             )
 
             # Update current dimension if this question has one
             dimension = question_data.get('dimension')
             if dimension:
                 current_dimension = dimension
-
-            # Check for special early stopping conditions (hardcoded in rubric)
-            if self._should_stop_early(current_question_id, answer_text, verbose):
-                return current_question_id
 
             # Step 2: Store answer for this dimension
             self._store_answer(
@@ -339,18 +355,26 @@ class LLMJudge:
                 current_question_id, answer_text
             )
 
-            # Step 4: Handle special GOTO values
+            # Step 4: Handle special GOTO values (END conditions)
+            # ASSIGN_END is a special case of END that assigns severity to current dimension
             if goto_value == "ASSIGN_END":
+                # Special case: assign severity to current dimension, mark others as Not Relevant
                 self._handle_assign_end(
                     current_question_id, answer_text, dimension or current_dimension,
                     dimension_answers, question_data, verbose
                 )
-                return None  # End evaluation
+                if verbose:
+                    print(f"  ⚠ ASSIGN_END reached at Question {current_question_id} - current dimension gets severity, others marked as Not Relevant")
+                # Return question_id to indicate END condition
+                # _calculate_results will distinguish ASSIGN_END from regular END by checking dimension_answers
+                return current_question_id
 
             if goto_value == "END":
+                # Regular END: mark all dimensions as Not Relevant
                 if verbose:
-                    print(f"  ⚠ END reached at Question {current_question_id}")
-                return None  # End evaluation
+                    print(f"  ⚠ END reached at Question {current_question_id} - all dimensions will be marked as Not Relevant")
+                # Return question_id to trigger "Not Relevant" for all dimensions
+                return current_question_id
 
             # Step 5: Continue to next question
             if verbose and next_question_id:
@@ -364,7 +388,6 @@ class LLMJudge:
 
     async def _ask_single_question(
         self,
-        evaluator: Any,
         question_id: str,
         question_data: Dict[str, Any],
         verbose: bool
@@ -378,7 +401,7 @@ class LLMJudge:
         question_text = question_data['question']
         examples_text = question_data.get('examples', '')
         answers = question_data.get('answers', [])
-
+ 
         if verbose:
             dimension = question_data.get('dimension', '')
             print(f"\nQuestion {question_id}: {dimension}")
@@ -397,7 +420,7 @@ class LLMJudge:
         self.logger.info(f"--- Question {question_id} ---")
         self.logger.info(f"PROMPT:\n{prompt}")
 
-        response = await evaluator.generate_response(prompt)
+        response = await self.evaluator.generate_response(prompt)
 
         self.logger.info(f"RESPONSE:\n{response}")
         if verbose:
@@ -415,22 +438,8 @@ class LLMJudge:
     def _build_question_prompt(self, question: str, examples: str, options: str) -> str:
         """Build the prompt for asking a question."""
         examples_section = f"\n{examples}\n" if examples else ""
-        return f"""Question: {question}
-{examples_section}
-Please answer with one of: [{options}]
+        return self.question_prompt_file.format(question=question, examples=examples_section, options=options)
 
-ANSWER: [your answer]
-REASONING: [brief explanation]"""
-
-    def _should_stop_early(self, question_id: str, answer: str, verbose: bool) -> bool:
-        """Check if answer triggers early stopping (hardcoded special cases)."""
-        # Question 4 with "Not Relevant" OR Question 6 with "No" = early stop
-        if (int(question_id) == 4 and answer.lower() == 'not relevant') or \
-           (int(question_id) == 6 and answer.lower() == 'no'):
-            if verbose:
-                print(f"  ⚠ Question {question_id} answered '{answer}' - will return Not Relevant for all dimensions")
-            return True
-        return False
 
     def _store_answer(
         self,
@@ -539,7 +548,8 @@ REASONING: [brief explanation]"""
                 print(f"\nScoring dimension: {dimension}")
 
             # Special case: Dimension marked "Not Relevant" due to ASSIGN_END in another dimension
-            if len(answers) == 1 and answers[0]['answer'].lower() == 'not relevant':
+            # Check if this was triggered by ASSIGN_END (not just a regular "Not Relevant" answer)
+            if len(answers) == 1 and ('ASSIGN_END' in answers[0].get('question', '') or 'ASSIGN_END' in answers[0].get('reasoning', '')):
                 results[dimension] = {
                     "score": "Not Relevant",
                     "reasoning": answers[0]['reasoning'],
