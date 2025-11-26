@@ -73,7 +73,7 @@ async def batch_evaluate_with_individual_judges(
                 evaluation_dict[f"{dimension}_yes_reasoning"] = values.get('yes_reasoning', '')
         except Exception as e:
             print(f"Error parsing evaluation: {e}")
-            print("the folloing dict is malformed")
+            print("the following dict is malformed")
             print(evaluation)
             evaluation_dict = {}
 
