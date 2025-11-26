@@ -9,12 +9,23 @@ from judge.question_navigator import QuestionNavigator
 
 class LLMJudge:
     """Evaluates conversations using LLM-based scoring with rubrics."""
-    
-    
+
+    # Supported judge models by provider
+    # TODO: this should go in some config file
+    SUPPORTED_JUDGES = {
+        "openai": ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"],
+        "claude": [
+            "claude-3-5-sonnet-20241022",
+            "claude-3-opus-20240229",
+            "claude-3-sonnet-20240229",
+        ],
+        "gemini": ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-pro"],
+        "llama": ["llama3:8b", "llama3:70b", "llama2:13b"],
+    }
+
     def __init__(
-        self, 
+        self,
         judge_model: str,
-        conversation_file: str,
         rubric_folder: str = "data",
         rubric_prompt_beginning_file: str = "rubric_prompt_beginning.txt",
         rubric_file: str = "rubric.tsv",
@@ -89,15 +100,13 @@ class LLMJudge:
         # Load dimensions from rubric
         self.dimensions, _ = load_rubric_structure(str(rubric_path), sep=sep)
 
-        self.logger.info(f"Loaded question-flow rubric with {len(self.question_flow_data)} questions")
+        self.logger.info(
+            f"Loaded question-flow rubric with {len(self.question_flow_data)} questions"
+        )
         self.logger.info(f"Loaded dimensions: {self.dimensions}")
-        print(f"Loaded question-flow rubric with {len(self.question_flow_data)} questions")
-        
-        # Create evaluator with conversation context
-        self.conversation_file = conversation_file
-        conversation = self.load_conversation(conversation_file)
-        # this actually instantiates the LLM client
-        self.evaluator = self._create_evaluator(conversation, conversation_file, verbose)
+        print(
+            f"Loaded question-flow rubric with {len(self.question_flow_data)} questions"
+        )
     
     
     def load_conversation(self, conversation_file: str) -> str:
@@ -147,6 +156,12 @@ class LLMJudge:
         """
         if self.question_flow_data is None:
             raise ValueError("Question flow rubric not loaded. Check rubric file exists.")
+
+        # Load conversation and create evaluator
+        conversation = self.load_conversation(conversation_file)
+        self.evaluator = self._create_evaluator(
+            conversation, conversation_file, verbose
+        )
 
         # Step 1: Navigate through questions and collect answers
         if start_question_id is None:
