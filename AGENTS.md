@@ -45,10 +45,6 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/) format:
 <type>: <description>
 
 [optional body]
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
 **Types:**
