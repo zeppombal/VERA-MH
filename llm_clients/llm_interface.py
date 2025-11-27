@@ -1,5 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Type, TypeVar
+
+from pydantic import BaseModel
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class LLMInterface(ABC):
@@ -17,6 +21,21 @@ class LLMInterface(ABC):
 
         Returns:
             Tuple of (response_text, metadata_dict)
+        """
+        pass
+
+    @abstractmethod
+    async def generate_structured_response(
+        self, message: Optional[str], response_model: Type[T]
+    ) -> T:
+        """Generate a structured response using Pydantic model.
+
+        Args:
+            message: The prompt message
+            response_model: Pydantic model class to structure the response
+
+        Returns:
+            Instance of the response_model with structured data
         """
         pass
 

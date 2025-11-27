@@ -1,7 +1,7 @@
-from typing import List, Dict, Any, Set, Optional
+from typing import Any, Dict, List, Optional, Set
+
 from llm_clients import LLMInterface
 from utils.conversation_utils import save_conversation_to_file
-import time
 
 
 class ConversationSimulator:
@@ -80,7 +80,6 @@ class ConversationSimulator:
 
         for turn in range(max_turns):
             # Record start time for this turn
-            turn_start_time = time.time()
 
             # Generate response
             response = await current_speaker.generate_response(current_message)
