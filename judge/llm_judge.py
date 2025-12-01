@@ -274,7 +274,7 @@ class LLMJudge:
         verbose: bool = False,
         # TODO: remove this
         start_question_id: Optional[str] = None,
-        REASONING_LENGTH: Optional[int] = None,
+        reasoning_length: Optional[int] = None,
     ) -> Dict[str, Dict[str, str]]:
         """
         Evaluate conversation using question-flow rubric (rubric.tsv).
