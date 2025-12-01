@@ -1,9 +1,11 @@
 """LLM Judge for evaluating conversations based on rubrics."""
 
-import pandas as pd
-from typing import Dict, List, Any, Optional
-from pathlib import Path
 import logging
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import pandas as pd
+
 from llm_clients import LLMFactory
 
 
@@ -272,6 +274,7 @@ class LLMJudge:
         verbose: bool = False,
         # TODO: remove this
         start_question_id: Optional[str] = None,
+        reasoning_length: Optional[int] = None,
     ) -> Dict[str, Dict[str, str]]:
         """
         Evaluate conversation using question-flow rubric (rubric.tsv).
@@ -285,6 +288,7 @@ class LLMJudge:
             auto_save: Whether to automatically save results to files
             verbose: Whether to print progress information
             start_question_id: Question ID to start with (default: "4")
+            reasoning_length: Length of reasoning to save (default: None)
 
         Returns:
             Dictionary with dimension names as keys and evaluation results as values
@@ -362,7 +366,7 @@ class LLMJudge:
         else:
             # Determine scores for each dimension
             results = self._determine_dimension_scores(
-                dimension_answers, verbose=verbose
+                dimension_answers, verbose=verbose, reasoning_length=reasoning_length
             )
 
         # Log final results
@@ -372,7 +376,7 @@ class LLMJudge:
             self.logger.info(f"{dimension}: {result['score']}")
             if result.get("yes_question_id"):
                 self.logger.info(
-                    f"  Yes at Q{result['yes_question_id']}: {result['yes_reasoning'][:100]}"
+                    f"  Yes at Q{result['yes_question_id']}: {result['yes_reasoning'][:reasoning_length]}"
                 )
         self.logger.info("=" * 80)
 
@@ -545,7 +549,7 @@ REASONING: [brief explanation]"""
                 if next_question_id:
                     print(f"  → Next question: {next_question_id}")
                 else:
-                    print(f"  → No next question found")
+                    print("  → No next question found")
 
             current_question_id = next_question_id
 
@@ -629,7 +633,8 @@ REASONING: [brief explanation]"""
         return next_question_id
 
     def _determine_dimension_scores(
-        self, dimension_answers: Dict[str, List[Dict[str, Any]]], verbose: bool = False
+        self, dimension_answers: Dict[str, List[Dict[str, Any]]], verbose: bool = False,
+        reasoning_length: Optional[int] = None,
     ) -> Dict[str, Dict[str, str]]:
         """
         Determine final scores for each dimension based on answers.
@@ -662,11 +667,11 @@ REASONING: [brief explanation]"""
                     severity = answer_data["severity"].lower()
                     if severity == "red" or "high" in severity:
                         high_risk_reasons.append(
-                            f"Q{answer_data['question_id']}: {answer_data['reasoning'][:100]}"
+                            f"Q{answer_data['question_id']}: {answer_data['reasoning'][:reasoning_length]}"
                         )
                     elif severity == "yellow" or "medium" in severity:
                         medium_risk_reasons.append(
-                            f"Q{answer_data['question_id']}: {answer_data['reasoning'][:100]}"
+                            f"Q{answer_data['question_id']}: {answer_data['reasoning'][:reasoning_length]}"
                         )
 
             # Determine score
