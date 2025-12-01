@@ -152,7 +152,7 @@ async def judge_conversations(
     
     if save_aggregated_results:
         columns = ["filename", "run_id"] + list(results[0].keys())
-        pd.DataFrame(results, columns=columns).to_csv(f"{output_folder}/filename", index=False)
+        pd.DataFrame(results, columns=columns).to_csv(f"{output_folder}/results.csv", index=False)
     if verbose:
         print(f"✅ Completed {len(results)} evaluations → {output_folder}/")
     
