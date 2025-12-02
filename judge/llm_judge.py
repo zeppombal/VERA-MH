@@ -4,6 +4,9 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import aiofiles
+
+from judge.file_cache import get_cached_file
 from judge.question_navigator import QuestionNavigator
 from judge.response_models import QuestionResponse
 from judge.utils import load_rubric_structure
@@ -105,9 +108,113 @@ class LLMJudge:
             f"Loaded question-flow rubric with {len(self.question_flow_data)} questions"
         )
 
-    def load_conversation(self, conversation_file: str) -> str:
+    @classmethod
+    async def create(
+        cls,
+        judge_model: str,
+        rubric_folder: str = "data",
+        rubric_prompt_beginning_file: str = "rubric_prompt_beginning.txt",
+        rubric_file: str = "rubric.tsv",
+        sep: str = "\t",
+        log_file: Optional[str] = None,
+        verbose: bool = False,
+        question_prompt_file: str = "question_prompt.txt",
+    ) -> "LLMJudge":
         """
-        Load conversation from file.
+        Async factory method to create LLMJudge with cached files.
+
+        Uses module-level cache to avoid repeated disk I/O.
+
+        Args:
+            judge_model: Model to use for judging
+            rubric_folder: Folder containing rubric files
+            rubric_prompt_beginning_file: File containing rubric prompt beginning
+            rubric_file: File containing the question-flow rubric
+            sep: Separator for the rubric file
+            log_file: Path to log file (default: logs/judge_{timestamp}.log)
+            verbose: Whether to print verbose output during initialization
+            question_prompt_file: File containing question prompt template
+
+        Returns:
+            Initialized LLMJudge instance
+        """
+        from judge.utils import load_rubric_structure_async
+
+        # Create instance without calling __init__
+        instance = cls.__new__(cls)
+
+        # Setup logger (same as __init__)
+        if log_file is None:
+            log_dir = Path("logs")
+            log_dir.mkdir(exist_ok=True)
+            from datetime import datetime
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_file = str(log_dir / f"judge_{timestamp}.log")
+
+        instance.logger = logging.getLogger(f"LLMJudge_{id(instance)}")
+        instance.logger.setLevel(logging.INFO)
+        instance.logger.handlers.clear()
+
+        file_handler = logging.FileHandler(log_file, mode="a")
+        file_handler.setLevel(logging.INFO)
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+        file_handler.setFormatter(formatter)
+        instance.logger.addHandler(file_handler)
+        instance.log_file = log_file
+
+        # Setup paths
+        rubric_path = Path(rubric_folder) / rubric_file
+        rubric_prompt_beginning_path = (
+            Path(rubric_folder) / rubric_prompt_beginning_file
+        )
+        instance.question_prompt_file = Path(rubric_folder) / question_prompt_file
+
+        # Validate files exist
+        for file_path in [
+            rubric_path,
+            rubric_prompt_beginning_path,
+            instance.question_prompt_file,
+        ]:
+            if not file_path.exists():
+                raise FileNotFoundError(f"File not found: {file_path}")
+
+        instance.judge_model = judge_model
+
+        # Log initialization
+        instance.logger.info("=== Initializing LLM Judge ===")
+        instance.logger.info(f"Judge model: {judge_model}")
+        instance.logger.info(f"Rubric folder: {rubric_folder}")
+        instance.logger.info(f"Log file: {log_file}")
+
+        # Load cached files
+        instance.rubric_prompt_beginning = await get_cached_file(
+            str(rubric_prompt_beginning_path)
+        )
+        instance.navigator = await QuestionNavigator.create(str(rubric_path), sep=sep)
+        instance.question_flow_data = instance.navigator.question_flow_data
+        instance.question_order = instance.navigator.question_order
+        instance.dimensions, _ = await load_rubric_structure_async(
+            str(rubric_path), sep=sep
+        )
+
+        instance.logger.info(
+            f"Loaded question-flow rubric with "
+            f"{len(instance.question_flow_data)} questions"
+        )
+        instance.logger.info(f"Loaded dimensions: {instance.dimensions}")
+        print(
+            f"Loaded question-flow rubric with "
+            f"{len(instance.question_flow_data)} questions"
+        )
+
+        return instance
+
+    async def load_conversation(self, conversation_file: str) -> str:
+        """
+        Load conversation from file asynchronously.
 
         Args:
             conversation_file: Path to conversation file
@@ -120,8 +227,8 @@ class LLMJudge:
         if not conversation_path.exists():
             raise FileNotFoundError(f"Conversation file not found: {conversation_path}")
 
-        with open(conversation_path, "r", encoding="utf-8") as f:
-            return f.read()
+        async with aiofiles.open(conversation_path, "r", encoding="utf-8") as f:
+            return await f.read()
 
     async def evaluate_conversation_question_flow(
         self,
@@ -156,7 +263,7 @@ class LLMJudge:
             )
 
         # Load conversation and create evaluator
-        conversation = self.load_conversation(conversation_file)
+        conversation = await self.load_conversation(conversation_file)
         self.evaluator = self._create_evaluator(
             conversation, conversation_file, verbose
         )
@@ -477,7 +584,9 @@ class LLMJudge:
         options_str = ", ".join(answer_options)
 
         # Build prompt
-        prompt = self._build_question_prompt(question_text, examples_text, options_str)
+        prompt = await self._build_question_prompt(
+            question_text, examples_text, options_str
+        )
 
         if verbose:
             print(f"  Options: {options_str}")
@@ -515,15 +624,18 @@ class LLMJudge:
         # Return the matched answer and reasoning
         return matched_answer, structured_response.reasoning
 
-    def _build_question_prompt(self, question: str, examples: str, options: str) -> str:
-        """Build the prompt for asking a question."""
+    async def _build_question_prompt(
+        self, question: str, examples: str, options: str
+    ) -> str:
+        """Build the prompt for asking a question using cached template."""
         examples_section = f"\n{examples}\n" if examples else ""
-        with open(self.question_prompt_file, "r", encoding="utf-8") as f:
-            prompt = f.read()
-            prompt = prompt.format(
-                question=question, examples_section=examples_section, options=options
-            )
-            return prompt
+
+        # Use cached file instead of reading each time
+        prompt_template = await get_cached_file(str(self.question_prompt_file))
+        prompt = prompt_template.format(
+            question=question, examples_section=examples_section, options=options
+        )
+        return prompt
 
     def _store_answer(
         self,

@@ -63,7 +63,7 @@ async def _evaluate_single_conversation_with_judge(
         Dict with filename, run_id, judge_model, judge_instance,
         and all dimension scores
     """
-    judge = LLMJudge(judge_model=judge_model)
+    judge = await LLMJudge.create(judge_model=judge_model)
 
     evaluation = await judge.evaluate_conversation_question_flow(
         conversation_file,

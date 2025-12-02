@@ -28,7 +28,7 @@ async def main(args):
     if args.conversation:
         # Single conversation with first judge model (single instance)
         first_model = next(iter(judge_models.keys()))
-        judge = LLMJudge(judge_model=first_model)
+        judge = await LLMJudge.create(judge_model=first_model)
         await judge_single_conversation(
             judge, args.conversation, args.rubrics, args.output
         )

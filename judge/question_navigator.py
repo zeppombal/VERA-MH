@@ -25,6 +25,37 @@ class QuestionNavigator:
         self.rubric_df = pd.read_csv(rubric_path, sep=sep)
         self.question_flow_data, self.question_order = self._parse_rubric()
 
+    @classmethod
+    async def create(cls, rubric_path: str, sep: str = "\t") -> "QuestionNavigator":
+        """
+        Async factory method to create QuestionNavigator with cached rubric.
+
+        Uses cached DataFrame to avoid repeated disk I/O.
+
+        Args:
+            rubric_path: Path to the rubric TSV file
+            sep: Separator for the rubric file (default: tab)
+
+        Returns:
+            Initialized QuestionNavigator instance
+
+        Raises:
+            FileNotFoundError: If rubric file doesn't exist
+        """
+        from judge.file_cache import get_cached_dataframe
+
+        instance = cls.__new__(cls)
+        instance.rubric_path = Path(rubric_path)
+
+        if not instance.rubric_path.exists():
+            raise FileNotFoundError(f"Rubric file not found: {rubric_path}")
+
+        # Use cached DataFrame
+        instance.rubric_df = await get_cached_dataframe(rubric_path, sep=sep)
+        instance.question_flow_data, instance.question_order = instance._parse_rubric()
+
+        return instance
+
     def _parse_rubric(self) -> tuple[Dict[str, Any], List[str]]:
         """
         Parse the rubric file into a navigable data structure.
