@@ -54,7 +54,7 @@ class QuestionNavigator:
             if question_id and question_id != 'nan':
                 # Save previous question if exists
                 # It means the current question is complete, so we need to save it
-                # we dont know if a question is complte until we get to a new one or to the end of the file
+                # we don't know if a question is complete until we get to a new one or to the end of the file
                 if current_question_id and current_question_data:
                     questions[current_question_id] = current_question_data
 
