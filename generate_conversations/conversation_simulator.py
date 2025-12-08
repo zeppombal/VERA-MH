@@ -1,7 +1,8 @@
-from typing import List, Dict, Any, Set, Optional
+import time
+from typing import Any, Dict, List, Optional, Set
+
 from llm_clients import LLMInterface
 from utils.conversation_utils import save_conversation_to_file
-import time
 
 
 class ConversationSimulator:
@@ -59,15 +60,17 @@ class ConversationSimulator:
         return False
 
     async def start_conversation(
-        self, initial_message: Optional[str] = None, max_turns: int = 10, 
-        max_total_words: Optional[int] = None
+        self,
+        max_turns: int,
+        initial_message: Optional[str] = None,
+        max_total_words: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         Start a conversation between the two LLMs with early stopping support.
 
         Args:
-            initial_message: Optional initial message to start the conversation
             max_turns: Maximum number of conversation turns
+            initial_message: Optional initial message (for the first speaker) to start the conversation. By default, the first speaker is the persona.
             max_total_words: Optional maximum total words across all responses
 
 
@@ -82,7 +85,6 @@ class ConversationSimulator:
         current_speaker = self.persona
         next_speaker = self.agent
 
-
         total_words = 0
         for turn in range(max_turns):
             # Record start time for this turn
@@ -90,8 +92,6 @@ class ConversationSimulator:
 
             # Generate response
             response = await current_speaker.generate_response(current_message)
-
-
 
             total_words += len(response.split())
             # Record this turn
@@ -106,7 +106,6 @@ class ConversationSimulator:
                 }
             )
 
-
             # Check if persona wants to end the conversation
             if self._should_terminate_conversation(response, current_speaker):
                 self.conversation_history[-1]["early_termination"] = True
@@ -114,9 +113,13 @@ class ConversationSimulator:
 
             # Check if we've reached the maximum total words
             # TODO: chatbot should not be hardcoded
-            if current_speaker.get_name() == "chatbot" and max_total_words is not None and total_words >= max_total_words:
+            if (
+                current_speaker.get_name() == "chatbot"
+                and max_total_words is not None
+                and total_words >= max_total_words
+            ):
                 break
-            
+
             # Switch speakers and use the response as the next input
             current_message = response
             current_speaker, next_speaker = next_speaker, current_speaker
