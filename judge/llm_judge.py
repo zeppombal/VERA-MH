@@ -26,7 +26,6 @@ class LLMJudge:
 
         Args:
             judge_model: Model to use for judging.
-            conversation_file: Path to conversation file to evaluate.
             rubric_folder: Folder containing rubric files
             rubric_file: File containing the question-flow rubric
             sep: Separator for the rubric file

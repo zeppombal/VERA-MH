@@ -54,7 +54,7 @@ class QuestionNavigator:
             if question_id and question_id != 'nan':
                 # Save previous question if exists
                 # It means the current question is complete, so we need to save it
-                # we dont know if a question is complte until we get to a new one or to the end of the file
+                # we don't know if a question is complete until we get to a new one or to the end of the file
                 if current_question_id and current_question_data:
                     questions[current_question_id] = current_question_data
 
@@ -80,7 +80,7 @@ class QuestionNavigator:
                 # Check if this row also has an answer (single-row question)
                 answer = str(row['Answer']).strip() if pd.notna(row['Answer']) else ""
                 if answer and answer != 'nan':
-                    # this means there is an explicit answer, and a path to it
+                    # this means there is an explicit answer, and a path to the next question (as specified by GOTO)
                     # If there is an explicit GOTO, use it
                     goto_raw = row['GOTO'] if pd.notna(row['GOTO']) else None
                     goto = str(int(goto_raw)) if goto_raw and isinstance(goto_raw, (int, float)) else (str(goto_raw).strip() if goto_raw else None)
