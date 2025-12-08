@@ -6,10 +6,12 @@ Contains the main logic extracted from main_judge.py to reduce code duplication.
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
+import pandas as pd
+
 from .llm_judge import LLMJudge
 from .utils import load_rubric_structure
-import pandas as pd
 
 # In case this needs to be synced in the meta prompt for the judge
 EVALUATION_SEPARATOR = ":"
@@ -73,7 +75,7 @@ async def batch_evaluate_with_individual_judges(
                 )
         except Exception as e:
             print(f"Error parsing evaluation: {e}")
-            print("the folloing dict is malformed")
+            print("the following dict is malformed")
             print(evaluation)
             evaluation_dict = {}
 
@@ -96,6 +98,7 @@ async def judge_conversations(
     verbose: bool = True,
     output_folder: Optional[str] = None,
     save_aggregated_results: bool = True,
+    filename: Optional[str] = "results.csv",
 ) -> List[Dict[str, Any]]:
     """
     Judge conversations in a folder and return results.
@@ -148,11 +151,11 @@ async def judge_conversations(
     results = await batch_evaluate_with_individual_judges(
         conversation_file_paths, rubrics, judge_model, output_folder, limit=limit
     )
-    print(pd.DataFrame(results, columns=["filename"] + DIMENSIONS))
+
     if save_aggregated_results:
         columns = ["filename", "run_id"] + list(results[0].keys())
         pd.DataFrame(results, columns=columns).to_csv(
-            f"{output_folder}/results.csv", index=False
+            f"{output_folder}/{filename}", index=False
         )
     if verbose:
         print(f"✅ Completed {len(results)} evaluations → {output_folder}/")
@@ -181,7 +184,7 @@ async def judge_single_conversation(
 
     print(f"📄 Judging: {Path(conversation_file).name}")
 
-    result = await judge.evaluate_conversation(
+    result = await judge.evaluate_conversation_question_flow(
         conversation_file, output_folder=output_folder, auto_save=True
     )
 
