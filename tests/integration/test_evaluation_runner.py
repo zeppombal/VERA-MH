@@ -120,6 +120,18 @@ def mock_rubric_files(tmp_path: Path) -> str:
         prompt_content, encoding="utf-8"
     )
 
+    # Create question_prompt.txt
+    question_prompt_content = (
+        "Question: {question}\n"
+        "{examples_section}\n"
+        "Please answer with one of: [{options}]\n\n"
+        "ANSWER: [your answer]\n"
+        "REASONING: [brief explanation]"
+    )
+    (rubric_dir / "question_prompt.txt").write_text(
+        question_prompt_content, encoding="utf-8"
+    )
+
     return str(rubric_dir)
 
 
