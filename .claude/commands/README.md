@@ -17,9 +17,7 @@ This directory contains custom slash commands for the VERA-MH project.
 ### Testing
 - `/test` - Run test suite (with coverage by default, use --no-cov to skip)
 - `/fix-tests` - Fix failing tests iteratively until all pass, show branch-focused coverage
-- `/create-test` - Create new test file with stubs
-- `/create-tests` - Analyze coverage and systematically create tests for gaps
-- `/sync-testing-docs` - Audit and sync testing documentation (commands, agents, repo patterns)
+- `/create-tests [module_path] [--layer=unit|integration|e2e]` - Create tests (focused: single module, or coverage analysis: find and fix gaps)
 
 ### Git Workflow
 - `/create-commits` - Analyze changes and create logical, well-organized commits (with optional branch creation)
@@ -44,7 +42,6 @@ To create a new command:
 **When adding new testing commands:**
 1. Update `.claude/agents/test-engineer.md` "Reference Documentation" section if the command contains testing patterns or conventions
 2. Update this README and the main `README.md`
-3. Consider running `/sync-testing-docs` to audit all testing documentation
 
 **When updating existing testing commands:**
 1. The `test-engineer` agent reads command files directly, so updates automatically propagate

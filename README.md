@@ -93,9 +93,7 @@ If you have Claude Code installed, you can use these custom commands:
 **Testing:**
 - `/test` - Run test suite (with coverage by default)
 - `/fix-tests` - Fix failing tests iteratively, show branch-focused coverage
-- `/create-test` - Create new test files
-- `/create-tests` - Analyze coverage and systematically create tests for gaps
-- `/sync-testing-docs` - Audit and sync testing documentation
+- `/create-tests [module_path] [--layer=unit|integration|e2e]` - Create tests (focused: single module, or coverage analysis: find and fix gaps)
 
 **Git Workflow:**
 - `/create-commits` - Create logical, organized commits (with optional branch creation)
