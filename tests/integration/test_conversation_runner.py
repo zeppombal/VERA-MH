@@ -143,9 +143,8 @@ TestPersona2\t25\tAsian\tshe/her\tTest background 2"""
 
 
 @pytest.mark.integration
-@pytest.mark.asyncio
 class TestConversationRunnerInit:
-    """Test ConversationRunner initialization."""
+    """Test ConversationRunner initialization (non-async tests)."""
 
     def test_init_with_basic_config(
         self,
