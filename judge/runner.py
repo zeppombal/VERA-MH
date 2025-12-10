@@ -391,13 +391,17 @@ async def judge_conversations(
         per_judge,
     )
 
-    if save_aggregated_results and results:
+    if save_aggregated_results:
         # Column order: filename, run_id, judge_model, judge_instance, dimensions
-        columns = ["filename", "run_id", "judge_model", "judge_instance"] + [
-            k
-            for k in results[0].keys()
-            if k not in ["filename", "run_id", "judge_model", "judge_instance"]
-        ]
+        if results:
+            columns = ["filename", "run_id", "judge_model", "judge_instance"] + [
+                k
+                for k in results[0].keys()
+                if k not in ["filename", "run_id", "judge_model", "judge_instance"]
+            ]
+        else:
+            # Use known dimensions from rubric
+            columns = ["filename", "run_id", "judge_model", "judge_instance"] + DIMENSIONS
         pd.DataFrame(results, columns=columns).to_csv(
             f"{output_folder}/{filename}", index=False
         )
