@@ -9,6 +9,7 @@ from judge.question_navigator import QuestionNavigator
 from judge.response_models import QuestionResponse
 from judge.utils import load_rubric_structure
 from llm_clients import LLMFactory
+from llm_clients.llm_interface import JudgeLLM
 
 
 class LLMJudge:
@@ -205,8 +206,15 @@ class LLMJudge:
 
     def _create_evaluator(
         self, conversation: str, conversation_file: str, verbose: bool
-    ):
-        """Create and configure the LLM evaluator with conversation context."""
+    ) -> JudgeLLM:
+        """Create and configure the LLM evaluator with conversation context.
+
+        Returns:
+            JudgeLLM instance configured for evaluation
+
+        Raises:
+            ValueError: If the judge model doesn't support structured output
+        """
         # Log evaluation start
         self.logger.info("=" * 80)
         self.logger.info(f"Starting evaluation: {conversation_file}")
@@ -225,11 +233,24 @@ class LLMJudge:
         )
         self.logger.info(f"SYSTEM PROMPT:\n{conversation_context_prompt[:500]}...")
 
-        return LLMFactory.create_llm(
+        # Create LLM instance
+        llm = LLMFactory.create_llm(
             model_name=self.judge_model,
             name="Question Flow Evaluator",
             system_prompt=conversation_context_prompt,
         )
+
+        # Validate that the LLM supports structured output
+        if not isinstance(llm, JudgeLLM):
+            raise ValueError(
+                f"Model '{self.judge_model}' does not support structured "
+                f"output generation. Judge operations require models with "
+                f"structured output support. Supported models: "
+                f"Claude (claude-*), OpenAI (gpt-*), Gemini (gemini-*). "
+                f"Not supported: Llama/Ollama models."
+            )
+
+        return llm
 
     def _calculate_results(
         self,

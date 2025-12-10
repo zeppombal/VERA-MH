@@ -7,12 +7,12 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel
 
 from .config import Config
-from .llm_interface import LLMInterface
+from .llm_interface import JudgeLLM
 
 T = TypeVar("T", bound=BaseModel)
 
 
-class GeminiLLM(LLMInterface):
+class GeminiLLM(JudgeLLM):
     """Gemini implementation using LangChain."""
 
     def __init__(

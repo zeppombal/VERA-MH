@@ -7,12 +7,12 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 from .config import Config
-from .llm_interface import LLMInterface
+from .llm_interface import JudgeLLM
 
 T = TypeVar("T", bound=BaseModel)
 
 
-class OpenAILLM(LLMInterface):
+class OpenAILLM(JudgeLLM):
     """OpenAI implementation using LangChain."""
 
     def __init__(
@@ -62,7 +62,8 @@ class OpenAILLM(LLMInterface):
             # Extract metadata from response - capturing all available fields
             self.last_response_metadata = {
                 "response_id": getattr(response, "id", None),
-                "model": self.model_name,  # Will be updated from response_metadata if available
+                # Will be updated from response_metadata if available
+                "model": self.model_name,
                 "provider": "openai",
                 "timestamp": datetime.now().isoformat(),
                 "response_time_seconds": round(end_time - start_time, 3),

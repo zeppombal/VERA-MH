@@ -7,12 +7,12 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 
 from .config import Config
-from .llm_interface import LLMInterface
+from .llm_interface import JudgeLLM
 
 T = TypeVar("T", bound=BaseModel)
 
 
-class ClaudeLLM(LLMInterface):
+class ClaudeLLM(JudgeLLM):
     """Claude implementation using LangChain."""
 
     def __init__(
