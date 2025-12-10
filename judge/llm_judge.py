@@ -753,7 +753,10 @@ class LLMJudge:
             for answer_data in answers:
                 if answer_data["answer"].lower() == "yes" and answer_data["severity"]:
                     self._add_severity_reason(
-                        answer_data, high_risk_reasons, medium_risk_reasons
+                        answer_data,
+                        high_risk_reasons,
+                        medium_risk_reasons,
+                        reasoning_length=100,
                     )
 
             # Check if the last answer triggered ASSIGN_END
@@ -766,6 +769,7 @@ class LLMJudge:
                         high_risk_reasons,
                         medium_risk_reasons,
                         is_assign_end=True,
+                        reasoning_length=100,
                     )
 
             # Determine final score based on collected severity issues

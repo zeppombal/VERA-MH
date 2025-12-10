@@ -1,10 +1,15 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Type, TypeVar
 
-from llm_clients.llm_interface import LLMInterface
+from llm_clients.llm_interface import JudgeLLM
+
+T = TypeVar("T")
 
 
-class MockLLM(LLMInterface):
-    """Mock LLM for testing without API calls."""
+class MockLLM(JudgeLLM):
+    """Mock LLM for testing without API calls.
+
+    Implements JudgeLLM to support structured output generation for judge operations.
+    """
 
     def __init__(
         self,
@@ -71,3 +76,76 @@ class MockLLM(LLMInterface):
         self.response_index = 0
         self.calls = []
         self.last_response_metadata = {}
+
+    async def generate_structured_response(
+        self, message: Optional[str], response_model: Type[T]
+    ) -> T:
+        """Generate a structured response using Pydantic model.
+
+        For testing, this creates a mock instance of the response model
+        with default/example values.
+
+        Args:
+            message: The prompt message
+            response_model: Pydantic model class to structure the response
+
+        Returns:
+            Instance of response_model with mock data
+        """
+        # Get the next response or use default
+        if self.response_index < len(self.responses):
+            response_text = self.responses[self.response_index]
+            self.response_index += 1
+        else:
+            response_text = f"Mock response {self.response_index + 1}"
+            self.response_index += 1
+
+        self.calls.append(message)
+
+        # Try to parse the response as JSON and create model instance
+        try:
+            import json
+
+            response_data = json.loads(response_text)
+            return response_model(**response_data)
+        except (json.JSONDecodeError, ValueError, TypeError):
+            # Create instance with mock default values
+            # Check if the model has example data in json_schema_extra
+            if hasattr(response_model, "model_config") and isinstance(
+                response_model.model_config.get("json_schema_extra"), dict
+            ):
+                example_data = response_model.model_config.get(
+                    "json_schema_extra", {}
+                ).get("example", {})
+                if example_data:
+                    return response_model(**example_data)
+            elif hasattr(response_model, "Config") and hasattr(
+                response_model.Config, "json_schema_extra"
+            ):
+                # Pydantic v1 style config
+                json_schema_extra = response_model.Config.json_schema_extra
+                if (
+                    isinstance(json_schema_extra, dict)
+                    and "example" in json_schema_extra
+                ):
+                    return response_model(**json_schema_extra["example"])
+
+            # If no example, construct default values based on field types
+            default_values = {}
+            for field_name, field_info in response_model.model_fields.items():
+                annotation = field_info.annotation
+                # Check if field is a string type
+                if annotation is str or (
+                    isinstance(annotation, type) and issubclass(annotation, str)
+                ):
+                    default_values[field_name] = f"Mock {field_name}"
+                elif annotation is int:
+                    default_values[field_name] = 0
+                elif annotation is bool:
+                    default_values[field_name] = False
+                elif annotation is float:
+                    default_values[field_name] = 0.0
+                # Fallback for string annotation (handle Union, Optional, etc.)
+                elif "str" in str(annotation):
+                    default_values[field_name] = f"Mock {field_name}"
+            return response_model(**default_values)
