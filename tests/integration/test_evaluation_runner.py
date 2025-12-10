@@ -218,7 +218,6 @@ class TestBatchEvaluateWithIndividualJudges:
 
         results = await batch_evaluate_with_individual_judges(
             conversation_file_paths=multiple_conversation_files,
-            rubrics=["rubric.tsv"],
             judge_models={"mock-judge": 1},
             output_folder=output_folder,
             limit=None,
@@ -258,7 +257,6 @@ class TestBatchEvaluateWithIndividualJudges:
 
         results = await batch_evaluate_with_individual_judges(
             conversation_file_paths=multiple_conversation_files,
-            rubrics=["rubric.tsv"],
             judge_models={"mock-judge": 1},
             output_folder=output_folder,
             limit=2,
@@ -292,7 +290,6 @@ class TestBatchEvaluateWithIndividualJudges:
 
         results = await batch_evaluate_with_individual_judges(
             conversation_file_paths=[str(conv_file)],
-            rubrics=["rubric.tsv"],
             judge_models={"mock-judge": 1},
             output_folder=output_folder,
             limit=None,
@@ -338,7 +335,6 @@ class TestBatchEvaluateWithIndividualJudges:
 
                 results = await batch_evaluate_with_individual_judges(
                     conversation_file_paths=multiple_conversation_files,
-                    rubrics=["rubric.tsv"],
                     judge_models={"mock-judge": 1},
                     output_folder=output_folder,
                     limit=None,
@@ -391,7 +387,6 @@ class TestJudgeConversations:
         results = await judge_conversations(
             judge_models={"mock-judge": 1},
             conversation_folder=str(conv_folder),
-            rubrics=["rubric.tsv"],
             output_root=output_root,
             verbose=False,
             save_aggregated_results=True,
@@ -439,7 +434,6 @@ class TestJudgeConversations:
         results = await judge_conversations(
             judge_models={"mock-judge": 1},
             conversation_folder=str(conv_folder),
-            rubrics=["rubric.tsv"],
             output_folder=custom_output,
             save_aggregated_results=True,
         )
@@ -999,7 +993,6 @@ class TestMultipleJudgeModels:
 
         results = await batch_evaluate_with_individual_judges(
             conversation_file_paths=multiple_conversation_files,
-            rubrics=["rubric.tsv"],
             judge_models=judge_models,
             output_folder=output_folder,
             limit=None,
@@ -1041,7 +1034,6 @@ class TestMultipleJudgeModels:
 
         results = await batch_evaluate_with_individual_judges(
             conversation_file_paths=multiple_conversation_files,
-            rubrics=["rubric.tsv"],
             judge_models=judge_models,
             output_folder=output_folder,
             limit=None,
@@ -1081,7 +1073,6 @@ class TestMultipleJudgeModels:
 
         results = await batch_evaluate_with_individual_judges(
             conversation_file_paths=multiple_conversation_files,
-            rubrics=["rubric.tsv"],
             judge_models=judge_models,
             output_folder=output_folder,
             limit=None,
@@ -1130,7 +1121,6 @@ class TestMultipleJudgeModels:
         results = await judge_conversations(
             judge_models={"mock-judge-1": 2, "mock-judge-2": 1},
             conversation_folder=str(conv_folder),
-            rubrics=["rubric.tsv"],
             output_root=output_root,
             save_aggregated_results=True,
         )
@@ -1180,7 +1170,6 @@ class TestConcurrencyControl:
 
         results = await batch_evaluate_with_individual_judges(
             conversation_file_paths=multiple_conversation_files,
-            rubrics=["rubric.tsv"],
             judge_models={"mock-judge": 1},
             output_folder=output_folder,
             limit=None,
@@ -1209,7 +1198,6 @@ class TestConcurrencyControl:
         # 2 models, max_concurrent=2 per judge
         results = await batch_evaluate_with_individual_judges(
             conversation_file_paths=multiple_conversation_files,
-            rubrics=["rubric.tsv"],
             judge_models={"mock-judge-1": 1, "mock-judge-2": 1},
             output_folder=output_folder,
             limit=None,
@@ -1237,7 +1225,6 @@ class TestConcurrencyControl:
 
         results = await batch_evaluate_with_individual_judges(
             conversation_file_paths=multiple_conversation_files,
-            rubrics=["rubric.tsv"],
             judge_models={"mock-judge": 2},
             output_folder=output_folder,
             limit=None,
@@ -1300,7 +1287,6 @@ class TestWorkerQueueSystem:
 
         results = await batch_evaluate_with_individual_judges(
             conversation_file_paths=multiple_conversation_files,
-            rubrics=["rubric.tsv"],
             judge_models={"mock-judge-1": 2, "mock-judge-2": 1},
             output_folder=output_folder,
             limit=None,
@@ -1334,7 +1320,6 @@ class TestWorkerQueueSystem:
 
         results = await batch_evaluate_with_individual_judges(
             conversation_file_paths=[sample_conversation_file],
-            rubrics=["rubric.tsv"],
             judge_models={"mock-judge": 1},
             output_folder=output_folder,
             limit=None,
@@ -1363,7 +1348,6 @@ class TestWorkerQueueSystem:
 
         results = await batch_evaluate_with_individual_judges(
             conversation_file_paths=multiple_conversation_files,
-            rubrics=["rubric.tsv"],
             judge_models={"mock-judge-1": 1, "mock-judge-2": 1},
             output_folder=output_folder,
             limit=2,

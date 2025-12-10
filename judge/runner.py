@@ -381,7 +381,6 @@ async def judge_conversations(
     # Run batch evaluation with multiple judges
     results = await batch_evaluate_with_individual_judges(
         conversation_file_paths,
-        rubrics,
         judge_models,
         output_folder,
         limit,
@@ -389,17 +388,13 @@ async def judge_conversations(
         per_judge,
     )
 
-    if save_aggregated_results:
+    if save_aggregated_results and results:
         # Column order: filename, run_id, judge_model, judge_instance, dimensions
-        if results:
-            columns = ["filename", "run_id", "judge_model", "judge_instance"] + [
-                k
-                for k in results[0].keys()
-                if k not in ["filename", "run_id", "judge_model", "judge_instance"]
-            ]
-        else:
-            # Use known dimensions from rubric
-            columns = ["filename", "run_id", "judge_model", "judge_instance"] + DIMENSIONS
+        columns = ["filename", "run_id", "judge_model", "judge_instance"] + [
+            k
+            for k in results[0].keys()
+            if k not in ["filename", "run_id", "judge_model", "judge_instance"]
+        ]
         pd.DataFrame(results, columns=columns).to_csv(
             f"{output_folder}/{filename}", index=False
         )
