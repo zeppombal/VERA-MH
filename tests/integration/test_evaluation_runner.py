@@ -972,3 +972,410 @@ class TestErrorHandlingAndEdgeCases:
         results_csv = Path(output_folder) / "results.csv"
         df = pd.read_csv(results_csv)
         assert len(df) == 5
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+class TestMultipleJudgeModels:
+    """Tests for multiple judge models feature (new in multiple_judges branch)."""
+
+    async def test_evaluate_with_multiple_judge_models(
+        self,
+        multiple_conversation_files: List[str],
+        mock_rubric_files: str,
+        mock_llm_factory_for_judge,
+        tmp_path: Path,
+    ):
+        """Test evaluation with multiple different judge models.
+
+        Arrange: Create conversations, specify 2 different judge models
+        Act: Call batch_evaluate_with_individual_judges with multiple models
+        Assert: Each conversation evaluated by both judge models
+        """
+        output_folder = str(tmp_path / "multi_judge_test")
+
+        # Use 2 different judge models (1 instance each)
+        judge_models = {"mock-judge-1": 1, "mock-judge-2": 1}
+
+        results = await batch_evaluate_with_individual_judges(
+            conversation_file_paths=multiple_conversation_files,
+            rubrics=["rubric.tsv"],
+            judge_models=judge_models,
+            output_folder=output_folder,
+            limit=None,
+            max_concurrent=None,
+            per_judge=False,
+        )
+
+        # Should have results for each conversation × judge model combination
+        # 3 conversations × 2 judges = 6 results
+        assert len(results) == 6
+
+        # Verify we have results for both judge models
+        judge_1_results = [r for r in results if r["judge_model"] == "mock-judge-1"]
+        judge_2_results = [r for r in results if r["judge_model"] == "mock-judge-2"]
+        assert len(judge_1_results) == 3
+        assert len(judge_2_results) == 3
+
+        # Each result should have judge_instance = 1
+        for result in results:
+            assert result["judge_instance"] == 1
+
+    async def test_multiple_instances_of_same_judge(
+        self,
+        multiple_conversation_files: List[str],
+        mock_rubric_files: str,
+        mock_llm_factory_for_judge,
+        tmp_path: Path,
+    ):
+        """Test evaluation with multiple instances of the same judge model.
+
+        Arrange: Create conversations, specify 3 instances of same model
+        Act: Call batch_evaluate_with_individual_judges
+        Assert: Each conversation evaluated 3 times with different instances
+        """
+        output_folder = str(tmp_path / "multi_instance_test")
+
+        # Use 3 instances of the same judge model
+        judge_models = {"mock-judge": 3}
+
+        results = await batch_evaluate_with_individual_judges(
+            conversation_file_paths=multiple_conversation_files,
+            rubrics=["rubric.tsv"],
+            judge_models=judge_models,
+            output_folder=output_folder,
+            limit=None,
+            max_concurrent=None,
+            per_judge=False,
+        )
+
+        # 3 conversations × 3 instances = 9 results
+        assert len(results) == 9
+
+        # Check that we have instances 1, 2, 3 for each conversation
+        for conv_file in multiple_conversation_files:
+            conv_name = Path(conv_file).name
+            conv_results = [r for r in results if r["filename"] == conv_name]
+            assert len(conv_results) == 3
+
+            instances = sorted([r["judge_instance"] for r in conv_results])
+            assert instances == [1, 2, 3]
+
+    async def test_multiple_models_with_different_instance_counts(
+        self,
+        multiple_conversation_files: List[str],
+        mock_rubric_files: str,
+        mock_llm_factory_for_judge,
+        tmp_path: Path,
+    ):
+        """Test evaluation with multiple models having different instance counts.
+
+        Arrange: Create conversations, specify different instance counts per model
+        Act: Call batch_evaluate_with_individual_judges
+        Assert: Correct number of evaluations per model
+        """
+        output_folder = str(tmp_path / "mixed_judges_test")
+
+        # Model A: 2 instances, Model B: 3 instances
+        judge_models = {"mock-judge-a": 2, "mock-judge-b": 3}
+
+        results = await batch_evaluate_with_individual_judges(
+            conversation_file_paths=multiple_conversation_files,
+            rubrics=["rubric.tsv"],
+            judge_models=judge_models,
+            output_folder=output_folder,
+            limit=None,
+            max_concurrent=None,
+            per_judge=False,
+        )
+
+        # 3 conversations × (2 + 3) instances = 15 results
+        assert len(results) == 15
+
+        # Check model A results
+        model_a_results = [r for r in results if r["judge_model"] == "mock-judge-a"]
+        assert len(model_a_results) == 6  # 3 convs × 2 instances
+
+        # Check model B results
+        model_b_results = [r for r in results if r["judge_model"] == "mock-judge-b"]
+        assert len(model_b_results) == 9  # 3 convs × 3 instances
+
+        # Verify instance numbers for model A
+        for conv_file in multiple_conversation_files:
+            conv_name = Path(conv_file).name
+            conv_a_results = [r for r in model_a_results if r["filename"] == conv_name]
+            assert len(conv_a_results) == 2
+            instances = sorted([r["judge_instance"] for r in conv_a_results])
+            assert instances == [1, 2]
+
+    async def test_judge_conversations_with_multiple_models(
+        self,
+        tmp_path: Path,
+        mock_rubric_files: str,
+        mock_llm_factory_for_judge,
+    ):
+        """Test full judge_conversations workflow with multiple judge models.
+
+        Arrange: Create conversation folder with files
+        Act: Call judge_conversations with multiple models
+        Assert: Creates results.csv with all model evaluations
+        """
+        conv_folder = tmp_path / "conversations"
+        conv_folder.mkdir()
+        (conv_folder / "conv1.txt").write_text("user: Hi\nchatbot: Hello")
+        (conv_folder / "conv2.txt").write_text("user: Bye\nchatbot: Goodbye")
+
+        output_root = str(tmp_path / "multi_judge_output")
+
+        results = await judge_conversations(
+            judge_models={"mock-judge-1": 2, "mock-judge-2": 1},
+            conversation_folder=str(conv_folder),
+            rubrics=["rubric.tsv"],
+            output_root=output_root,
+            save_aggregated_results=True,
+        )
+
+        # 2 conversations × (2 + 1) judge instances = 6 results
+        assert len(results) == 6
+
+        # Check output folder naming includes both models
+        output_folders = list(Path(output_root).glob("j_*"))
+        assert len(output_folders) == 1
+        folder_name = output_folders[0].name
+        assert "mock-judge-1x2" in folder_name
+        assert "mock-judge-2x1" in folder_name
+
+        # Check results.csv
+        results_csv = output_folders[0] / "results.csv"
+        assert results_csv.exists()
+        df = pd.read_csv(results_csv)
+        assert len(df) == 6
+
+        # Verify all required columns present
+        assert "filename" in df.columns
+        assert "run_id" in df.columns
+        assert "judge_model" in df.columns
+        assert "judge_instance" in df.columns
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+class TestConcurrencyControl:
+    """Tests for concurrency control features (max_concurrent, per_judge)."""
+
+    async def test_max_concurrent_limits_total_workers(
+        self,
+        multiple_conversation_files: List[str],
+        mock_rubric_files: str,
+        mock_llm_factory_for_judge,
+        tmp_path: Path,
+    ):
+        """Test max_concurrent limits total number of workers.
+
+        Arrange: Create 3 conversations, set max_concurrent=2
+        Act: Call batch_evaluate_with_individual_judges
+        Assert: Completes successfully (concurrency respected)
+        """
+        output_folder = str(tmp_path / "concurrent_limit_test")
+
+        results = await batch_evaluate_with_individual_judges(
+            conversation_file_paths=multiple_conversation_files,
+            rubrics=["rubric.tsv"],
+            judge_models={"mock-judge": 1},
+            output_folder=output_folder,
+            limit=None,
+            max_concurrent=2,
+            per_judge=False,
+        )
+
+        # Should complete all evaluations
+        assert len(results) == 3
+
+    async def test_per_judge_concurrency_mode(
+        self,
+        multiple_conversation_files: List[str],
+        mock_rubric_files: str,
+        mock_llm_factory_for_judge,
+        tmp_path: Path,
+    ):
+        """Test per_judge=True applies max_concurrent per judge model.
+
+        Arrange: Create conversations with 2 judge models
+        Act: Call batch_evaluate with per_judge=True
+        Assert: Completes successfully with per-judge concurrency
+        """
+        output_folder = str(tmp_path / "per_judge_test")
+
+        # 2 models, max_concurrent=2 per judge
+        results = await batch_evaluate_with_individual_judges(
+            conversation_file_paths=multiple_conversation_files,
+            rubrics=["rubric.tsv"],
+            judge_models={"mock-judge-1": 1, "mock-judge-2": 1},
+            output_folder=output_folder,
+            limit=None,
+            max_concurrent=2,
+            per_judge=True,
+        )
+
+        # 3 conversations × 2 judges = 6 results
+        assert len(results) == 6
+
+    async def test_unlimited_concurrency_when_none(
+        self,
+        multiple_conversation_files: List[str],
+        mock_rubric_files: str,
+        mock_llm_factory_for_judge,
+        tmp_path: Path,
+    ):
+        """Test max_concurrent=None allows unlimited concurrency.
+
+        Arrange: Create conversations
+        Act: Call batch_evaluate with max_concurrent=None
+        Assert: All evaluations complete successfully
+        """
+        output_folder = str(tmp_path / "unlimited_test")
+
+        results = await batch_evaluate_with_individual_judges(
+            conversation_file_paths=multiple_conversation_files,
+            rubrics=["rubric.tsv"],
+            judge_models={"mock-judge": 2},
+            output_folder=output_folder,
+            limit=None,
+            max_concurrent=None,
+            per_judge=False,
+        )
+
+        # 3 conversations × 2 instances = 6 results
+        assert len(results) == 6
+
+    async def test_judge_conversations_passes_concurrency_params(
+        self,
+        tmp_path: Path,
+        mock_rubric_files: str,
+        mock_llm_factory_for_judge,
+    ):
+        """Test judge_conversations passes concurrency params correctly.
+
+        Arrange: Create conversation folder
+        Act: Call judge_conversations with concurrency params
+        Assert: Parameters accepted and evaluation completes
+        """
+        conv_folder = tmp_path / "conversations"
+        conv_folder.mkdir()
+        (conv_folder / "test.txt").write_text("user: test\nchatbot: ok")
+
+        output_folder = str(tmp_path / "concurrency_test")
+
+        results = await judge_conversations(
+            judge_models={"mock-judge": 2},
+            conversation_folder=str(conv_folder),
+            output_folder=output_folder,
+            max_concurrent=5,
+            per_judge=True,
+        )
+
+        # 1 conversation × 2 instances = 2 results
+        assert len(results) == 2
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+class TestWorkerQueueSystem:
+    """Tests for the worker queue implementation."""
+
+    async def test_worker_queue_processes_all_jobs(
+        self,
+        multiple_conversation_files: List[str],
+        mock_rubric_files: str,
+        mock_llm_factory_for_judge,
+        tmp_path: Path,
+    ):
+        """Test worker queue processes all jobs successfully.
+
+        Arrange: Create multiple conversations with multiple judges
+        Act: Run batch evaluation (uses worker queue internally)
+        Assert: All jobs completed, no missing results
+        """
+        output_folder = str(tmp_path / "worker_queue_test")
+
+        results = await batch_evaluate_with_individual_judges(
+            conversation_file_paths=multiple_conversation_files,
+            rubrics=["rubric.tsv"],
+            judge_models={"mock-judge-1": 2, "mock-judge-2": 1},
+            output_folder=output_folder,
+            limit=None,
+            max_concurrent=3,
+            per_judge=False,
+        )
+
+        # 3 conversations × 3 total judge instances = 9 results
+        assert len(results) == 9
+
+        # Verify all conversations evaluated by all judge instances
+        for conv_file in multiple_conversation_files:
+            conv_name = Path(conv_file).name
+            conv_results = [r for r in results if r["filename"] == conv_name]
+            assert len(conv_results) == 3  # 2 instances of judge-1 + 1 of judge-2
+
+    async def test_worker_queue_handles_single_job(
+        self,
+        sample_conversation_file: str,
+        mock_rubric_files: str,
+        mock_llm_factory_for_judge,
+        tmp_path: Path,
+    ):
+        """Test worker queue handles single job correctly.
+
+        Arrange: Create single conversation with single judge
+        Act: Run batch evaluation
+        Assert: Single result returned successfully
+        """
+        output_folder = str(tmp_path / "single_job_test")
+
+        results = await batch_evaluate_with_individual_judges(
+            conversation_file_paths=[sample_conversation_file],
+            rubrics=["rubric.tsv"],
+            judge_models={"mock-judge": 1},
+            output_folder=output_folder,
+            limit=None,
+            max_concurrent=10,
+            per_judge=False,
+        )
+
+        assert len(results) == 1
+        assert results[0]["judge_model"] == "mock-judge"
+        assert results[0]["judge_instance"] == 1
+
+    async def test_worker_queue_with_limit_and_multiple_judges(
+        self,
+        multiple_conversation_files: List[str],
+        mock_rubric_files: str,
+        mock_llm_factory_for_judge,
+        tmp_path: Path,
+    ):
+        """Test worker queue respects limit with multiple judges.
+
+        Arrange: Create 3 conversations, 2 judges, limit=2
+        Act: Run batch evaluation
+        Assert: Only first 2 conversations evaluated by both judges
+        """
+        output_folder = str(tmp_path / "limit_multi_judge_test")
+
+        results = await batch_evaluate_with_individual_judges(
+            conversation_file_paths=multiple_conversation_files,
+            rubrics=["rubric.tsv"],
+            judge_models={"mock-judge-1": 1, "mock-judge-2": 1},
+            output_folder=output_folder,
+            limit=2,
+            max_concurrent=5,
+            per_judge=False,
+        )
+
+        # 2 conversations × 2 judges = 4 results
+        assert len(results) == 4
+
+        # Verify only first 2 conversation files present
+        filenames = {r["filename"] for r in results}
+        assert len(filenames) == 2
+        assert Path(multiple_conversation_files[0]).name in filenames
+        assert Path(multiple_conversation_files[1]).name in filenames

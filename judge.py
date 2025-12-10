@@ -107,9 +107,9 @@ if __name__ == "__main__":
         "--max-concurrent",
         "-m",
         type=int,
-        default=10,
+        default=None,
         help=(
-            "Maximum number of concurrent workers (default: 10). "
+            "Maximum number of concurrent workers (default: None). "
             "Set to a high number or omit for unlimited concurrency."
         ),
     )
