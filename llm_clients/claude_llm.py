@@ -7,12 +7,12 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 
 from .config import Config
-from .llm_interface import LLMInterface
+from .llm_interface import JudgeLLM
 
 T = TypeVar("T", bound=BaseModel)
 
 
-class ClaudeLLM(LLMInterface):
+class ClaudeLLM(JudgeLLM):
     """Claude implementation using LangChain."""
 
     def __init__(
@@ -43,6 +43,10 @@ class ClaudeLLM(LLMInterface):
         self.llm = ChatAnthropic(**llm_params)
 
         print(f"Using Claude model: {self.llm.model}")
+
+        # Store configuration parameters for logging
+        self.temperature = getattr(self.llm, "temperature", None)
+        self.max_tokens = getattr(self.llm, "max_tokens", None)
 
         # Store metadata from last response
         self.last_response_metadata: Dict[str, Any] = {}

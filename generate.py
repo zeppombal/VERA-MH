@@ -22,6 +22,7 @@ async def main(
     folder_name: Optional[str] = None,
     run_id: Optional[str] = None,
     max_concurrent: Optional[int] = None,
+    max_total_words: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """
     Generate conversations and return results.
@@ -37,7 +38,9 @@ async def main(
         persona_names: List of persona names to use. If None, uses all personas.
         verbose: Whether to print status messages
         folder_name: Custom folder name for saving conversations. If None, uses default format.
+        max_total_words: Optional maximum total words across all responses
         max_concurrent: Maximum number of concurrent conversations. If None, runs all conversations concurrently.
+
     Returns:
         List of conversation results
 
@@ -45,6 +48,10 @@ async def main(
         ValueError: Configuration error
         Exception: Other errors
     """
+    if max_turns % 2 != 0:
+        print("Max turns is odd, which means the last turn will be the user, without a response.")
+        print("Changing max turns to an even number.")
+        max_turns = max_turns + 1
     if verbose:
         print("🔄 Generating conversations with the following parameters:")
         print(f"  - Persona model: {persona_model_config}")
@@ -57,6 +64,7 @@ async def main(
         print(f"  - Folder name: {folder_name}")
         print(f"  - Run ID: {run_id}")
         print(f"  - Max concurrent: {max_concurrent}")
+        print(f"  - Max total words: {max_total_words}")
 
     # Generate default folder name if not provided
     if folder_name is None:
@@ -86,6 +94,7 @@ async def main(
         folder_name=folder_name,
         run_id=run_id,
         max_concurrent=max_concurrent,
+        max_total_words=max_total_words,
     )
 
     # Run conversations
@@ -147,6 +156,14 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--max-total-words",
+        "-w",
+        help="Optional maximum total words across all responses in a conversation",
+        default=None,
+        type=int,
+    )
+
+    parser.add_argument(
         "--run-id",
         "-i",
         help="Run ID for the conversations for this run. If not provided, a default will be generated.",
@@ -202,5 +219,7 @@ if __name__ == "__main__":
             },
             folder_name=args.folder_name,
             max_concurrent=args.max_concurrent,
+            max_total_words=args.max_total_words,
         )
     )
+

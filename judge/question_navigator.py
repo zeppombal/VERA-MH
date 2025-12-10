@@ -67,7 +67,8 @@ class QuestionNavigator:
         Returns:
             Tuple of (questions_dict, question_order_list):
             - questions_dict: Dictionary mapping Question ID to question data
-            - question_order_list: Ordered list of Question IDs as they appear in the file
+            - question_order_list: Ordered list of Question IDs as they
+                appear in the file
         """
         questions = {}
         question_order = []
@@ -91,17 +92,18 @@ class QuestionNavigator:
             # If this row has a Question ID, it's a new question
             if question_id and question_id != "nan":
                 # Save previous question if exists
-                # It means the current question is complete, so we need to save it
-                # we dont know if a question is complte until we get to a new one or to the end of the file
+                # It means the current question is complete, so save it
+                # We don't know if a question is complete until we get to
+                # a new one or to the end of the file
                 if current_question_id and current_question_data:
                     questions[current_question_id] = current_question_data
 
                 # Read severity from the question row (not from answers)
-                # read the severity from the row, and check that is not empty, or just spaces
+                # Read severity from row, check it's not empty or spaces
                 severity = (
                     str(row["Severity"]).strip() if pd.notna(row["Severity"]) else ""
                 )
-                # there might be empty string made of spaces, so we are checking that there is stuff there
+                # Check that severity is not just empty or spaces
                 severity = (
                     severity if severity and severity not in ["nan", ""] else None
                 )
@@ -129,7 +131,7 @@ class QuestionNavigator:
                 # Check if this row also has an answer (single-row question)
                 answer = str(row["Answer"]).strip() if pd.notna(row["Answer"]) else ""
                 if answer and answer != "nan":
-                    # this means there is an explicit answer, and a path to it
+                    # Explicit answer and path to next question (as per GOTO)
                     # If there is an explicit GOTO, use it
                     goto_raw = row["GOTO"] if pd.notna(row["GOTO"]) else None
                     goto = (
@@ -145,7 +147,7 @@ class QuestionNavigator:
                     )
 
             # This is a continuation row with an answer option
-            # meaning the question is not complete, so we need to add the answer to the current question
+            # Question not complete, add answer to current question
             elif current_question_data is not None:
                 answer = str(row["Answer"]).strip() if pd.notna(row["Answer"]) else ""
                 if answer and answer != "nan":
@@ -170,7 +172,7 @@ class QuestionNavigator:
         for question_id in question_order:
             question_data = questions[question_id]
             if len(question_data["answers"]) == 0:
-                # Add default answers: Yes (no GOTO, will use default), No (no GOTO, will use default)
+                # Add default answers: Yes/No (no GOTO, use default)
                 question_data["answers"] = [
                     {"option": "Yes", "goto": None},
                     {"option": "No", "goto": None},
@@ -202,7 +204,8 @@ class QuestionNavigator:
         Returns:
             Tuple of (next_question_id, goto_value):
             - next_question_id: ID of the next question to ask, or None if end of flow
-            - goto_value: The GOTO value from the answer ("END", "ASSIGN_END", question ID, or None)
+            - goto_value: The GOTO value from the answer
+                ("END", "ASSIGN_END", question ID, or None)
         """
         if current_question_id not in self.question_flow_data:
             return None, None
@@ -221,9 +224,11 @@ class QuestionNavigator:
                 if ans["option"].lower() == answer_text.lower():
                     goto_value = ans.get("goto")
 
-                    # If GOTO has a value, use it (could be question ID, "END", "ASSIGN_END", or "NOT_RELEVANT>>{ID}")
+                    # If GOTO has a value, use it (could be question ID,
+                    # "END", "ASSIGN_END", or "NOT_RELEVANT>>{ID}")
                     if goto_value:
-                        # Special values "END", "ASSIGN_END", and "NOT_RELEVANT>>" will be handled by caller
+                        # Special values "END", "ASSIGN_END", and
+                        # "NOT_RELEVANT>>" will be handled by caller
                         if goto_value not in [
                             "END",
                             "ASSIGN_END",
@@ -281,7 +286,8 @@ class QuestionNavigator:
             current_dimension: Current dimension name
 
         Returns:
-            Question ID of first question in next dimension, or None if no next dimension
+            Question ID of first question in next dimension, or None
+                if no next dimension
         """
         # Find the current question's position in the row order
 

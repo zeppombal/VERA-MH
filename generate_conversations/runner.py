@@ -32,6 +32,7 @@ class ConversationRunner:
         runs_per_prompt: int = 3,
         folder_name: str = "conversations",
         max_concurrent: Optional[int] = None,
+        max_total_words: Optional[int] = None,
     ):
         self.persona_model_config = persona_model_config
         self.agent_model_config = agent_model_config
@@ -39,13 +40,16 @@ class ConversationRunner:
         self.runs_per_prompt = runs_per_prompt
         self.folder_name = folder_name
         self.run_id = run_id
+
         # Limit concurrent conversations to avoid overwhelming the server
         # Default: None - run all conversations concurrently
         self.max_concurrent = max_concurrent
+        self.max_total_words = max_total_words
 
         self.AGENT_SYSTEM_PROMPT = self.agent_model_config.get(
             "system_prompt", "You are a helpful AI assistant."
         )
+
 
     async def run_single_conversation(
         self,
@@ -103,8 +107,10 @@ class ConversationRunner:
         # Create conversation simulator and run conversation
         simulator = ConversationSimulator(persona, agent)
         # Run the conversation - let first speaker start naturally with None
+
         conversation = await simulator.start_conversation(
-            initial_message=None, max_turns=max_turns
+            initial_message=None, max_turns=max_turns,
+            max_total_words=self.max_total_words
         )
 
         # Log each conversation turn
