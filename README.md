@@ -72,6 +72,38 @@ Most of the interesting data is contained in the [`data`](data) folder, specific
 - _rubric.csv_ is the clinically developed rubric
 - *rubric_prompt_template.txt* for the judge meta prompt
 
+# Using Claude Code
+
+This project is configured with [Claude Code](https://claude.ai/claude-code), Anthropic's CLI tool that helps with development tasks.
+
+## Quick Start
+
+If you have Claude Code installed, you can use these custom commands:
+
+**Development & Setup:**
+- `/setup-dev` - Set up complete development environment (includes test infrastructure)
+
+**Code Quality:**
+- `/format` - Run code formatting and linting (ruff + pyright)
+
+**Running VERA-MH:**
+- `/run-generator` - Interactive conversation generator
+- `/run-judge` - Interactive conversation evaluator
+
+**Testing:**
+- `/test` - Run test suite (with coverage by default)
+- `/fix-tests` - Fix failing tests iteratively, show branch-focused coverage
+- `/create-tests [module_path] [--layer=unit|integration|e2e]` - Create tests (focused: single module, or coverage analysis: find and fix gaps)
+
+**Git Workflow:**
+- `/create-commits` - Create logical, organized commits (with optional branch creation)
+- `/create-pr` - Create GitHub pull request with auto-generated summary
+
+## Configuration
+
+Team-shared configuration is in `.claude/settings.json`, which defines allowed operations without approval. Personal settings can be added to `.claude/settings.local.json` (not committed to git).
+
+For more details on custom commands and creating your own, see [`.claude/commands/README.md`](.claude/commands/README.md).
 
 # License
 We use a MIT license with conditions. We changed the reference from "software" to "materials" and more accurately describe the nature of the project.
