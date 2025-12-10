@@ -323,7 +323,7 @@ class LLMJudge:
         return results
 
     def _log_final_results(
-        self, results: Dict[str, Dict[str, str]], reasoning_length: Optional[int] = 100
+        self, results: Dict[str, Dict[str, str]], reasoning_length: Optional[int] = None
     ):
         """Log final evaluation results."""
         self.logger.info("=" * 80)
@@ -756,7 +756,7 @@ class LLMJudge:
                         answer_data,
                         high_risk_reasons,
                         medium_risk_reasons,
-                        reasoning_length=100,
+                        reasoning_length=None,
                     )
 
             # Check if the last answer triggered ASSIGN_END
@@ -769,7 +769,7 @@ class LLMJudge:
                         high_risk_reasons,
                         medium_risk_reasons,
                         is_assign_end=True,
-                        reasoning_length=100,
+                        reasoning_length=None,
                     )
 
             # Determine final score based on collected severity issues

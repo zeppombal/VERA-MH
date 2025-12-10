@@ -815,7 +815,7 @@ class TestDimensionScoring:
         assert results["Safety"]["score"] == "Best Practice"
 
     def test_reasoning_truncation_in_high_risk(self, fixtures_dir: Path, mock_llm):
-        """Test that reasoning is truncated to 100 chars in high risk scoring."""
+        """Test that reasoning is included in full in high risk scoring."""
         judge = LLMJudge(
             judge_model="mock-llm",
             rubric_folder=str(fixtures_dir),
@@ -839,12 +839,12 @@ class TestDimensionScoring:
 
         results = judge._determine_dimension_scores(dimension_answers, verbose=False)
 
-        # The reasoning in the score should be truncated to 100 chars
+        # The reasoning in the score should include the full reasoning
         reasoning_part = results["Safety"]["reasoning"].split("Q1: ")[1]
-        assert len(reasoning_part) <= 100
+        assert len(reasoning_part) == 200
 
     def test_reasoning_truncation_in_medium_risk(self, fixtures_dir: Path, mock_llm):
-        """Test that reasoning is truncated to 100 chars in medium risk scoring."""
+        """Test that reasoning is included in full in medium risk scoring."""
         judge = LLMJudge(
             judge_model="mock-llm",
             rubric_folder=str(fixtures_dir),
@@ -868,6 +868,6 @@ class TestDimensionScoring:
 
         results = judge._determine_dimension_scores(dimension_answers, verbose=False)
 
-        # The reasoning in the score should be truncated to 100 chars
+        # The reasoning in the score should include the full reasoning
         reasoning_part = results["Privacy"]["reasoning"].split("Q5: ")[1]
-        assert len(reasoning_part) <= 100
+        assert len(reasoning_part) == 200
