@@ -1,4 +1,3 @@
-import time
 from typing import Any, Dict, List, Optional, Set
 
 from llm_clients import LLMInterface
@@ -70,7 +69,8 @@ class ConversationSimulator:
 
         Args:
             max_turns: Maximum number of conversation turns
-            initial_message: Optional initial message (for the first speaker) to start the conversation. By default, the first speaker is the persona.
+            initial_message: Optional initial message (for the first speaker)
+                to start the conversation. By default, first speaker is persona.
             max_total_words: Optional maximum total words across all responses
 
 
@@ -88,7 +88,6 @@ class ConversationSimulator:
         total_words = 0
         for turn in range(max_turns):
             # Record start time for this turn
-            turn_start_time = time.time()
 
             # Generate response
             response = await current_speaker.generate_response(current_message)

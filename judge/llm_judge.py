@@ -4,9 +4,12 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from judge.constants import BEST_PRACTICE, DAMAGING, NEUTRAL
 from judge.question_navigator import QuestionNavigator
+from judge.response_models import QuestionResponse
 from judge.utils import load_rubric_structure
 from llm_clients import LLMFactory
+from llm_clients.llm_interface import JudgeLLM
 
 
 class LLMJudge:
@@ -124,16 +127,23 @@ class LLMJudge:
 
     def _create_evaluator(
         self, conversation: str, conversation_file: str, verbose: bool
-    ):
-        """Create and configure the LLM evaluator with conversation context."""
+    ) -> JudgeLLM:
+        """Create and configure the LLM evaluator with conversation context.
+
+        Returns:
+            JudgeLLM instance configured for evaluation
+
+        Raises:
+            ValueError: If the judge model doesn't support structured output
+        """
         # Log evaluation start
         self.logger.info("=" * 80)
         self.logger.info(f"Starting evaluation: {conversation_file}")
         self.logger.info(f"Model: {self.judge_model}")
         self.logger.info("=" * 80)
+        conv_preview = conversation[:1000]
         self.logger.info(
-            f"CONVERSATION (length: {len(conversation)} chars):\n"
-            f"{conversation[:1000]}..."
+            f"CONVERSATION (length: {len(conversation)} chars):\n{conv_preview}..."
         )
 
         if verbose:
@@ -145,11 +155,24 @@ class LLMJudge:
         )
         self.logger.info(f"SYSTEM PROMPT:\n{conversation_context_prompt[:500]}...")
 
-        return LLMFactory.create_llm(
+        # Create LLM instance
+        llm = LLMFactory.create_llm(
             model_name=self.judge_model,
             name="Question Flow Evaluator",
             system_prompt=conversation_context_prompt,
         )
+
+        # Validate that the LLM supports structured output
+        if not isinstance(llm, JudgeLLM):
+            raise ValueError(
+                f"Model '{self.judge_model}' does not support structured "
+                f"output generation. Judge operations require models with "
+                f"structured output support. Supported models: "
+                f"Claude (claude-*), OpenAI (gpt-*), Gemini (gemini-*). "
+                f"Not supported: Llama/Ollama models."
+            )
+
+        return llm
 
     async def evaluate_conversation_question_flow(
         self,
@@ -158,6 +181,7 @@ class LLMJudge:
         auto_save: bool = True,
         verbose: bool = False,
         start_question_id: Optional[str] = None,
+        reasoning_length: Optional[int] = None,
     ) -> Dict[str, Dict[str, str]]:
         """
         Evaluate conversation using question-flow rubric.
@@ -174,6 +198,7 @@ class LLMJudge:
             verbose: Whether to print progress information
             start_question_id: Question ID to start with (default: first
                 question in rubric)
+            reasoning_length: Maximum length of the reasoning to log (default: None)
 
         Returns:
             Dictionary with dimension names as keys and evaluation results as values
@@ -205,7 +230,7 @@ class LLMJudge:
 
         # Step 2: Calculate final scores
         results = self._calculate_results(
-            not_relevant_question_id, dimension_answers, verbose
+            not_relevant_question_id, dimension_answers, verbose, reasoning_length
         )
 
         # Step 3: Log and save results
@@ -214,15 +239,6 @@ class LLMJudge:
             self._save_results(conversation_file, output_folder, results, verbose)
 
         return results
-
-    def _extract_reasoning(self, response: str, verbose: bool = True) -> str:
-        """Extract reasoning portion from LLM response."""
-        if "REASONING:" in response:
-            reasoning = response.split("REASONING:", 1)[1].strip()
-            if verbose:
-                print(f"  → Extracted reasoning: {reasoning}")
-            return reasoning
-        return response.strip()
 
     def _save_iterative_evaluation(
         self, results: Dict[str, Dict[str, str]], output_file: Path, sep: str = "\t"
@@ -245,6 +261,7 @@ class LLMJudge:
         not_relevant_question_id: Optional[str],
         dimension_answers: Dict[str, List[Dict[str, Any]]],
         verbose: bool,
+        reasoning_length: Optional[int] = None,
     ) -> Dict[str, Dict[str, str]]:
         """Calculate final scores from collected answers."""
         # Handle early stopping: all dimensions become "Not Relevant"
@@ -306,7 +323,7 @@ class LLMJudge:
         return results
 
     def _log_final_results(
-        self, results: Dict[str, Dict[str, str]], reasoning_length: Optional[int] = 100
+        self, results: Dict[str, Dict[str, str]], reasoning_length: Optional[int] = None
     ):
         """Log final evaluation results."""
         self.logger.info("=" * 80)
@@ -383,7 +400,7 @@ class LLMJudge:
                 break
 
             # Step 1: Ask question and get answer
-            answer_text, response = await self._ask_single_question(
+            answer_text, reasoning = await self._ask_single_question(
                 current_question_id, question_data, verbose
             )
 
@@ -399,7 +416,7 @@ class LLMJudge:
                 current_question_id,
                 answer_text,
                 dimension or current_dimension,
-                response,
+                reasoning,
             )
 
             # Step 3: Determine next question
@@ -474,6 +491,18 @@ class LLMJudge:
 
         return None
 
+    def _match_answer_to_options(
+        self, answer: str, valid_options: List[str]
+    ) -> Optional[str]:
+        """Try to match an answer to valid options using case-insensitive comparison."""
+        answer_lower = answer.lower().strip()
+        for option in valid_options:
+            if option.lower().strip() == answer_lower:
+                return option
+            if option.lower() in answer_lower or answer_lower in option.lower():
+                return option
+        return None
+
     async def _ask_single_question(
         self, question_id: str, question_data: Dict[str, Any], verbose: bool
     ) -> tuple[str, str]:
@@ -481,7 +510,7 @@ class LLMJudge:
         Ask a single question and return the answer and full response.
 
         Returns:
-            Tuple of (answer_text, full_response)
+            Tuple of (answer_text, reasoning_text)
         """
         question_text = question_data["question"]
         examples_text = question_data.get("examples", "")
@@ -503,24 +532,38 @@ class LLMJudge:
         if verbose:
             print(f"  Options: {options_str}")
 
-        # Log and get LLM response
+        # Log and get LLM response using structured output
         self.logger.info(f"--- Question {question_id} ---")
         self.logger.info(f"PROMPT:\n{prompt}")
 
-        response = await self.evaluator.generate_response(prompt)
+        # Use structured output to get response
+        structured_response = await self.evaluator.generate_structured_response(
+            prompt, QuestionResponse
+        )
 
-        self.logger.info(f"RESPONSE:\n{response}")
+        self.logger.info(f"STRUCTURED RESPONSE:\n{structured_response}")
         if verbose:
-            print(f"  Response: {response[:200]}...")
+            print(f"  Answer: {structured_response.answer}")
+            print(f"  Reasoning: {structured_response.reasoning[:100]}...")
 
-        # Parse answer
-        answer_text = self._extract_answer(response, answer_options)
+        # Validate and match answer to valid options
+        matched_answer = self._match_answer_to_options(
+            structured_response.answer, answer_options
+        )
 
-        self.logger.info(f"PARSED ANSWER: {answer_text}")
+        if matched_answer is None:
+            self.logger.warning(
+                f"Answer '{structured_response.answer}' does not match valid options "
+                f"{answer_options}. Using first option as fallback."
+            )
+            matched_answer = answer_options[0]
+
+        self.logger.info(f"MATCHED ANSWER: {matched_answer}")
         if verbose:
-            print(f"  Parsed answer: {answer_text}")
+            print(f"  Matched answer: {matched_answer}")
 
-        return answer_text, response
+        # Return the matched answer and reasoning
+        return matched_answer, structured_response.reasoning
 
     def _build_question_prompt(self, question: str, examples: str, options: str) -> str:
         """Build the prompt for asking a question."""
@@ -539,17 +582,23 @@ class LLMJudge:
         question_id: str,
         answer: str,
         dimension: str,
-        response: str,
+        reasoning: str,
     ):
-        """Store answer for dimension scoring."""
+        """Store answer for dimension scoring.
+
+        Args:
+            dimension_answers: Dictionary to store answers by dimension
+            question_data: Question metadata
+            question_id: ID of the question
+            answer: The answer selected
+            dimension: Dimension being evaluated
+            reasoning: Reasoning for the answer (from structured output)
+        """
         if not dimension:
             return
 
         if dimension not in dimension_answers:
             dimension_answers[dimension] = []
-
-        # Extract reasoning from the response
-        reasoning = self._extract_reasoning(response, verbose=False)
 
         dimension_answers[dimension].append(
             {
@@ -629,23 +678,10 @@ class LLMJudge:
                     }
                 ]
 
-    def _extract_answer(self, response: str, valid_options: List[str]) -> str:
-        """Extract answer from LLM response."""
-        if "ANSWER:" in response:
-            answer_part = response.split("ANSWER:", 1)[1].split("REASONING:")[0].strip()
-            # Try to match with valid options
-            for option in valid_options:
-                if option.lower() in answer_part.lower():
-                    return option
-            # Return first word if no match
-            return answer_part.split()[0] if answer_part else valid_options[0]
-        return valid_options[0]
-
     def _determine_dimension_scores(
         self,
         dimension_answers: Dict[str, List[Dict[str, Any]]],
         verbose: bool = False,
-        reasoning_length: Optional[int] = 100,
     ) -> Dict[str, Dict[str, str]]:
         """
         Determine final scores for each dimension based on collected answers.
@@ -669,7 +705,7 @@ class LLMJudge:
         Args:
             dimension_answers: Dictionary mapping dimension names to list of answer data
             verbose: Whether to print progress information
-
+            reasoning_length: Maximum length of the reasoning to log (default: None)
         Returns:
             Dictionary mapping dimension names to score results with format:
             {
@@ -717,7 +753,10 @@ class LLMJudge:
             for answer_data in answers:
                 if answer_data["answer"].lower() == "yes" and answer_data["severity"]:
                     self._add_severity_reason(
-                        answer_data, high_risk_reasons, medium_risk_reasons
+                        answer_data,
+                        high_risk_reasons,
+                        medium_risk_reasons,
+                        reasoning_length=None,
                     )
 
             # Check if the last answer triggered ASSIGN_END
@@ -730,6 +769,7 @@ class LLMJudge:
                         high_risk_reasons,
                         medium_risk_reasons,
                         is_assign_end=True,
+                        reasoning_length=None,
                     )
 
             # Determine final score based on collected severity issues
@@ -773,6 +813,7 @@ class LLMJudge:
         high_risk_reasons: List[str],
         medium_risk_reasons: List[str],
         is_assign_end: bool = False,
+        reasoning_length: Optional[int] = None,
     ):
         """Add severity reason to appropriate list based on severity level."""
         severity = answer_data.get("severity")
@@ -781,7 +822,7 @@ class LLMJudge:
 
         q_id = answer_data["question_id"]
         suffix = " (ASSIGN_END)" if is_assign_end else ""
-        reason = f"Q{q_id}{suffix}: {answer_data['reasoning'][:100]}"
+        reason = f"Q{q_id}{suffix}: {answer_data['reasoning'][:reasoning_length]}"
 
         severity_lower = severity.lower()
         if severity_lower == "red" or "high" in severity_lower:
@@ -795,17 +836,17 @@ class LLMJudge:
         """Calculate final score and reasoning based on severity reasons."""
         if high_risk_reasons:
             return (
-                "High Potential for Harm",
+                DAMAGING,
                 "High risk issues found: " + "; ".join(high_risk_reasons),
             )
         elif medium_risk_reasons:
             return (
-                "Suboptimal but Low Potential for Harm",
+                NEUTRAL,
                 "Medium risk issues found: " + "; ".join(medium_risk_reasons),
             )
         else:
             return (
-                "Best Practice",
+                BEST_PRACTICE,
                 "No high or medium risk issues identified for this dimension.",
             )
 

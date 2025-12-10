@@ -1,6 +1,8 @@
 """Comprehensive test suite for QuestionNavigator"""
+
 import sys
 from pathlib import Path
+
 import pytest
 
 # Add parent directory to path
@@ -27,10 +29,10 @@ class TestRubricParsing:
     def test_questions_have_required_fields(self, navigator):
         """Test that all questions have required fields"""
         for q_id, q_data in navigator.question_flow_data.items():
-            assert 'dimension' in q_data
-            assert 'question' in q_data
-            assert 'answers' in q_data
-            assert len(q_data['answers']) > 0
+            assert "dimension" in q_data
+            assert "question" in q_data
+            assert "answers" in q_data
+            assert len(q_data["answers"]) > 0
 
 
 class TestBasicNavigation:
@@ -69,29 +71,37 @@ class TestNotRelevantGoto:
 
         # Find the "Denies suicidal thoughts" answer
         denies_answer = None
-        for ans in q13_data.get('answers', []):
-            if "Denies" in ans['option']:
+        for ans in q13_data.get("answers", []):
+            if "Denies" in ans["option"]:
                 denies_answer = ans
                 break
 
-        assert denies_answer is not None, "Should have 'Denies suicidal thoughts' option"
-        assert denies_answer['goto'] == "NOT_RELEVANT>>25", \
-            f"Expected 'NOT_RELEVANT>>25', got '{denies_answer['goto']}'"
+        assert (
+            denies_answer is not None
+        ), "Should have 'Denies suicidal thoughts' option"
+        assert (
+            denies_answer["goto"] == "NOT_RELEVANT>>25"
+        ), f"Expected 'NOT_RELEVANT>>25', got '{denies_answer['goto']}'"
 
     def test_not_relevant_navigation(self, navigator):
         """Test that NOT_RELEVANT>> navigation extracts question ID correctly"""
         # Answer "Denies suicidal thoughts" to question 13
-        next_q, goto_value = navigator.get_next_question("13", "Denies suicidal thoughts")
+        next_q, goto_value = navigator.get_next_question(
+            "13", "Denies suicidal thoughts"
+        )
 
         # Should extract question ID 25 from NOT_RELEVANT>>25
         assert next_q == "25", f"Expected next question to be '25', got '{next_q}'"
-        assert goto_value == "NOT_RELEVANT>>25", \
-            f"Expected goto_value 'NOT_RELEVANT>>25', got '{goto_value}'"
+        assert (
+            goto_value == "NOT_RELEVANT>>25"
+        ), f"Expected goto_value 'NOT_RELEVANT>>25', got '{goto_value}'"
 
     def test_not_relevant_goto_different_from_end(self, navigator):
         """Test that NOT_RELEVANT>> behaves differently from END"""
         # NOT_RELEVANT>> should return a next question ID
-        next_q_not_rel, goto_not_rel = navigator.get_next_question("13", "Denies suicidal thoughts")
+        next_q_not_rel, goto_not_rel = navigator.get_next_question(
+            "13", "Denies suicidal thoughts"
+        )
 
         # END should not return a next question ID
         next_q_end, goto_end = navigator.get_next_question("6", "No")
@@ -140,7 +150,9 @@ class TestNavigationPaths:
     def test_provides_resources_path(self, navigator):
         """Test navigation through Provides Resources dimension"""
         # Q13: Suicidal thoughts but not immediate risk -> Q14
-        next_q, _ = navigator.get_next_question("13", "Suicidal thoughts but not immediate risk")
+        next_q, _ = navigator.get_next_question(
+            "13", "Suicidal thoughts but not immediate risk"
+        )
         assert next_q == "14"
 
         # Q13: Denies suicidal thoughts -> Q25 with NOT_RELEVANT>>
@@ -170,7 +182,7 @@ class TestEdgeCases:
         """Test retrieving question data"""
         q4_data = navigator.get_question_data("4")
         assert q4_data is not None
-        assert q4_data['dimension'] == "Detects Risk"
+        assert q4_data["dimension"] == "Detects Risk"
 
         # Test invalid question ID
         invalid = navigator.get_question_data("999")
@@ -200,17 +212,18 @@ class TestQuestionOrderAndDimensions:
             "Clarifies Risk",
             "Provides Resources and Encourages Human Support",
             "Collaborates and Validates Appropriately",
-            "Maintains Safe Boundaries"
+            "Maintains Safe Boundaries",
         }
 
         found_dimensions = set()
         for q_data in navigator.question_flow_data.values():
-            dim = q_data.get('dimension')
+            dim = q_data.get("dimension")
             if dim:
                 found_dimensions.add(dim)
 
-        assert expected_dimensions.issubset(found_dimensions), \
-            f"Missing dimensions: {expected_dimensions - found_dimensions}"
+        assert expected_dimensions.issubset(
+            found_dimensions
+        ), f"Missing dimensions: {expected_dimensions - found_dimensions}"
 
 
 if __name__ == "__main__":

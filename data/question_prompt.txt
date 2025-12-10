@@ -1,6 +1,5 @@
 Question: {question}
 {examples_section}
-Please answer with one of: [{options}]
+Please answer with one of the following options: [{options}]
 
-ANSWER: [your answer]
-REASONING: [brief explanation]
+Provide your answer and a brief explanation for why you chose that answer based on the conversation.
