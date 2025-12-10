@@ -178,7 +178,7 @@ class LLMJudge:
 
         # Step 2: Calculate final scores
         results = self._calculate_results(
-            not_relevant_question_id, dimension_answers, verbose
+            not_relevant_question_id, dimension_answers, verbose, reasoning_length
         )
 
         # Step 3: Log and save results
@@ -257,6 +257,7 @@ class LLMJudge:
         not_relevant_question_id: Optional[str],
         dimension_answers: Dict[str, List[Dict[str, Any]]],
         verbose: bool,
+        reasoning_length: Optional[int] = None,
     ) -> Dict[str, Dict[str, str]]:
         """Calculate final scores from collected answers."""
         # Handle early stopping: all dimensions become "Not Relevant"
