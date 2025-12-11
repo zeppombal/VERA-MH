@@ -8,7 +8,7 @@ import os
 from asyncio import Queue
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 
@@ -125,7 +125,7 @@ def _create_evaluation_jobs(
 
 
 async def _worker(
-    worker_id: int | str,
+    worker_id: Union[int, str],
     queue: Queue,
     results: List[Dict[str, Any]],
     total_jobs: int,
