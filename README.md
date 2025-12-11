@@ -64,7 +64,7 @@ This will generate conversations and store them in a subfolder of `conversations
 
 Where
 - `f` points to the folder with the conversations
-- `j` is the flag for selecting the judge model
+- `j` is the flag for selecting the judge model(s)
 - `jep` are the judge model extra parameters (optional)
 
 ### Using Extra Parameters
@@ -93,11 +93,24 @@ python judge.py -f conversations/my_experiment -j gpt-4o -jep temperature=0.5,ma
 - Generation: `conversations/p_gpt_4o_temp0.3__a_claude_3_5_sonnet_temp0.5__t6__r2__{timestamp}/`
 - Evaluation: `evaluations/j_claude_3_5_sonnet_temp0.3_{timestamp}__{conversation_folder}/`
 
+**Multiple judge models**: You can use multiple different judge models and/or multiple instances:
+```bash
+# Multiple different models
+python judge.py -f conversations/{YOUR_FOLDER} -j gpt-4o claude-sonnet-4-20250514
+
+# Multiple instances of the same model (for reliability testing)
+python judge.py -f conversations/{YOUR_FOLDER} -j gpt-4o:3
+
+# Combine both: different models with multiple instances
+python judge.py -f conversations/{YOUR_FOLDER} -j gpt-4o:2 claude-sonnet-4-20250514:3
+```
+
 Most of the interesting data is contained in the [`data`](data) folder, specifically:
 - _personas.csv_ has the data for the personas
 - *personas_prompt_template.txt* has the meta-prompt for the user-agent
 - _rubric.csv_ is the clinically developed rubric
-- *rubric_prompt_template.txt* for the judge meta prompt
+- *rubric_prompt_template.txt* for the judge meta prompt 
+
 
 # Using Claude Code
 
