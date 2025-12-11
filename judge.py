@@ -9,6 +9,7 @@ import asyncio
 
 from judge import judge_conversations, judge_single_conversation
 from judge.llm_judge import LLMJudge
+from utils.utils import parse_key_value_list
 
 
 async def main(args):
@@ -19,7 +20,10 @@ async def main(args):
 
     # TODO: this judge is used to the single convo case
     # make the API so that it's consisten with one or multi-convo case
-    judge = LLMJudge(judge_model=args.judge_model)
+    judge = LLMJudge(
+        judge_model=args.judge_model,
+        judge_model_extra_params=args.judge_model_extra_params,
+    )
 
     if args.conversation:
         # judge a single conversation file
@@ -35,6 +39,7 @@ async def main(args):
             output_root=args.output,
             limit=args.limit,
             verbose=True,
+            judge_model_extra_params=args.judge_model_extra_params,
         )
 
 
@@ -68,7 +73,21 @@ if __name__ == "__main__":
     parser.add_argument(
         "--judge-model",
         "-j",
-        help="Model to use for judging. Examples: claude-3-5-sonnet-20241022, gemini-1.5-pro, llama3:8b",
+        help=(
+            "Model to use for judging. Examples: claude-3-5-sonnet-20241022, "
+            "gemini-1.5-pro, llama3:8b"
+        ),
+    )
+
+    parser.add_argument(
+        "--judge-model-extra-params",
+        "-jep",
+        help=(
+            "Extra parameters for the judge model. "
+            "Examples: temperature=0.7, max_tokens=1000"
+        ),
+        type=parse_key_value_list,
+        default={},
     )
 
     # optional limit

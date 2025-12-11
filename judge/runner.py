@@ -26,9 +26,10 @@ async def batch_evaluate_with_individual_judges(
     judge_model: str,
     output_folder: str,
     limit: Optional[int] = None,
+    judge_model_extra_params: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Evaluate multiple conversations, creating a new LLMJudge instance for each conversation.
+    Evaluate multiple conversations, creating a new LLMJudge instance for each.
 
     Args:
         conversation_file_paths: List of conversation file paths
@@ -36,6 +37,7 @@ async def batch_evaluate_with_individual_judges(
         judge_model: Model to use for judging
         output_folder: Folder to save evaluation results
         limit: Optional limit on number of conversations to evaluate
+        judge_model_extra_params: Extra parameters for the judge model
 
     Returns:
         List of evaluation results
@@ -51,15 +53,20 @@ async def batch_evaluate_with_individual_judges(
         print(f"📄 ({i}/{total_files}) {Path(conversation_file).name}")
 
         # Create a new LLMJudge instance for this conversation
-        judge = LLMJudge(judge_model=judge_model)
+        judge = LLMJudge(
+            judge_model=judge_model,
+            judge_model_extra_params=judge_model_extra_params,
+        )
 
         evaluation = await judge.evaluate_conversation_question_flow(
             conversation_file, output_folder=output_folder, auto_save=True, verbose=True
         )
-        # NOTE: We can't guarantee that the evalation always has the same format, so we need to enforce it
+        # NOTE: We can't guarantee that the evalation always has the same
+        # format, so we need to enforce it
         # TODO: maybe move this cleaning to the utils?
 
-        # evaluation shape: {dimension: {"score": str, "reasoning": str, "yes_question_id": str, "yes_reasoning": str}}
+        # evaluation shape: {dimension: {"score": str, "reasoning": str,
+        # "yes_question_id": str, "yes_reasoning": str}}
         try:
             evaluation_dict = {}
             for dimension, values in evaluation.items():
@@ -99,6 +106,7 @@ async def judge_conversations(
     output_folder: Optional[str] = None,
     save_aggregated_results: bool = True,
     filename: Optional[str] = "results.csv",
+    judge_model_extra_params: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Judge conversations in a folder and return results.
@@ -110,6 +118,7 @@ async def judge_conversations(
         output_folder: Output folder for evaluation results
         limit: Optional limit on number of files to process
         verbose: Whether to print status messages
+        judge_model_extra_params: Extra parameters for the judge model
 
     Returns:
         List of evaluation results
@@ -120,7 +129,8 @@ async def judge_conversations(
     """
     if output_folder is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
-        output_folder = f"{output_root}/j_{judge_model}_{timestamp}__{Path(conversation_folder).name}"
+        folder_name = Path(conversation_folder).name
+        output_folder = f"{output_root}/j_{judge_model}_{timestamp}__{folder_name}"
 
     os.makedirs(output_folder, exist_ok=True)
 
@@ -149,7 +159,12 @@ async def judge_conversations(
 
     # Run batch evaluation with individual judges
     results = await batch_evaluate_with_individual_judges(
-        conversation_file_paths, rubrics, judge_model, output_folder, limit=limit
+        conversation_file_paths,
+        rubrics,
+        judge_model,
+        output_folder,
+        limit=limit,
+        judge_model_extra_params=judge_model_extra_params,
     )
 
     if save_aggregated_results:

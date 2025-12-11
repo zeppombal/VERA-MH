@@ -18,6 +18,7 @@ class LLMJudge:
     def __init__(
         self,
         judge_model: str,
+        judge_model_extra_params: Optional[Dict[str, Any]] = None,
         rubric_folder: str = "data",
         rubric_prompt_beginning_file: str = "rubric_prompt_beginning.txt",
         rubric_file: str = "rubric.tsv",
@@ -31,6 +32,7 @@ class LLMJudge:
 
         Args:
             judge_model: Model to use for judging.
+            judge_model_extra_params: Extra parameters for the judge model.
             rubric_folder: Folder containing rubric files
             rubric_file: File containing the question-flow rubric
             sep: Separator for the rubric file
@@ -81,6 +83,7 @@ class LLMJudge:
                 f"Question prompt file not found: {self.question_prompt_file}"
             )
         self.judge_model = judge_model
+        self.judge_model_extra_params = judge_model_extra_params or {}
 
         # Log initialization info
         self.logger.info("=== Initializing LLM Judge ===")
@@ -160,6 +163,7 @@ class LLMJudge:
             model_name=self.judge_model,
             name="Question Flow Evaluator",
             system_prompt=conversation_context_prompt,
+            **self.judge_model_extra_params,
         )
 
         # Validate that the LLM supports structured output
