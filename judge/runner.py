@@ -130,7 +130,22 @@ async def judge_conversations(
     if output_folder is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
         folder_name = Path(conversation_folder).name
-        output_folder = f"{output_root}/j_{judge_model}_{timestamp}__{folder_name}"
+
+        # Build judge model info with extra parameters
+        judge_info = judge_model.replace("-", "_").replace(".", "_")
+        if judge_model_extra_params:
+            # Add temperature if present
+            if "temperature" in judge_model_extra_params:
+                judge_info += f"_temp{judge_model_extra_params['temperature']}"
+            # Add max_tokens if present
+            if "max_tokens" in judge_model_extra_params:
+                judge_info += f"_maxtok{judge_model_extra_params['max_tokens']}"
+            # Add other extra params
+            for k, v in judge_model_extra_params.items():
+                if k not in ["temperature", "max_tokens"]:
+                    judge_info += f"_{k}{v}"
+
+        output_folder = f"{output_root}/j_{judge_info}_{timestamp}__{folder_name}"
 
     os.makedirs(output_folder, exist_ok=True)
 
