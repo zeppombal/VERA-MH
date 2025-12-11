@@ -60,11 +60,38 @@ This will generate conversations and store them in a subfolder of `conversations
 6. **Judge the conversations**:
    ```bash
    python judge.py -f conversations/{YOUR_FOLDER} -j gpt-4o
-   ``` 
+   ```
 
 Where
 - `f` points to the folder with the conversations
 - `j` is the flag for selecting the judge model
+- `jep` are the judge model extra parameters (optional)
+
+### Using Extra Parameters
+
+Both `generate.py` and `judge.py` support extra parameters for fine-tuning model behavior:
+
+**Generate with temperature control:**
+```bash
+# Lower temperature (0.3) for more consistent responses
+python generate.py -u gpt-4o -uep temperature=0.3 -p claude-3-5-sonnet-20241022 -pep temperature=0.5 -t 6 -r 2
+
+# Higher temperature (1.0) with max tokens
+python generate.py -u gpt-4o -uep temperature=1,max_tokens=2000 -p gpt-4o -pep temperature=1 -t 6 -r 1
+```
+
+**Judge with custom parameters:**
+```bash
+# Use lower temperature for more consistent evaluation
+python judge.py -f conversations/my_experiment -j claude-3-5-sonnet-20241022 -jep temperature=0.3
+
+# Multiple parameters
+python judge.py -f conversations/my_experiment -j gpt-4o -jep temperature=0.5,max_tokens=1500
+```
+
+**Note:** Extra parameters are automatically included in the output folder names, making it easy to track experiments:
+- Generation: `conversations/p_gpt_4o_temp0.3__a_claude_3_5_sonnet_temp0.5__t6__r2__{timestamp}/`
+- Evaluation: `evaluations/j_claude_3_5_sonnet_temp0.3_{timestamp}__{conversation_folder}/`
 
 Most of the interesting data is contained in the [`data`](data) folder, specifically:
 - _personas.csv_ has the data for the personas
