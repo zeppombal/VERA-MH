@@ -182,6 +182,7 @@ class LLMJudge:
         verbose: bool = False,
         start_question_id: Optional[str] = None,
         reasoning_length: Optional[int] = None,
+        judge_instance: Optional[int] = None,
     ) -> Dict[str, Dict[str, str]]:
         """
         Evaluate conversation using question-flow rubric.
@@ -199,6 +200,7 @@ class LLMJudge:
             start_question_id: Question ID to start with (default: first
                 question in rubric)
             reasoning_length: Maximum length of the reasoning to log (default: None)
+            judge_instance: Instance number for this judge (for unique filenames)
 
         Returns:
             Dictionary with dimension names as keys and evaluation results as values
@@ -236,7 +238,9 @@ class LLMJudge:
         # Step 3: Log and save results
         self._log_final_results(results)
         if auto_save:
-            self._save_results(conversation_file, output_folder, results, verbose)
+            self._save_results(
+                conversation_file, output_folder, results, verbose, judge_instance
+            )
 
         return results
 
@@ -342,10 +346,17 @@ class LLMJudge:
         output_folder: str,
         results: Dict[str, Dict[str, str]],
         verbose: bool,
+        judge_instance: Optional[int] = None,
     ):
         """Save evaluation results to file."""
         conversation_name = Path(conversation_file).stem
-        output_file = Path(output_folder) / f"{conversation_name}_question_flow.tsv"
+
+        # Build filename with judge model and instance info
+        judge_suffix = self.judge_model.replace("/", "_").replace(":", "_")
+        if judge_instance is not None:
+            judge_suffix += f"_i{judge_instance}"
+
+        output_file = Path(output_folder) / f"{conversation_name}_{judge_suffix}.tsv"
         if verbose:
             print(f"\nSaving evaluation to {output_file}")
         self._save_iterative_evaluation(results, output_file)

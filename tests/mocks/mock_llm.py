@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, Type, TypeVar
+from typing import Any, Dict, List, Optional, Type, TypeVar, Union
 
 from llm_clients.llm_interface import JudgeLLM
 
@@ -14,7 +14,7 @@ class MockLLM(JudgeLLM):
     def __init__(
         self,
         name: str = "mock-llm",
-        responses: list[str] | None = None,
+        responses: Optional[List[str]] = None,
         system_prompt: Optional[str] = None,
         simulate_error: bool = False,
         model_name: str = "mock-model",
@@ -24,7 +24,7 @@ class MockLLM(JudgeLLM):
         super().__init__(name, system_prompt)
         self.responses = responses or ["Mock response"]
         self.response_index = 0
-        self.calls: list[str] = []
+        self.calls: List[str] = []
         self.simulate_error = simulate_error
         self.last_response_metadata: Dict[str, Any] = {}
         self.model_name = model_name
