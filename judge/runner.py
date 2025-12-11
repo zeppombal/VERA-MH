@@ -206,7 +206,8 @@ async def _run_workers_with_queue(
             num_workers = len(model_jobs) if max_concurrent is None else max_concurrent
             print(
                 f"Starting {num_workers} workers for {judge_model} "
-                f"({len(model_jobs)} jobs)"
+                f"({len(model_jobs)} jobs total)"
+                f"(max concurrent: {max_concurrent})"
             )
 
             # Create workers for this judge model
@@ -235,7 +236,10 @@ async def _run_workers_with_queue(
 
         # Determine number of workers
         num_workers = total_jobs if max_concurrent is None else max_concurrent
-        print(f"Starting {num_workers} workers for all jobs ({total_jobs} total)")
+        print(
+            f"Starting {num_workers} workers for all jobs ({total_jobs} total)"
+            f"(max concurrent: {max_concurrent})"
+        )
 
         # Create workers
         workers = [

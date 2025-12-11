@@ -13,14 +13,16 @@ from judge.llm_judge import LLMJudge
 
 async def main(args):
     """Main async entrypoint for judging conversations."""
-    # Parse judge model from args (supports "model" or "model:count" format)
-    if ":" in args.judge_model:
-        # Format: "model:count"
-        model, count = args.judge_model.rsplit(":", 1)
-        judge_models = {model: int(count)}
-    else:
-        # Format: "model" (defaults to 1 instance)
-        judge_models = {args.judge_model: 1}
+    # Parse judge models from args (supports "model" or "model:count" format)
+    judge_models = {}
+    for model_spec in args.judge_model:
+        if ":" in model_spec:
+            # Format: "model:count"
+            model, count = model_spec.rsplit(":", 1)
+            judge_models[model] = int(count)
+        else:
+            # Format: "model" (defaults to 1 instance)
+            judge_models[model_spec] = 1
 
     models_str = ", ".join(f"{model}x{count}" for model, count in judge_models.items())
     print(f"🎯 LLM Judge | Models: {models_str} | Rubrics: {', '.join(args.rubrics)}")
@@ -76,12 +78,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--judge-model",
         "-j",
+        nargs="+",
         required=True,
         help=(
-            "Model to use for judging. "
+            "Model(s) to use for judging. "
             "Format: 'model' or 'model:count' for multiple instances. "
+            "Can specify multiple models: --judge-model model1 model2:3. "
             "Examples: claude-3-5-sonnet-20241022, "
-            "claude-3-5-sonnet-20241022:3"
+            "claude-3-5-sonnet-20241022:3, "
+            "claude-3-5-sonnet-20241022:2 gpt-4o:1"
         ),
     )
 
