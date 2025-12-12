@@ -49,7 +49,9 @@ async def main(
         Exception: Other errors
     """
     if max_turns % 2 != 0:
-        print("Max turns is odd, which means the last turn will be the user, without a response.")
+        print(
+            "Max turns is odd, which means the last turn will be the user, without a response."
+        )
         print("Changing max turns to an even number.")
         max_turns = max_turns + 1
     if verbose:
@@ -222,4 +224,3 @@ if __name__ == "__main__":
             max_total_words=args.max_total_words,
         )
     )
-

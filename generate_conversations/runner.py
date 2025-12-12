@@ -50,7 +50,6 @@ class ConversationRunner:
             "system_prompt", "You are a helpful AI assistant."
         )
 
-
     async def run_single_conversation(
         self,
         persona_config: dict,
@@ -109,8 +108,9 @@ class ConversationRunner:
         # Run the conversation - let first speaker start naturally with None
 
         conversation = await simulator.start_conversation(
-            initial_message=None, max_turns=max_turns,
-            max_total_words=self.max_total_words
+            initial_message=None,
+            max_turns=max_turns,
+            max_total_words=self.max_total_words,
         )
 
         # Log each conversation turn

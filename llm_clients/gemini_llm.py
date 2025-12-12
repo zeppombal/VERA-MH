@@ -40,6 +40,18 @@ class GeminiLLM(JudgeLLM):
 
         # Override with any provided kwargs
         llm_params.update(kwargs)
+
+        # Print configuration before creating LLM
+        print("Creating Gemini LLM with parameters:")
+        print(f"  Model: {llm_params['model']}")
+        print(f"  Temperature: {llm_params.get('temperature', 'default')}")
+        print(f"  Max tokens: {llm_params.get('max_tokens', 'default')}")
+        extra_params = {
+            k: v for k, v in llm_params.items() if k not in ["model", "google_api_key"]
+        }
+        if extra_params:
+            print(f"  Extra parameters: {extra_params}")
+
         self.llm = ChatGoogleGenerativeAI(**llm_params)
 
         print(f"Using Gemini model: {self.llm.model}")

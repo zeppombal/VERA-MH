@@ -277,7 +277,7 @@ class TestConversationFileOperations:
             {
                 "speaker": "ModelA",
                 "response": (
-                    "I have questions about: " "1) stress, 2) anxiety, 3) depression"
+                    "I have questions about: 1) stress, 2) anxiety, 3) depression"
                 ),
             },
             {"speaker": "ModelB", "response": "Let's tackle these one by one."},
@@ -306,7 +306,7 @@ class TestConversationFileOperations:
             {
                 "speaker": "ModelA",
                 "response": (
-                    "I have multiple concerns:\n" "1. Sleep\n2. Appetite\n3. Focus"
+                    "I have multiple concerns:\n1. Sleep\n2. Appetite\n3. Focus"
                 ),
             },
             {

@@ -8,7 +8,7 @@ import os
 from asyncio import Queue
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 
@@ -48,7 +48,9 @@ async def _evaluate_single_conversation_with_judge(
     conversation_file: str,
     judge_model: str,
     judge_instance: int,
+    judge_id: int,
     output_folder: str,
+    judge_model_extra_params: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Evaluate a single conversation with a single judge model instance.
@@ -57,19 +59,24 @@ async def _evaluate_single_conversation_with_judge(
         conversation_file: Path to conversation file
         judge_model: Model name to use for judging
         judge_instance: Instance number for this judge (1, 2, 3, ...)
+        judge_id: Zero-based ID for this judge (0, 1, 2, ...)
         output_folder: Folder to save evaluation results
+        judge_model_extra_params: Extra parameters for the judge model
 
     Returns:
-        Dict with filename, run_id, judge_model, judge_instance,
+        Dict with filename, run_id, judge_model, judge_instance, judge_id,
         and all dimension scores
     """
-    judge = await LLMJudge.create(judge_model=judge_model)
+    judge = LLMJudge(
+        judge_model=judge_model, judge_model_extra_params=judge_model_extra_params
+    )
 
     evaluation = await judge.evaluate_conversation_question_flow(
         conversation_file,
         output_folder=output_folder,
         auto_save=True,
         verbose=False,
+        judge_instance=judge_instance,
     )
 
     try:
@@ -87,6 +94,7 @@ async def _evaluate_single_conversation_with_judge(
         "run_id": Path(conversation_file).parent.name,
         "judge_model": judge_model,
         "judge_instance": judge_instance,
+        "judge_id": judge_id,
         **evaluation_dict,
     }
 
@@ -95,7 +103,8 @@ def _create_evaluation_jobs(
     conversation_file_paths: List[str],
     judge_models: Dict[str, int],
     output_folder: str,
-) -> List[Tuple[str, str, int, str]]:
+    judge_model_extra_params: Optional[Dict[str, Any]] = None,
+) -> List[Tuple[str, str, int, int, str, Optional[Dict[str, Any]]]]:
     """
     Create job tuples for all (conversation × judge × instance) combinations.
 
@@ -103,34 +112,45 @@ def _create_evaluation_jobs(
         conversation_file_paths: List of conversation file paths
         judge_models: Dict mapping model names to number of instances
         output_folder: Folder to save evaluation results
+        judge_model_extra_params: Extra parameters for the judge model
 
     Returns:
-        List of job tuples (conversation_file, judge_model, instance, output_folder)
+        List of job tuples:
+        (conversation_file, judge_model, instance, judge_id, output_folder,
+        extra_params) where judge_id starts from 0 for each model type
     """
     jobs = []
     for conversation_file in conversation_file_paths:
         for judge_model, num_instances in judge_models.items():
             for instance in range(1, num_instances + 1):
-                jobs.append((conversation_file, judge_model, instance, output_folder))
+                judge_id = instance - 1  # Convert 1-based instance to 0-based judge_id
+                jobs.append(
+                    (
+                        conversation_file,
+                        judge_model,
+                        instance,
+                        judge_id,
+                        output_folder,
+                        judge_model_extra_params,
+                    )
+                )
     return jobs
 
 
 async def _worker(
-    worker_id: int,
+    worker_id: Union[int, str],
     queue: Queue,
     results: List[Dict[str, Any]],
     total_jobs: int,
-    judge_model_filter: Optional[str] = None,
 ):
     """
     Worker that processes evaluation jobs from the queue.
 
     Args:
-        worker_id: Unique identifier for this worker
+        worker_id: Unique identifier for this worker (int or str)
         queue: Queue containing job tuples
         results: Shared list to append results to
         total_jobs: Total number of jobs for progress tracking
-        judge_model_filter: If set, only process jobs for this judge model
     """
     while True:
         try:
@@ -138,22 +158,30 @@ async def _worker(
         except asyncio.QueueEmpty:
             break
 
-        conversation_file, judge_model, instance, output_folder = job
-
-        # Skip if worker is filtered to a specific judge model
-        if judge_model_filter and judge_model != judge_model_filter:
-            queue.task_done()
-            continue
+        (
+            conversation_file,
+            judge_model,
+            instance,
+            judge_id,
+            output_folder,
+            extra_params,
+        ) = job
 
         completed = len(results)
         print(
             f"[Worker {worker_id}] ({completed + 1}/{total_jobs}) "
-            f"{Path(conversation_file).name} | {judge_model} (instance {instance})"
+            f"{Path(conversation_file).name} | {judge_model} "
+            f"(instance {instance}, id {judge_id})"
         )
 
         try:
             result = await _evaluate_single_conversation_with_judge(
-                conversation_file, judge_model, instance, output_folder
+                conversation_file,
+                judge_model,
+                instance,
+                judge_id,
+                output_folder,
+                extra_params,
             )
             results.append(result)
         except Exception as e:
@@ -166,7 +194,7 @@ async def _worker(
 
 
 async def _run_workers_with_queue(
-    jobs: List[Tuple[str, str, int, str]],
+    jobs: List[Tuple[str, str, int, int, str, Optional[Dict[str, Any]]]],
     max_concurrent: Optional[int],
     per_judge: bool = False,
 ) -> List[Dict[str, Any]]:
@@ -175,7 +203,8 @@ async def _run_workers_with_queue(
 
     Args:
         jobs: List of job tuples
-              (conversation_file, judge_model, instance, output_folder)
+              (conversation_file, judge_model, instance, judge_id, output_folder,
+              extra_params)
         max_concurrent: Maximum number of concurrent workers (None = unlimited)
         per_judge: If True, max_concurrent applies per judge model;
                   if False, total
@@ -206,7 +235,8 @@ async def _run_workers_with_queue(
             num_workers = len(model_jobs) if max_concurrent is None else max_concurrent
             print(
                 f"Starting {num_workers} workers for {judge_model} "
-                f"({len(model_jobs)} jobs)"
+                f"({len(model_jobs)} jobs total)"
+                f"(max concurrent: {max_concurrent})"
             )
 
             # Create workers for this judge model
@@ -217,7 +247,6 @@ async def _run_workers_with_queue(
                         queue,
                         results,
                         total_jobs,
-                        judge_model_filter=None,
                     )
                 )
                 for i in range(num_workers)
@@ -235,13 +264,14 @@ async def _run_workers_with_queue(
 
         # Determine number of workers
         num_workers = total_jobs if max_concurrent is None else max_concurrent
-        print(f"Starting {num_workers} workers for all jobs ({total_jobs} total)")
+        print(
+            f"Starting {num_workers} workers for all jobs ({total_jobs} total)"
+            f"(max concurrent: {max_concurrent})"
+        )
 
         # Create workers
         workers = [
-            asyncio.create_task(
-                _worker(i, queue, results, total_jobs, judge_model_filter=None)
-            )
+            asyncio.create_task(_worker(i, queue, results, total_jobs))
             for i in range(num_workers)
         ]
 
@@ -253,12 +283,12 @@ async def _run_workers_with_queue(
 
 async def batch_evaluate_with_individual_judges(
     conversation_file_paths: List[str],
-    rubrics: List[str],
     judge_models: Dict[str, int],
     output_folder: str,
     limit: Optional[int],
     max_concurrent: Optional[int],
     per_judge: bool,
+    judge_model_extra_params: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Evaluate conversations with multiple judge models using queue workers.
@@ -268,13 +298,13 @@ async def batch_evaluate_with_individual_judges(
 
     Args:
         conversation_file_paths: List of conversation file paths
-        rubrics: List of rubric names to use (currently unused)
         judge_models: Dict mapping model names to number of instances
                      Example: {"claude-3-7-sonnet": 3, "gpt-4": 2}
         output_folder: Folder to save evaluation results
         limit: Optional limit on number of conversations to evaluate
         max_concurrent: Maximum number of concurrent workers
         per_judge: If True, max_concurrent applies per judge model; if False, total
+        judge_model_extra_params: Extra parameters for the judge model
 
     Returns:
         Flattened list of evaluation results with one row per
@@ -299,7 +329,9 @@ async def batch_evaluate_with_individual_judges(
     )
 
     # Create all evaluation jobs
-    jobs = _create_evaluation_jobs(conversation_file_paths, judge_models, output_folder)
+    jobs = _create_evaluation_jobs(
+        conversation_file_paths, judge_models, output_folder, judge_model_extra_params
+    )
 
     # Run workers with queue
     results = await _run_workers_with_queue(jobs, max_concurrent, per_judge)
@@ -318,6 +350,7 @@ async def judge_conversations(
     output_folder: Optional[str] = None,
     save_aggregated_results: bool = True,
     filename: Optional[str] = "results.csv",
+    judge_model_extra_params: Optional[Dict[str, Any]] = None,
     max_concurrent: Optional[int] = None,
     per_judge: bool = False,
 ) -> List[Dict[str, Any]]:
@@ -335,6 +368,7 @@ async def judge_conversations(
         output_folder: Custom output folder (auto-generated if None)
         save_aggregated_results: Whether to save results to CSV
         filename: Name for aggregated results CSV
+        judge_model_extra_params: Extra parameters for the judge model
         max_concurrent: Maximum number of concurrent workers
         per_judge: If True, max_concurrent applies per judge model; if False, total
 
@@ -350,8 +384,23 @@ async def judge_conversations(
         judges_str = "_".join(
             f"{model}x{count}" for model, count in judge_models.items()
         )
+
+        # Build judge info string with extra parameters
+        judge_info = judges_str
+        if judge_model_extra_params:
+            # Add temperature if present
+            if "temperature" in judge_model_extra_params:
+                judge_info += f"_temp{judge_model_extra_params['temperature']}"
+            # Add max_tokens if present
+            if "max_tokens" in judge_model_extra_params:
+                judge_info += f"_maxtok{judge_model_extra_params['max_tokens']}"
+            # Add other extra params
+            for k, v in judge_model_extra_params.items():
+                if k not in ["temperature", "max_tokens"]:
+                    judge_info += f"_{k}{v}"
+
         output_folder = (
-            f"{output_root}/j_{judges_str}_{timestamp}__"
+            f"{output_root}/j_{judge_info}_{timestamp}__"
             f"{Path(conversation_folder).name}"
         )
 
@@ -383,20 +432,28 @@ async def judge_conversations(
     # Run batch evaluation with multiple judges
     results = await batch_evaluate_with_individual_judges(
         conversation_file_paths,
-        rubrics,
         judge_models,
         output_folder,
         limit,
         max_concurrent,
         per_judge,
+        judge_model_extra_params,
     )
 
     if save_aggregated_results and results:
-        # Column order: filename, run_id, judge_model, judge_instance, dimensions
-        columns = ["filename", "run_id", "judge_model", "judge_instance"] + [
+        # Column order: filename, run_id, judge_model, judge_instance,
+        # judge_id, dimensions
+        columns = [
+            "filename",
+            "run_id",
+            "judge_model",
+            "judge_instance",
+            "judge_id",
+        ] + [
             k
             for k in results[0].keys()
-            if k not in ["filename", "run_id", "judge_model", "judge_instance"]
+            if k
+            not in ["filename", "run_id", "judge_model", "judge_instance", "judge_id"]
         ]
         pd.DataFrame(results, columns=columns).to_csv(
             f"{output_folder}/{filename}", index=False
