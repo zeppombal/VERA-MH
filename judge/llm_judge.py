@@ -4,13 +4,10 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import aiofiles
-
 from judge.constants import BEST_PRACTICE, DAMAGING, NEUTRAL
-from judge.file_cache import get_cached_file
 from judge.question_navigator import QuestionNavigator
 from judge.response_models import QuestionResponse
-from judge.utils import load_rubric_structure
+from judge.rubric_config import ConversationData, RubricConfig
 from llm_clients import LLMFactory
 from llm_clients.llm_interface import JudgeLLM
 
@@ -21,28 +18,20 @@ class LLMJudge:
     def __init__(
         self,
         judge_model: str,
+        rubric_config: RubricConfig,
         judge_model_extra_params: Optional[Dict[str, Any]] = None,
-        rubric_folder: str = "data",
-        rubric_prompt_beginning_file: str = "rubric_prompt_beginning.txt",
-        rubric_file: str = "rubric.tsv",
-        sep: str = "\t",
         log_file: Optional[str] = None,
         verbose: bool = False,
-        question_prompt_file: str = "question_prompt.txt",
     ):
         """
-        Initialize the LLM Judge.
+        Initialize the LLM Judge with pre-loaded rubric configuration.
 
         Args:
-            judge_model: Model to use for judging.
-            judge_model_extra_params: Extra parameters for the judge model.
-            rubric_folder: Folder containing rubric files
-            rubric_file: File containing the question-flow rubric
-            sep: Separator for the rubric file
+            judge_model: Model to use for judging
+            rubric_config: Pre-loaded rubric configuration data
+            judge_model_extra_params: Extra parameters for the judge model
             log_file: Path to log file (default: logs/judge_{timestamp}.log)
             verbose: Whether to print verbose output during initialization
-
-        Note: assumes that `rubric_folder` contains the `rubric_file`
         """
 
         # Setup logger
@@ -68,23 +57,6 @@ class LLMJudge:
         self.logger.addHandler(file_handler)
 
         self.log_file = log_file
-
-        rubric_path = Path(rubric_folder) / rubric_file
-        rubric_prompt_beginning_path = (
-            Path(rubric_folder) / rubric_prompt_beginning_file
-        )
-        self.question_prompt_file = Path(rubric_folder) / question_prompt_file
-        if not rubric_path.exists():
-            raise FileNotFoundError(f"Rubric file not found: {rubric_path}")
-        if not rubric_prompt_beginning_path.exists():
-            raise FileNotFoundError(
-                f"Rubric prompt beginning file not found: "
-                f"{rubric_prompt_beginning_path}"
-            )
-        if not self.question_prompt_file.exists():
-            raise FileNotFoundError(
-                f"Question prompt file not found: {self.question_prompt_file}"
-            )
         self.judge_model = judge_model
         self.judge_model_extra_params = judge_model_extra_params or {}
 
@@ -93,23 +65,23 @@ class LLMJudge:
         if "temperature" not in self.judge_model_extra_params:
             self.judge_model_extra_params["temperature"] = 0
 
+        # Store rubric data from config
+        self.rubric_prompt_beginning = rubric_config.rubric_prompt_beginning
+        self.question_prompt_template = rubric_config.question_prompt_template
+        self.dimensions = rubric_config.dimensions
+        self.question_flow_data = rubric_config.question_flow_data
+        self.question_order = rubric_config.question_order
+
+        # Initialize question navigator with parsed data
+        self.navigator = QuestionNavigator(
+            question_flow_data=rubric_config.question_flow_data,
+            question_order=rubric_config.question_order,
+        )
+
         # Log initialization info
         self.logger.info("=== Initializing LLM Judge ===")
         self.logger.info(f"Judge model: {judge_model}")
-        self.logger.info(f"Rubric folder: {rubric_folder}")
         self.logger.info(f"Log file: {log_file}")
-
-        with open(rubric_prompt_beginning_path, "r", encoding="utf-8") as f:
-            self.rubric_prompt_beginning = f.read()
-
-        # Initialize question navigator (handles rubric parsing and navigation)
-        self.navigator = QuestionNavigator(str(rubric_path), sep=sep)
-        self.question_flow_data = self.navigator.question_flow_data
-        self.question_order = self.navigator.question_order
-
-        # Load dimensions from rubric
-        self.dimensions, _ = load_rubric_structure(str(rubric_path), sep=sep)
-
         self.logger.info(
             f"Loaded question-flow rubric with {len(self.question_flow_data)} questions"
         )
@@ -118,132 +90,15 @@ class LLMJudge:
             f"Loaded question-flow rubric with {len(self.question_flow_data)} questions"
         )
 
-    @classmethod
-    async def create(
-        cls,
-        judge_model: str,
-        rubric_folder: str = "data",
-        rubric_prompt_beginning_file: str = "rubric_prompt_beginning.txt",
-        rubric_file: str = "rubric.tsv",
-        sep: str = "\t",
-        log_file: Optional[str] = None,
-        verbose: bool = False,
-        question_prompt_file: str = "question_prompt.txt",
-    ) -> "LLMJudge":
-        """
-        Async factory method to create LLMJudge with cached files.
-
-        Uses module-level cache to avoid repeated disk I/O.
-
-        Args:
-            judge_model: Model to use for judging
-            rubric_folder: Folder containing rubric files
-            rubric_prompt_beginning_file: File containing rubric prompt beginning
-            rubric_file: File containing the question-flow rubric
-            sep: Separator for the rubric file
-            log_file: Path to log file (default: logs/judge_{timestamp}.log)
-            verbose: Whether to print verbose output during initialization
-            question_prompt_file: File containing question prompt template
-
-        Returns:
-            Initialized LLMJudge instance
-        """
-        from judge.utils import load_rubric_structure_async
-
-        # Create instance without calling __init__
-        instance = cls.__new__(cls)
-
-        # Setup logger (same as __init__)
-        if log_file is None:
-            log_dir = Path("logs")
-            log_dir.mkdir(exist_ok=True)
-            from datetime import datetime
-
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            log_file = str(log_dir / f"judge_{timestamp}.log")
-
-        instance.logger = logging.getLogger(f"LLMJudge_{id(instance)}")
-        instance.logger.setLevel(logging.INFO)
-        instance.logger.handlers.clear()
-
-        file_handler = logging.FileHandler(log_file, mode="a")
-        file_handler.setLevel(logging.INFO)
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
-        file_handler.setFormatter(formatter)
-        instance.logger.addHandler(file_handler)
-        instance.log_file = log_file
-
-        # Setup paths
-        rubric_path = Path(rubric_folder) / rubric_file
-        rubric_prompt_beginning_path = (
-            Path(rubric_folder) / rubric_prompt_beginning_file
-        )
-        instance.question_prompt_file = Path(rubric_folder) / question_prompt_file
-
-        # Validate files exist
-        for file_path in [
-            rubric_path,
-            rubric_prompt_beginning_path,
-            instance.question_prompt_file,
-        ]:
-            if not file_path.exists():
-                raise FileNotFoundError(f"File not found: {file_path}")
-
-        instance.judge_model = judge_model
-
-        # Log initialization
-        instance.logger.info("=== Initializing LLM Judge ===")
-        instance.logger.info(f"Judge model: {judge_model}")
-        instance.logger.info(f"Rubric folder: {rubric_folder}")
-        instance.logger.info(f"Log file: {log_file}")
-
-        # Load cached files
-        instance.rubric_prompt_beginning = await get_cached_file(
-            str(rubric_prompt_beginning_path)
-        )
-        instance.navigator = await QuestionNavigator.create(str(rubric_path), sep=sep)
-        instance.question_flow_data = instance.navigator.question_flow_data
-        instance.question_order = instance.navigator.question_order
-        instance.dimensions, _ = await load_rubric_structure_async(
-            str(rubric_path), sep=sep
-        )
-
-        instance.logger.info(
-            f"Loaded question-flow rubric with "
-            f"{len(instance.question_flow_data)} questions"
-        )
-        instance.logger.info(f"Loaded dimensions: {instance.dimensions}")
-        print(
-            f"Loaded question-flow rubric with "
-            f"{len(instance.question_flow_data)} questions"
-        )
-
-        return instance
-
-    async def load_conversation(self, conversation_file: str) -> str:
-        """
-        Load conversation from file asynchronously.
-
-        Args:
-            conversation_file: Path to conversation file
-
-        Returns:
-            Conversation text
-        """
-        conversation_path = Path(conversation_file)
-
-        if not conversation_path.exists():
-            raise FileNotFoundError(f"Conversation file not found: {conversation_path}")
-
-        async with aiofiles.open(conversation_path, "r", encoding="utf-8") as f:
-            return await f.read()
-
     def _create_evaluator(
-        self, conversation: str, conversation_file: str, verbose: bool
+        self, conversation: str, conversation_filename: str, verbose: bool
     ) -> JudgeLLM:
         """Create and configure the LLM evaluator with conversation context.
+
+        Args:
+            conversation: Conversation text content
+            conversation_filename: Filename for logging purposes
+            verbose: Whether to print verbose output
 
         Returns:
             JudgeLLM instance configured for evaluation
@@ -253,7 +108,7 @@ class LLMJudge:
         """
         # Log evaluation start
         self.logger.info("=" * 80)
-        self.logger.info(f"Starting evaluation: {conversation_file}")
+        self.logger.info(f"Starting evaluation: {conversation_filename}")
         self.logger.info(f"Model: {self.judge_model}")
         self.logger.info("=" * 80)
         conv_preview = conversation[:1000]
@@ -292,7 +147,7 @@ class LLMJudge:
 
     async def evaluate_conversation_question_flow(
         self,
-        conversation_file: str,
+        conversation: ConversationData,
         output_folder: str,
         auto_save: bool = True,
         verbose: bool = False,
@@ -309,7 +164,7 @@ class LLMJudge:
         3. Save results if requested
 
         Args:
-            conversation_file: Path to conversation file
+            conversation: ConversationData with content and metadata
             output_folder: Folder to save evaluation results
             auto_save: Whether to automatically save results to files
             verbose: Whether to print progress information
@@ -327,10 +182,10 @@ class LLMJudge:
                 "Question flow rubric not loaded. Check rubric file exists."
             )
 
-        # Load conversation and create evaluator
-        conversation = await self.load_conversation(conversation_file)
+        # Create evaluator with conversation content
+        conversation_filename = conversation.metadata.get("filename", "unknown")
         self.evaluator = self._create_evaluator(
-            conversation, conversation_file, verbose
+            conversation.content, conversation_filename, verbose
         )
 
         # Step 1: Navigate through questions and collect answers
@@ -355,7 +210,7 @@ class LLMJudge:
         self._log_final_results(results)
         if auto_save:
             self._save_results(
-                conversation_file, output_folder, results, verbose, judge_instance
+                conversation, output_folder, results, verbose, judge_instance
             )
 
         return results
@@ -458,14 +313,24 @@ class LLMJudge:
 
     def _save_results(
         self,
-        conversation_file: str,
+        conversation: ConversationData,
         output_folder: str,
         results: Dict[str, Dict[str, str]],
         verbose: bool,
         judge_instance: Optional[int] = None,
     ):
-        """Save evaluation results to file."""
-        conversation_name = Path(conversation_file).stem
+        """Save evaluation results to file.
+
+        Args:
+            conversation: ConversationData with metadata
+            output_folder: Folder to save results
+            results: Evaluation results dictionary
+            verbose: Whether to print progress
+            judge_instance: Optional judge instance number for filename
+        """
+        # Extract conversation name from metadata
+        filename = conversation.metadata.get("filename", "unknown.txt")
+        conversation_name = Path(filename).stem
 
         # Build filename with judge model and instance info
         judge_suffix = self.judge_model.replace("/", "_").replace(":", "_")
@@ -697,12 +562,20 @@ class LLMJudge:
     async def _build_question_prompt(
         self, question: str, examples: str, options: str
     ) -> str:
-        """Build the prompt for asking a question using cached template."""
+        """Build the prompt for asking a question using pre-loaded template.
+
+        Args:
+            question: Question text
+            examples: Examples text
+            options: Answer options
+
+        Returns:
+            Formatted question prompt
+        """
         examples_section = f"\n{examples}\n" if examples else ""
 
-        # Use cached file instead of reading each time
-        prompt_template = await get_cached_file(str(self.question_prompt_file))
-        prompt = prompt_template.format(
+        # Use pre-loaded template from rubric config
+        prompt = self.question_prompt_template.format(
             question=question, examples_section=examples_section, options=options
         )
         return prompt
