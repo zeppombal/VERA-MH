@@ -37,9 +37,11 @@ class TestRunnerExtraParams:
 
             results = await batch_evaluate_with_individual_judges(
                 conversation_file_paths=[str(conv_file)],
-                rubrics=["rubric.tsv"],
-                judge_model="claude-3-7-sonnet",
+                judge_models={"claude-3-7-sonnet": 1},
                 output_folder=str(tmp_path),
+                limit=None,
+                max_concurrent=None,
+                per_judge=False,
                 judge_model_extra_params=extra_params,
             )
 
@@ -72,9 +74,11 @@ class TestRunnerExtraParams:
 
             results = await batch_evaluate_with_individual_judges(
                 conversation_file_paths=[str(conv_file)],
-                rubrics=["rubric.tsv"],
-                judge_model="claude-3-7-sonnet",
+                judge_models={"claude-3-7-sonnet": 1},
                 output_folder=str(tmp_path),
+                limit=None,
+                max_concurrent=None,
+                per_judge=False,
                 # No extra params provided
             )
 
@@ -106,7 +110,7 @@ class TestRunnerExtraParams:
             ]
 
             results = await judge_conversations(
-                judge_model="claude-3-7-sonnet",
+                judge_models={"claude-3-7-sonnet": 1},
                 conversation_folder=str(conv_folder),
                 output_root=str(tmp_path / "output"),
                 judge_model_extra_params=extra_params,
@@ -115,9 +119,11 @@ class TestRunnerExtraParams:
 
             # Verify batch function was called with extra params
             mock_batch.assert_called_once()
-            call_kwargs = mock_batch.call_args[1]
-            assert "judge_model_extra_params" in call_kwargs
-            assert call_kwargs["judge_model_extra_params"] == extra_params
+            call_args = mock_batch.call_args[0]
+            # Arguments: conversation_file_paths, judge_models, output_folder,
+            #            limit, max_concurrent, per_judge, judge_model_extra_params
+            assert len(call_args) == 7
+            assert call_args[6] == extra_params  # judge_model_extra_params is 7th arg
             assert len(results) == 1
 
     @pytest.mark.asyncio
@@ -140,7 +146,7 @@ class TestRunnerExtraParams:
             ]
 
             results = await judge_conversations(
-                judge_model="claude-3-7-sonnet",
+                judge_models={"claude-3-7-sonnet": 1},
                 conversation_folder=str(conv_folder),
                 output_root=str(tmp_path / "output"),
                 save_aggregated_results=False,
@@ -149,9 +155,11 @@ class TestRunnerExtraParams:
 
             # Verify batch function was called with None for extra params
             mock_batch.assert_called_once()
-            call_kwargs = mock_batch.call_args[1]
-            assert "judge_model_extra_params" in call_kwargs
-            assert call_kwargs["judge_model_extra_params"] is None
+            call_args = mock_batch.call_args[0]
+            # Arguments: conversation_file_paths, judge_models, output_folder,
+            #            limit, max_concurrent, per_judge, judge_model_extra_params
+            assert len(call_args) == 7
+            assert call_args[6] is None  # judge_model_extra_params is 7th arg
             assert len(results) == 1
 
     @pytest.mark.asyncio
@@ -182,9 +190,11 @@ class TestRunnerExtraParams:
 
             results = await batch_evaluate_with_individual_judges(
                 conversation_file_paths=conv_files,
-                rubrics=["rubric.tsv"],
-                judge_model="claude-3-7-sonnet",
+                judge_models={"claude-3-7-sonnet": 1},
                 output_folder=str(tmp_path),
+                limit=None,
+                max_concurrent=None,
+                per_judge=False,
                 judge_model_extra_params=extra_params,
             )
 
@@ -227,10 +237,11 @@ class TestRunnerExtraParams:
 
             results = await batch_evaluate_with_individual_judges(
                 conversation_file_paths=conv_files,
-                rubrics=["rubric.tsv"],
-                judge_model="claude-3-7-sonnet",
+                judge_models={"claude-3-7-sonnet": 1},
                 output_folder=str(tmp_path),
                 limit=2,  # Only process first 2
+                max_concurrent=None,
+                per_judge=False,
                 judge_model_extra_params=extra_params,
             )
 

@@ -1559,10 +1559,10 @@ class TestRunnerHelperFunctions:
         assert len(jobs) == 6
 
         # Verify job structure (includes judge_id starting from 0)
-        assert jobs[0] == ("conv1.txt", "judge-a", 1, 0, output_folder)
-        assert jobs[1] == ("conv1.txt", "judge-a", 2, 1, output_folder)
-        assert jobs[2] == ("conv1.txt", "judge-a", 3, 2, output_folder)
-        assert jobs[3] == ("conv2.txt", "judge-a", 1, 0, output_folder)
+        assert jobs[0] == ("conv1.txt", "judge-a", 1, 0, output_folder, None)
+        assert jobs[1] == ("conv1.txt", "judge-a", 2, 1, output_folder, None)
+        assert jobs[2] == ("conv1.txt", "judge-a", 3, 2, output_folder, None)
+        assert jobs[3] == ("conv2.txt", "judge-a", 1, 0, output_folder, None)
 
     def test_create_evaluation_jobs_multiple_models(self):
         """Test job creation with multiple models and varying instances.

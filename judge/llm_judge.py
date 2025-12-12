@@ -88,6 +88,11 @@ class LLMJudge:
         self.judge_model = judge_model
         self.judge_model_extra_params = judge_model_extra_params or {}
 
+        # Set default temperature to 0 for more deterministic judge behavior
+        # Users can override this by passing temperature in judge_model_extra_params
+        if "temperature" not in self.judge_model_extra_params:
+            self.judge_model_extra_params["temperature"] = 0
+
         # Log initialization info
         self.logger.info("=== Initializing LLM Judge ===")
         self.logger.info(f"Judge model: {judge_model}")

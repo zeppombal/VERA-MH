@@ -100,7 +100,8 @@ if __name__ == "__main__":
         "-jep",
         help=(
             "Extra parameters for the judge model. "
-            "Examples: temperature=0.7, max_tokens=1000"
+            "Examples: temperature=0.7, max_tokens=1000. "
+            "Default: temperature=0 (unless overridden)"
         ),
         type=parse_key_value_list,
         default={},

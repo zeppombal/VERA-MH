@@ -26,8 +26,10 @@ class TestJudgeExtraParams:
 
         assert judge.judge_model_extra_params == extra_params
 
-    def test_llm_judge_extra_params_defaults_to_empty_dict(self, fixtures_dir: Path):
-        """Test that judge_model_extra_params defaults to empty dict."""
+    def test_llm_judge_extra_params_defaults_to_temperature_zero(
+        self, fixtures_dir: Path
+    ):
+        """Test that judge_model_extra_params defaults to temperature=0."""
         judge = LLMJudge(
             judge_model="mock-llm",
             rubric_folder=str(fixtures_dir),
@@ -35,7 +37,7 @@ class TestJudgeExtraParams:
             rubric_prompt_beginning_file="rubric_prompt_beginning.txt",
         )
 
-        assert judge.judge_model_extra_params == {}
+        assert judge.judge_model_extra_params == {"temperature": 0}
 
     def test_llm_judge_stores_extra_params_correctly(self, fixtures_dir: Path):
         """Test that LLMJudge stores extra params and makes them available."""
@@ -152,7 +154,7 @@ class TestJudgeExtraParams:
             assert captured_kwargs["model_name"] == "claude-3-7-sonnet"
 
     def test_llm_judge_extra_params_with_none(self, fixtures_dir: Path):
-        """Test that passing None for extra_params works correctly."""
+        """Test that passing None for extra_params sets default temperature=0."""
         judge = LLMJudge(
             judge_model="mock-llm",
             judge_model_extra_params=None,
@@ -161,7 +163,7 @@ class TestJudgeExtraParams:
             rubric_prompt_beginning_file="rubric_prompt_beginning.txt",
         )
 
-        assert judge.judge_model_extra_params == {}
+        assert judge.judge_model_extra_params == {"temperature": 0}
 
     def test_llm_judge_preserves_standard_params(self, fixtures_dir: Path):
         """Test that extra params don't interfere with standard parameters."""
@@ -200,3 +202,80 @@ class TestJudgeExtraParams:
         assert isinstance(judge.judge_model_extra_params["temperature"], float)
         assert isinstance(judge.judge_model_extra_params["max_tokens"], int)
         assert isinstance(judge.judge_model_extra_params["stop_sequences"], list)
+
+    def test_user_provided_temperature_overrides_default(self, fixtures_dir: Path):
+        """Test that user-provided temperature overrides the default of 0."""
+        extra_params = {"temperature": 0.9, "max_tokens": 2000}
+
+        judge = LLMJudge(
+            judge_model="mock-llm",
+            judge_model_extra_params=extra_params,
+            rubric_folder=str(fixtures_dir),
+            rubric_file="rubric_simple.tsv",
+            rubric_prompt_beginning_file="rubric_prompt_beginning.txt",
+        )
+
+        # User-provided temperature should override the default
+        assert judge.judge_model_extra_params["temperature"] == 0.9
+        assert judge.judge_model_extra_params["max_tokens"] == 2000
+
+    def test_default_temperature_added_when_other_params_provided(
+        self, fixtures_dir: Path
+    ):
+        """Test that default temperature=0 is added when user provides other params."""
+        extra_params = {"max_tokens": 500, "top_p": 0.9}
+
+        judge = LLMJudge(
+            judge_model="mock-llm",
+            judge_model_extra_params=extra_params,
+            rubric_folder=str(fixtures_dir),
+            rubric_file="rubric_simple.tsv",
+            rubric_prompt_beginning_file="rubric_prompt_beginning.txt",
+        )
+
+        # Default temperature should be added along with user params
+        assert judge.judge_model_extra_params["temperature"] == 0
+        assert judge.judge_model_extra_params["max_tokens"] == 500
+        assert judge.judge_model_extra_params["top_p"] == 0.9
+        # Verify all params are present
+        assert len(judge.judge_model_extra_params) == 3
+
+    def test_temperature_zero_is_preserved_when_explicitly_set(
+        self, fixtures_dir: Path
+    ):
+        """Test that explicitly setting temperature=0 is preserved (not overridden)."""
+        extra_params = {"temperature": 0, "max_tokens": 1000}
+
+        judge = LLMJudge(
+            judge_model="mock-llm",
+            judge_model_extra_params=extra_params,
+            rubric_folder=str(fixtures_dir),
+            rubric_file="rubric_simple.tsv",
+            rubric_prompt_beginning_file="rubric_prompt_beginning.txt",
+        )
+
+        # Explicitly set temperature=0 should be preserved
+        assert judge.judge_model_extra_params["temperature"] == 0
+        assert judge.judge_model_extra_params["max_tokens"] == 1000
+
+    def test_various_temperature_values_override_default(self, fixtures_dir: Path):
+        """Test that various temperature values properly override the default."""
+        test_cases = [
+            {"temperature": 0.5, "expected": 0.5},
+            {"temperature": 1.0, "expected": 1.0},
+            {"temperature": 0.1, "expected": 0.1},
+            {"temperature": 0.99, "expected": 0.99},
+        ]
+
+        for test_case in test_cases:
+            extra_params = {"temperature": test_case["temperature"]}
+            judge = LLMJudge(
+                judge_model="mock-llm",
+                judge_model_extra_params=extra_params,
+                rubric_folder=str(fixtures_dir),
+                rubric_file="rubric_simple.tsv",
+                rubric_prompt_beginning_file="rubric_prompt_beginning.txt",
+            )
+            assert (
+                judge.judge_model_extra_params["temperature"] == test_case["expected"]
+            ), f"Failed for temperature={test_case['temperature']}"
