@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Tuple, Type, TypeVar
+from typing import Any, Dict, List, Optional, Type, TypeVar
 
 from pydantic import BaseModel
 
@@ -19,12 +19,20 @@ class LLMInterface(ABC):
 
     @abstractmethod
     async def generate_response(
-        self, message: Optional[str] = None
-    ) -> Tuple[str, Dict[str, Any]]:
+        self,
+        message: Optional[str] = None,
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
+    ) -> str:
         """Generate a response to the given message asynchronously.
 
+        Args:
+            message: The current message to respond to
+            conversation_history: Optional list of previous conversation turns.
+                Each turn is a dict with keys: 'speaker', 'response', etc.
+
         Returns:
-            Tuple of (response_text, metadata_dict)
+            str: The response text. Metadata available via
+                get_last_response_metadata()
         """
         pass
 

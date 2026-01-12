@@ -1,8 +1,8 @@
 import time
 from datetime import datetime
-from typing import Any, Dict, Optional, Type, TypeVar
+from typing import Any, Dict, List, Optional, Type, TypeVar
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel
 
@@ -63,14 +63,35 @@ class GeminiLLM(JudgeLLM):
         # Store metadata from last response
         self.last_response_metadata: Dict[str, Any] = {}
 
-    async def generate_response(self, message: Optional[str] = None) -> str:
-        """Generate a response to the given message asynchronously."""
+    async def generate_response(
+        self,
+        message: Optional[str] = None,
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
+    ) -> str:
+        """Generate a response to the given message asynchronously.
+
+        Args:
+            message: The current message to respond to
+            conversation_history: Optional list of previous conversation turns
+        """
         messages = []
 
         if self.system_prompt:
             messages.append(SystemMessage(content=self.system_prompt))
 
-        messages.append(HumanMessage(content=message))
+        # Add conversation history if provided
+        if conversation_history:
+            for turn in conversation_history:
+                speaker = turn.get("speaker")
+                text = turn.get("response")
+                if speaker == "persona":
+                    messages.append(HumanMessage(content=text))
+                elif speaker in ["chatbot", "agent"]:
+                    messages.append(AIMessage(content=text))
+
+        # Add current message
+        if message:
+            messages.append(HumanMessage(content=message))
 
         try:
             start_time = time.time()

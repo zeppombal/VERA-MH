@@ -77,7 +77,7 @@ class TestLlamaLLMGenerateResponse:
     @pytest.mark.asyncio
     @patch("llm_clients.llama_llm.Ollama")
     async def test_generate_response_without_system_prompt(self, mock_ollama):
-        """Test generating response without system prompt passes message directly."""
+        """Test response without system prompt uses Human/Assistant format."""
         from llm_clients.llama_llm import LlamaLLM
 
         mock_instance = MagicMock()
@@ -87,8 +87,10 @@ class TestLlamaLLMGenerateResponse:
         llm = LlamaLLM(name="test-llama")
         response = await llm.generate_response("Hello, how are you?")
 
-        # Verify message was passed directly without system prompt wrapper
-        mock_instance.invoke.assert_called_once_with("Hello, how are you?")
+        # Verify message uses Human/Assistant format even without system prompt
+        mock_instance.invoke.assert_called_once_with(
+            "Human: Hello, how are you?\n\nAssistant:"
+        )
         assert response == "This is a test response"
 
     @pytest.mark.asyncio
@@ -213,8 +215,8 @@ class TestLlamaLLMGenerateResponse:
         llm = LlamaLLM(name="test-llama")
         response = await llm.generate_response(None)
 
-        # Should handle None gracefully
-        mock_instance.invoke.assert_called_once_with(None)
+        # Should handle None gracefully - message won't include current message part
+        mock_instance.invoke.assert_called_once_with("")
         assert response == "Default response"
 
     @pytest.mark.asyncio

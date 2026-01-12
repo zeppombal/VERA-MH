@@ -89,8 +89,10 @@ class ConversationSimulator:
         for turn in range(max_turns):
             # Record start time for this turn
 
-            # Generate response
-            response = await current_speaker.generate_response(current_message)
+            # Generate response with conversation history
+            response = await current_speaker.generate_response(
+                message=current_message, conversation_history=self.conversation_history
+            )
 
             total_words += len(response.split())
             # Record this turn
