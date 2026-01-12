@@ -53,7 +53,7 @@ class TestClaudeLLM:
         mock_llm.model = "claude-3-5-sonnet-20241022"
         mock_chat_anthropic.return_value = mock_llm
 
-        llm = ClaudeLLM(name="TestClaude", temperature=0.5, max_tokens=500, top_p=0.9)
+        ClaudeLLM(name="TestClaude", temperature=0.5, max_tokens=500, top_p=0.9)
 
         # Verify kwargs were passed to ChatAnthropic
         call_kwargs = mock_chat_anthropic.call_args[1]
@@ -406,3 +406,115 @@ class TestClaudeLLM:
         assert "raw_metadata" in metadata
         assert metadata["raw_metadata"]["custom_field"] == "custom_value"
         assert metadata["raw_metadata"]["nested"]["key"] == "value"
+
+    @pytest.mark.asyncio
+    @patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key")
+    @patch("llm_clients.claude_llm.ChatAnthropic")
+    async def test_generate_response_with_conversation_history(
+        self, mock_chat_anthropic
+    ):
+        """Test generate_response with conversation_history parameter."""
+        mock_llm = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = "Response with history"
+        mock_response.id = "msg_history"
+        mock_response.response_metadata = {
+            "model": "claude-3-5-sonnet-20241022",
+            "usage": {"input_tokens": 50, "output_tokens": 20},
+        }
+
+        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+        mock_chat_anthropic.return_value = mock_llm
+
+        llm = ClaudeLLM(name="TestClaude", system_prompt="Test")
+
+        # Provide conversation history
+        history = [
+            {
+                "turn": 1,
+                "speaker": "persona",
+                "input": "Start",
+                "response": "Hello",
+                "early_termination": False,
+                "logging": {},
+            },
+            {
+                "turn": 2,
+                "speaker": "agent",
+                "input": "Hello",
+                "response": "Hi there",
+                "early_termination": False,
+                "logging": {},
+            },
+        ]
+
+        response = await llm.generate_response(
+            "How are you?", conversation_history=history
+        )
+
+        assert response == "Response with history"
+
+        # Verify ainvoke was called with correct messages
+        call_args = mock_llm.ainvoke.call_args
+        messages = call_args[0][0]
+
+        # Should have: SystemMessage + 2 history messages + current message
+        assert len(messages) == 4
+
+    @pytest.mark.asyncio
+    @patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key")
+    @patch("llm_clients.claude_llm.ChatAnthropic")
+    async def test_generate_response_with_empty_conversation_history(
+        self, mock_chat_anthropic
+    ):
+        """Test generate_response with empty conversation_history."""
+        mock_llm = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = "Response"
+        mock_response.id = "msg_empty"
+        mock_response.response_metadata = {}
+
+        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+        mock_chat_anthropic.return_value = mock_llm
+
+        llm = ClaudeLLM(name="TestClaude", system_prompt="Test")
+
+        response = await llm.generate_response("Hello", conversation_history=[])
+
+        assert response == "Response"
+
+        # Verify ainvoke was called
+        call_args = mock_llm.ainvoke.call_args
+        messages = call_args[0][0]
+
+        # Should have: SystemMessage + current message only
+        assert len(messages) == 2
+
+    @pytest.mark.asyncio
+    @patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key")
+    @patch("llm_clients.claude_llm.ChatAnthropic")
+    async def test_generate_response_with_none_conversation_history(
+        self, mock_chat_anthropic
+    ):
+        """Test generate_response with None conversation_history (default)."""
+        mock_llm = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = "Response"
+        mock_response.id = "msg_none"
+        mock_response.response_metadata = {}
+
+        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+        mock_chat_anthropic.return_value = mock_llm
+
+        llm = ClaudeLLM(name="TestClaude", system_prompt="Test")
+
+        response = await llm.generate_response("Hello", conversation_history=None)
+
+        assert response == "Response"
+
+        # Verify ainvoke was called
+        call_args = mock_llm.ainvoke.call_args
+        messages = call_args[0][0]
+
+        # Should have: SystemMessage + current message only
+        assert len(messages) == 2
