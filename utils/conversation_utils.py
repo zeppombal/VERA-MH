@@ -98,7 +98,9 @@ def build_langchain_messages(
     Args:
         conversation_history: Optional list of previous conversation turns.
             Each turn is a dict with keys: 'turn', 'response', etc.
-        current_message: Optional current message to add at the end
+        current_message: Optional current message to add at the end.
+            NOTE: If current_message matches the last message in history, it will
+            NOT be added again to avoid duplication.
 
     Returns:
         List of LangChain message objects (HumanMessage, AIMessage)
@@ -120,9 +122,12 @@ def build_langchain_messages(
             else:
                 messages.append(AIMessage(content=text))
 
-    # Add current message
+    # Add current message only if it's not already the last message in history
+    # This prevents duplication when current_message is the same as the last response
     if current_message:
-        messages.append(HumanMessage(content=current_message))
+        # Check if we already added this message from history
+        if not messages or messages[-1].content != current_message:
+            messages.append(HumanMessage(content=current_message))
 
     return messages
 
