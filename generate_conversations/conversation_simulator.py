@@ -16,7 +16,6 @@ class ConversationSimulator:
         self.conversation_history: List[ConversationTurn] = []
 
         # Define termination signals that indicate persona wants to end the conversation
-        # Can be either a list or set for backward compatibility
         self.termination_signals = ["<END OF CONVERSATION>"]
 
         # "goodbye", "bye", "farewell", "talk to you later",

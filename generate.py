@@ -203,7 +203,7 @@ if __name__ == "__main__":
         "--folder-name",
         "-f",
         help=(
-            "Folder name containng the conversations for this run. "
+            "Folder name containing the conversations for this run. "
             "Default is 'conversations'."
         ),
         default="conversations",
