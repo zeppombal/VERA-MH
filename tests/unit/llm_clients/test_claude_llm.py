@@ -85,7 +85,11 @@ class TestClaudeLLM:
         mock_chat_anthropic.return_value = mock_llm
 
         llm = ClaudeLLM(name="TestClaude", system_prompt="You are a helpful assistant.")
-        response = await llm.generate_response("Hello, Claude!")
+        response = await llm.generate_response(
+            conversation_history=[
+                {"turn": 0, "speaker": "system", "response": "Hello, Claude!"}
+            ]
+        )
 
         assert response == "This is a test response"
 
@@ -119,7 +123,11 @@ class TestClaudeLLM:
         mock_chat_anthropic.return_value = mock_llm
 
         llm = ClaudeLLM(name="TestClaude")  # No system prompt
-        response = await llm.generate_response("Test message")
+        response = await llm.generate_response(
+            conversation_history=[
+                {"turn": 0, "speaker": "system", "response": "Test message"}
+            ]
+        )
 
         assert response == "Response without system prompt"
 
@@ -146,7 +154,9 @@ class TestClaudeLLM:
         mock_chat_anthropic.return_value = mock_llm
 
         llm = ClaudeLLM(name="TestClaude")
-        response = await llm.generate_response("Test")
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         assert response == "Response"
         metadata = llm.get_last_response_metadata()
@@ -172,7 +182,9 @@ class TestClaudeLLM:
         mock_chat_anthropic.return_value = mock_llm
 
         llm = ClaudeLLM(name="TestClaude")
-        response = await llm.generate_response("Test")
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         assert response == "Response"
         metadata = llm.get_last_response_metadata()
@@ -193,7 +205,11 @@ class TestClaudeLLM:
         mock_chat_anthropic.return_value = mock_llm
 
         llm = ClaudeLLM(name="TestClaude")
-        response = await llm.generate_response("Test message")
+        response = await llm.generate_response(
+            conversation_history=[
+                {"turn": 0, "speaker": "system", "response": "Test message"}
+            ]
+        )
 
         # Should return error message instead of raising
         assert "Error generating response" in response
@@ -226,7 +242,9 @@ class TestClaudeLLM:
         mock_chat_anthropic.return_value = mock_llm
 
         llm = ClaudeLLM(name="TestClaude")
-        await llm.generate_response("Test")
+        await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         metadata = llm.get_last_response_metadata()
         assert "response_time_seconds" in metadata
@@ -292,7 +310,9 @@ class TestClaudeLLM:
         mock_chat_anthropic.return_value = mock_llm
 
         llm = ClaudeLLM(name="TestClaude")
-        response = await llm.generate_response("Test")
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         assert response == "Partial usage response"
         metadata = llm.get_last_response_metadata()
@@ -317,7 +337,9 @@ class TestClaudeLLM:
         mock_chat_anthropic.return_value = mock_llm
 
         llm = ClaudeLLM(name="TestClaude")
-        await llm.generate_response("Test")
+        await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         metadata = llm.get_last_response_metadata()
         assert "response" in metadata
@@ -340,7 +362,9 @@ class TestClaudeLLM:
         mock_chat_anthropic.return_value = mock_llm
 
         llm = ClaudeLLM(name="TestClaude")
-        await llm.generate_response("Test")
+        await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         metadata = llm.get_last_response_metadata()
         timestamp = metadata["timestamp"]
@@ -374,7 +398,9 @@ class TestClaudeLLM:
         mock_chat_anthropic.return_value = mock_llm
 
         llm = ClaudeLLM(name="TestClaude")
-        await llm.generate_response("Test")
+        await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         metadata = llm.get_last_response_metadata()
         assert metadata["stop_reason"] == "max_tokens"
@@ -400,7 +426,9 @@ class TestClaudeLLM:
         mock_chat_anthropic.return_value = mock_llm
 
         llm = ClaudeLLM(name="TestClaude")
-        await llm.generate_response("Test")
+        await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         metadata = llm.get_last_response_metadata()
         assert "raw_metadata" in metadata
@@ -428,7 +456,7 @@ class TestClaudeLLM:
 
         llm = ClaudeLLM(name="TestClaude", system_prompt="Test")
 
-        # Provide conversation history
+        # Provide conversation history including the current turn
         history = [
             {
                 "turn": 1,
@@ -446,11 +474,17 @@ class TestClaudeLLM:
                 "early_termination": False,
                 "logging": {},
             },
+            {
+                "turn": 3,
+                "speaker": "persona",
+                "input": "Hi there",
+                "response": "How are you?",
+                "early_termination": False,
+                "logging": {},
+            },
         ]
 
-        response = await llm.generate_response(
-            "How are you?", conversation_history=history
-        )
+        response = await llm.generate_response(conversation_history=history)
 
         assert response == "Response with history"
 
@@ -458,7 +492,7 @@ class TestClaudeLLM:
         call_args = mock_llm.ainvoke.call_args
         messages = call_args[0][0]
 
-        # Should have: SystemMessage + 2 history messages + current message
+        # Should have: SystemMessage + 3 history messages
         assert len(messages) == 4
 
     @pytest.mark.asyncio
@@ -479,7 +513,9 @@ class TestClaudeLLM:
 
         llm = ClaudeLLM(name="TestClaude", system_prompt="Test")
 
-        response = await llm.generate_response("Hello", conversation_history=[])
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Hello"}]
+        )
 
         assert response == "Response"
 
@@ -508,7 +544,9 @@ class TestClaudeLLM:
 
         llm = ClaudeLLM(name="TestClaude", system_prompt="Test")
 
-        response = await llm.generate_response("Hello", conversation_history=None)
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Hello"}]
+        )
 
         assert response == "Response"
 

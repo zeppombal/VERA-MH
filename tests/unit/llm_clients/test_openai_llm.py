@@ -91,7 +91,11 @@ class TestOpenAILLM:
         mock_chat_openai.return_value = mock_llm
 
         llm = OpenAILLM(name="TestOpenAI", system_prompt="You are a helpful assistant.")
-        response = await llm.generate_response("Hello, GPT!")
+        response = await llm.generate_response(
+            conversation_history=[
+                {"turn": 0, "speaker": "system", "response": "Hello, GPT!"}
+            ]
+        )
 
         assert response == "This is an OpenAI response"
 
@@ -128,11 +132,16 @@ class TestOpenAILLM:
         mock_chat_openai.return_value = mock_llm
 
         llm = OpenAILLM(name="TestOpenAI")  # No system prompt
-        response = await llm.generate_response("Test message")
+        response = await llm.generate_response(
+            conversation_history=[
+                {"turn": 0, "speaker": "system", "response": "Test message"}
+            ]
+        )
 
         assert response == "Response without system prompt"
 
-        # Verify ainvoke was called with only HumanMessage (no SystemMessage)
+        # Verify ainvoke was called with only HumanMessage
+        # (turn 0 message, no SystemMessage)
         call_args = mock_llm.ainvoke.call_args[0][0]
         assert len(call_args) == 1
         assert call_args[0].content == "Test message"
@@ -153,7 +162,9 @@ class TestOpenAILLM:
         mock_chat_openai.return_value = mock_llm
 
         llm = OpenAILLM(name="TestOpenAI")
-        response = await llm.generate_response("Test")
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         assert response == "Response"
         metadata = llm.get_last_response_metadata()
@@ -174,7 +185,9 @@ class TestOpenAILLM:
         mock_chat_openai.return_value = mock_llm
 
         llm = OpenAILLM(name="TestOpenAI")
-        response = await llm.generate_response("Test")
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         assert response == "Response"
         metadata = llm.get_last_response_metadata()
@@ -206,7 +219,9 @@ class TestOpenAILLM:
         mock_chat_openai.return_value = mock_llm
 
         llm = OpenAILLM(name="TestOpenAI")
-        response = await llm.generate_response("Test")
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         assert response == "Response"
         metadata = llm.get_last_response_metadata()
@@ -227,7 +242,11 @@ class TestOpenAILLM:
         mock_chat_openai.return_value = mock_llm
 
         llm = OpenAILLM(name="TestOpenAI")
-        response = await llm.generate_response("Test message")
+        response = await llm.generate_response(
+            conversation_history=[
+                {"turn": 0, "speaker": "system", "response": "Test message"}
+            ]
+        )
 
         # Should return error message instead of raising
         assert "Error generating response" in response
@@ -259,7 +278,9 @@ class TestOpenAILLM:
         mock_chat_openai.return_value = mock_llm
 
         llm = OpenAILLM(name="TestOpenAI")
-        await llm.generate_response("Test")
+        await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         metadata = llm.get_last_response_metadata()
         assert "response_time_seconds" in metadata
@@ -316,7 +337,9 @@ class TestOpenAILLM:
         mock_chat_openai.return_value = mock_llm
 
         llm = OpenAILLM(name="TestOpenAI")
-        await llm.generate_response("Test")
+        await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         metadata = llm.get_last_response_metadata()
         assert "response" in metadata
@@ -338,7 +361,9 @@ class TestOpenAILLM:
         mock_chat_openai.return_value = mock_llm
 
         llm = OpenAILLM(name="TestOpenAI")
-        await llm.generate_response("Test")
+        await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         metadata = llm.get_last_response_metadata()
         timestamp = metadata["timestamp"]
@@ -368,7 +393,9 @@ class TestOpenAILLM:
         mock_chat_openai.return_value = mock_llm
 
         llm = OpenAILLM(name="TestOpenAI", model_name="gpt-4")
-        await llm.generate_response("Test")
+        await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         metadata = llm.get_last_response_metadata()
         assert metadata["model"] == "gpt-4-0613-updated"
@@ -396,7 +423,7 @@ class TestOpenAILLM:
 
         llm = OpenAILLM(name="TestOpenAI", system_prompt="Test")
 
-        # Provide conversation history
+        # Provide conversation history including the current turn
         history = [
             {
                 "turn": 1,
@@ -414,11 +441,17 @@ class TestOpenAILLM:
                 "early_termination": False,
                 "logging": {},
             },
+            {
+                "turn": 3,
+                "speaker": "persona",
+                "input": "Hi there",
+                "response": "How are you?",
+                "early_termination": False,
+                "logging": {},
+            },
         ]
 
-        response = await llm.generate_response(
-            "How are you?", conversation_history=history
-        )
+        response = await llm.generate_response(conversation_history=history)
 
         assert response == "Response with history"
 
@@ -426,7 +459,7 @@ class TestOpenAILLM:
         call_args = mock_llm.ainvoke.call_args
         messages = call_args[0][0]
 
-        # Should have: SystemMessage + 2 history messages + current message
+        # Should have: SystemMessage + 3 history messages
         assert len(messages) == 4
 
     @pytest.mark.asyncio
@@ -447,11 +480,13 @@ class TestOpenAILLM:
 
         llm = OpenAILLM(name="TestOpenAI", system_prompt="Test")
 
-        response = await llm.generate_response("Hi", conversation_history=[])
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Hi"}]
+        )
 
         assert response == "Response"
 
-        # Should have: SystemMessage + current message only
+        # Should have: SystemMessage + turn 0 message
         call_args = mock_llm.ainvoke.call_args
         messages = call_args[0][0]
         assert len(messages) == 2
@@ -474,11 +509,13 @@ class TestOpenAILLM:
 
         llm = OpenAILLM(name="TestOpenAI", system_prompt="Test")
 
-        response = await llm.generate_response("Hi", conversation_history=None)
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Hi"}]
+        )
 
         assert response == "Response"
 
-        # Should have: SystemMessage + current message only
+        # Should have: SystemMessage + turn 0 message
         call_args = mock_llm.ainvoke.call_args
         messages = call_args[0][0]
         assert len(messages) == 2

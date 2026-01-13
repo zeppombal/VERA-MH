@@ -33,18 +33,21 @@ class MockLLM(JudgeLLM):
 
     async def generate_response(
         self,
-        message: Optional[str] = None,
         conversation_history: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         """Return predetermined responses in sequence.
 
         Args:
-            message: The current message to respond to
             conversation_history: Optional list of previous conversation turns
 
         Returns:
             Response text string
         """
+        # Extract the last message from conversation history for tracking
+        message = ""
+        if conversation_history:
+            if len(conversation_history) > 0:
+                message = conversation_history[-1].get("response", "")
         self.calls.append(message or "")
 
         if self.simulate_error:

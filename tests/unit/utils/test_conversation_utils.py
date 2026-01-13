@@ -14,7 +14,7 @@ class TestBuildLangchainMessages:
     def test_build_messages_with_no_history(self):
         """Test with only current message, no history."""
         messages = build_langchain_messages(
-            conversation_history=None, current_message="Hello"
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Hello"}]
         )
 
         assert len(messages) == 1
@@ -24,7 +24,7 @@ class TestBuildLangchainMessages:
     def test_build_messages_with_empty_history(self):
         """Test with empty history list."""
         messages = build_langchain_messages(
-            conversation_history=[], current_message="Hello"
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Hello"}]
         )
 
         assert len(messages) == 1
@@ -55,11 +55,19 @@ class TestBuildLangchainMessages:
             },
         ]
 
-        messages = build_langchain_messages(
-            conversation_history=history, current_message="How can I help?"
+        # Add turn 4 for the next message
+        history.append(
+            {
+                "turn": 4,
+                "speaker": "therapist-bot",
+                "input": "I'm doing well",
+                "response": "How can I help?",
+            }
         )
 
-        # Should have 3 history messages + 1 current = 4 total
+        messages = build_langchain_messages(conversation_history=history)
+
+        # Should have 4 history messages
         assert len(messages) == 4
 
         # Turn 1 (odd) should be HumanMessage
@@ -74,8 +82,8 @@ class TestBuildLangchainMessages:
         assert isinstance(messages[2], HumanMessage)
         assert messages[2].content == "I'm doing well"
 
-        # Current message should be HumanMessage
-        assert isinstance(messages[3], HumanMessage)
+        # Turn 4 (even) should be AIMessage
+        assert isinstance(messages[3], AIMessage)
         assert messages[3].content == "How can I help?"
 
     def test_build_messages_with_standard_speaker_names(self):
@@ -101,9 +109,7 @@ class TestBuildLangchainMessages:
             },
         ]
 
-        messages = build_langchain_messages(
-            conversation_history=history, current_message=None
-        )
+        messages = build_langchain_messages(conversation_history=history)
 
         assert len(messages) == 3
         assert isinstance(messages[0], HumanMessage)
@@ -137,9 +143,7 @@ class TestBuildLangchainMessages:
             {"turn": 2, "speaker": "agent", "response": "Hi"},
         ]
 
-        messages = build_langchain_messages(
-            conversation_history=history, current_message=None
-        )
+        messages = build_langchain_messages(conversation_history=history)
 
         assert len(messages) == 2
         assert isinstance(messages[0], HumanMessage)
@@ -147,9 +151,7 @@ class TestBuildLangchainMessages:
 
     def test_build_messages_empty_inputs(self):
         """Test with all empty inputs."""
-        messages = build_langchain_messages(
-            conversation_history=None, current_message=None
-        )
+        messages = build_langchain_messages(conversation_history=None)
 
         assert len(messages) == 0
 
@@ -192,7 +194,7 @@ class TestFormatConversationAsString:
     def test_format_with_no_history(self):
         """Test with only current message, no history."""
         result = format_conversation_as_string(
-            conversation_history=None, current_message="Hello"
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Hello"}]
         )
 
         assert result == "Human: Hello\n\nAssistant:"
@@ -200,8 +202,9 @@ class TestFormatConversationAsString:
     def test_format_with_system_prompt(self):
         """Test with system prompt."""
         result = format_conversation_as_string(
-            conversation_history=None,
-            current_message="Hello",
+            conversation_history=[
+                {"turn": 0, "speaker": "system", "response": "Hello"}
+            ],
             system_prompt="You are helpful",
         )
 
@@ -213,17 +216,16 @@ class TestFormatConversationAsString:
             {"turn": 1, "speaker": "persona", "response": "Hi"},
             {"turn": 2, "speaker": "agent", "response": "Hello"},
             {"turn": 3, "speaker": "persona", "response": "How are you?"},
+            {"turn": 4, "speaker": "agent", "response": "What's your name?"},
         ]
 
-        result = format_conversation_as_string(
-            conversation_history=history, current_message="What's your name?"
-        )
+        result = format_conversation_as_string(conversation_history=history)
 
         expected = (
             "Human: Hi\n\n"
             "Assistant: Hello\n\n"
             "Human: How are you?\n\n"
-            "Human: What's your name?\n\n"
+            "Assistant: What's your name?\n\n"
             "Assistant:"
         )
         assert result == expected
@@ -233,12 +235,11 @@ class TestFormatConversationAsString:
         history = [
             {"turn": 1, "speaker": "custom_persona", "response": "Hello"},
             {"turn": 2, "speaker": "custom_agent", "response": "Hi there"},
+            {"turn": 3, "speaker": "custom_persona", "response": "Tell me more"},
         ]
 
         result = format_conversation_as_string(
-            conversation_history=history,
-            current_message="Tell me more",
-            system_prompt="Be concise",
+            conversation_history=history, system_prompt="Be concise"
         )
 
         expected = (
@@ -259,7 +260,7 @@ class TestFormatConversationAsString:
 
         result = format_conversation_as_string(conversation_history=history)
 
-        expected = "Human: Hello\n\nAssistant: Hi\n\n"
+        expected = "Human: Hello\n\nAssistant: Hi\n\nAssistant:"
         assert result == expected
 
     def test_format_skips_none_response(self):
@@ -273,13 +274,13 @@ class TestFormatConversationAsString:
         result = format_conversation_as_string(conversation_history=history)
 
         # Turn 2 should be skipped
-        expected = "Human: Hello\n\nHuman: Still there?\n\n"
+        expected = "Human: Hello\n\nHuman: Still there?\n\nAssistant:"
         assert result == expected
 
     def test_format_empty_inputs(self):
         """Test with all empty inputs."""
         result = format_conversation_as_string(
-            conversation_history=None, current_message=None, system_prompt=None
+            conversation_history=None, system_prompt=None
         )
 
         assert result == ""

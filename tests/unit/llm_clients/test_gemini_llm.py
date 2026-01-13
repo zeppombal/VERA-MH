@@ -96,7 +96,11 @@ class TestGeminiLLM:
         mock_chat_gemini.return_value = mock_llm
 
         llm = GeminiLLM(name="TestGemini", system_prompt="You are a helpful assistant.")
-        response = await llm.generate_response("Hello, Gemini!")
+        response = await llm.generate_response(
+            conversation_history=[
+                {"turn": 0, "speaker": "system", "response": "Hello, Gemini!"}
+            ]
+        )
 
         assert response == "This is a Gemini response"
 
@@ -129,7 +133,11 @@ class TestGeminiLLM:
         mock_chat_gemini.return_value = mock_llm
 
         llm = GeminiLLM(name="TestGemini")  # No system prompt
-        response = await llm.generate_response("Test message")
+        response = await llm.generate_response(
+            conversation_history=[
+                {"turn": 0, "speaker": "system", "response": "Test message"}
+            ]
+        )
 
         assert response == "Response without system prompt"
 
@@ -161,7 +169,9 @@ class TestGeminiLLM:
         mock_chat_gemini.return_value = mock_llm
 
         llm = GeminiLLM(name="TestGemini")
-        response = await llm.generate_response("Test")
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         assert response == "Response with fallback"
         metadata = llm.get_last_response_metadata()
@@ -186,7 +196,9 @@ class TestGeminiLLM:
         mock_chat_gemini.return_value = mock_llm
 
         llm = GeminiLLM(name="TestGemini")
-        response = await llm.generate_response("Test")
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         assert response == "Response"
         metadata = llm.get_last_response_metadata()
@@ -208,7 +220,9 @@ class TestGeminiLLM:
         mock_chat_gemini.return_value = mock_llm
 
         llm = GeminiLLM(name="TestGemini")
-        response = await llm.generate_response("Test")
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         assert response == "Response"
         metadata = llm.get_last_response_metadata()
@@ -228,7 +242,11 @@ class TestGeminiLLM:
         mock_chat_gemini.return_value = mock_llm
 
         llm = GeminiLLM(name="TestGemini")
-        response = await llm.generate_response("Test message")
+        response = await llm.generate_response(
+            conversation_history=[
+                {"turn": 0, "speaker": "system", "response": "Test message"}
+            ]
+        )
 
         # Should return error message instead of raising
         assert "Error generating response" in response
@@ -260,7 +278,9 @@ class TestGeminiLLM:
         mock_chat_gemini.return_value = mock_llm
 
         llm = GeminiLLM(name="TestGemini")
-        await llm.generate_response("Test")
+        await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         metadata = llm.get_last_response_metadata()
         assert "response_time_seconds" in metadata
@@ -317,7 +337,9 @@ class TestGeminiLLM:
         mock_chat_gemini.return_value = mock_llm
 
         llm = GeminiLLM(name="TestGemini")
-        await llm.generate_response("Test")
+        await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         metadata = llm.get_last_response_metadata()
         assert "response" in metadata
@@ -339,7 +361,9 @@ class TestGeminiLLM:
         mock_chat_gemini.return_value = mock_llm
 
         llm = GeminiLLM(name="TestGemini")
-        await llm.generate_response("Test")
+        await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         metadata = llm.get_last_response_metadata()
         timestamp = metadata["timestamp"]
@@ -372,7 +396,9 @@ class TestGeminiLLM:
         mock_chat_gemini.return_value = mock_llm
 
         llm = GeminiLLM(name="TestGemini")
-        await llm.generate_response("Test")
+        await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         metadata = llm.get_last_response_metadata()
         assert metadata["finish_reason"] == "MAX_TOKENS"
@@ -397,7 +423,9 @@ class TestGeminiLLM:
         mock_chat_gemini.return_value = mock_llm
 
         llm = GeminiLLM(name="TestGemini")
-        await llm.generate_response("Test")
+        await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         metadata = llm.get_last_response_metadata()
         assert "raw_metadata" in metadata
@@ -427,7 +455,7 @@ class TestGeminiLLM:
 
         llm = GeminiLLM(name="TestGemini", system_prompt="Test")
 
-        # Provide conversation history
+        # Provide conversation history including the current turn
         history = [
             {
                 "turn": 1,
@@ -445,11 +473,17 @@ class TestGeminiLLM:
                 "early_termination": False,
                 "logging": {},
             },
+            {
+                "turn": 3,
+                "speaker": "persona",
+                "input": "Hi there",
+                "response": "How are you?",
+                "early_termination": False,
+                "logging": {},
+            },
         ]
 
-        response = await llm.generate_response(
-            "How are you?", conversation_history=history
-        )
+        response = await llm.generate_response(conversation_history=history)
 
         assert response == "Response with history"
 
@@ -457,7 +491,7 @@ class TestGeminiLLM:
         call_args = mock_llm.ainvoke.call_args
         messages = call_args[0][0]
 
-        # Should have: SystemMessage + 2 history messages + current message
+        # Should have: SystemMessage + 3 history messages
         assert len(messages) == 4
 
     @pytest.mark.asyncio
@@ -478,7 +512,9 @@ class TestGeminiLLM:
 
         llm = GeminiLLM(name="TestGemini", system_prompt="Test")
 
-        response = await llm.generate_response("Hi", conversation_history=[])
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Hi"}]
+        )
 
         assert response == "Response"
 
@@ -505,7 +541,9 @@ class TestGeminiLLM:
 
         llm = GeminiLLM(name="TestGemini", system_prompt="Test")
 
-        response = await llm.generate_response("Hi", conversation_history=None)
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Hi"}]
+        )
 
         assert response == "Response"
 

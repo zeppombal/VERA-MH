@@ -85,7 +85,11 @@ class TestLlamaLLMGenerateResponse:
         mock_ollama.return_value = mock_instance
 
         llm = LlamaLLM(name="test-llama")
-        response = await llm.generate_response("Hello, how are you?")
+        response = await llm.generate_response(
+            conversation_history=[
+                {"turn": 0, "speaker": "system", "response": "Hello, how are you?"}
+            ]
+        )
 
         # Verify message uses Human/Assistant format even without system prompt
         mock_instance.invoke.assert_called_once_with(
@@ -104,7 +108,11 @@ class TestLlamaLLMGenerateResponse:
         mock_ollama.return_value = mock_instance
 
         llm = LlamaLLM(name="test-llama", system_prompt="You are a helpful assistant")
-        response = await llm.generate_response("How are you?")
+        response = await llm.generate_response(
+            conversation_history=[
+                {"turn": 0, "speaker": "system", "response": "How are you?"}
+            ]
+        )
 
         # Verify system prompt was included in formatted message
         call_args = mock_instance.invoke.call_args[0][0]
@@ -125,7 +133,11 @@ class TestLlamaLLMGenerateResponse:
 
         llm = LlamaLLM(name="test-llama")
         llm.set_system_prompt("You are a coding expert")
-        response = await llm.generate_response("Help me debug this code")
+        response = await llm.generate_response(
+            conversation_history=[
+                {"turn": 0, "speaker": "system", "response": "Help me debug this code"}
+            ]
+        )
 
         # Verify system prompt was included
         call_args = mock_instance.invoke.call_args[0][0]
@@ -146,7 +158,11 @@ class TestLlamaLLMGenerateResponse:
         mock_ollama.return_value = mock_instance
 
         llm = LlamaLLM(name="test-llama")
-        response = await llm.generate_response("Test message")
+        response = await llm.generate_response(
+            conversation_history=[
+                {"turn": 0, "speaker": "system", "response": "Test message"}
+            ]
+        )
 
         # Should return error message, not raise exception
         assert "Error generating response" in response
@@ -165,7 +181,11 @@ class TestLlamaLLMGenerateResponse:
         mock_ollama.return_value = mock_instance
 
         llm = LlamaLLM(name="test-llama", model_name="nonexistent:latest")
-        response = await llm.generate_response("Test message")
+        response = await llm.generate_response(
+            conversation_history=[
+                {"turn": 0, "speaker": "system", "response": "Test message"}
+            ]
+        )
 
         assert "Error generating response" in response
         assert "Model 'nonexistent:latest' not found" in response
@@ -181,7 +201,15 @@ class TestLlamaLLMGenerateResponse:
         mock_ollama.return_value = mock_instance
 
         llm = LlamaLLM(name="test-llama")
-        response = await llm.generate_response("Long message that times out")
+        response = await llm.generate_response(
+            conversation_history=[
+                {
+                    "turn": 0,
+                    "speaker": "system",
+                    "response": "Long message that times out",
+                }
+            ]
+        )
 
         assert "Error generating response" in response
         assert "Request timed out" in response
@@ -197,7 +225,9 @@ class TestLlamaLLMGenerateResponse:
         mock_ollama.return_value = mock_instance
 
         llm = LlamaLLM(name="test-llama")
-        response = await llm.generate_response("Test")
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         assert "Error generating response" in response
         assert "Unexpected error occurred" in response
@@ -230,9 +260,14 @@ class TestLlamaLLMGenerateResponse:
         mock_ollama.return_value = mock_instance
 
         llm = LlamaLLM(name="test-llama")
-        response = await llm.generate_response("")
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": ""}]
+        )
 
-        mock_instance.invoke.assert_called_once_with("")
+        # Empty string gets formatted as "Human: \n\nAssistant:"
+        call_args = mock_instance.invoke.call_args[0][0]
+        assert "Human:" in call_args
+        assert "Assistant:" in call_args
         assert response == "Response to empty"
 
     @pytest.mark.asyncio
@@ -247,7 +282,11 @@ class TestLlamaLLMGenerateResponse:
 
         multiline_msg = "Line 1\nLine 2\nLine 3"
         llm = LlamaLLM(name="test-llama", system_prompt="Helper")
-        await llm.generate_response(multiline_msg)
+        await llm.generate_response(
+            conversation_history=[
+                {"turn": 0, "speaker": "system", "response": multiline_msg}
+            ]
+        )
 
         call_args = mock_instance.invoke.call_args[0][0]
         assert "Line 1\nLine 2\nLine 3" in call_args
@@ -288,7 +327,11 @@ class TestLlamaLLMSystemPrompt:
         llm = LlamaLLM(name="test-llama")
 
         # First call without system prompt
-        await llm.generate_response("Question 1")
+        await llm.generate_response(
+            conversation_history=[
+                {"turn": 0, "speaker": "system", "response": "Question 1"}
+            ]
+        )
         call1 = mock_instance.invoke.call_args[0][0]
         assert "System:" not in call1
 
@@ -297,7 +340,11 @@ class TestLlamaLLMSystemPrompt:
 
         # Second call with system prompt
         mock_instance.invoke.reset_mock()
-        await llm.generate_response("Question 2")
+        await llm.generate_response(
+            conversation_history=[
+                {"turn": 0, "speaker": "system", "response": "Question 2"}
+            ]
+        )
         call2 = mock_instance.invoke.call_args[0][0]
         assert "System: You are helpful" in call2
 
@@ -331,11 +378,15 @@ class TestLlamaLLMConversationHistory:
                 "input": "Hello",
                 "response": "Hi there",
             },
+            {
+                "turn": 3,
+                "speaker": "persona",
+                "input": "Hi there",
+                "response": "How are you?",
+            },
         ]
 
-        response = await llm.generate_response(
-            "How are you?", conversation_history=history
-        )
+        response = await llm.generate_response(conversation_history=history)
 
         assert response == "Response with history"
 
@@ -359,7 +410,9 @@ class TestLlamaLLMConversationHistory:
 
         llm = LlamaLLM(name="test-llama")
 
-        response = await llm.generate_response("Hello", conversation_history=[])
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Hello"}]
+        )
 
         assert response == "Response"
 
@@ -379,7 +432,9 @@ class TestLlamaLLMConversationHistory:
 
         llm = LlamaLLM(name="test-llama")
 
-        response = await llm.generate_response("Test", conversation_history=None)
+        response = await llm.generate_response(
+            conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
+        )
 
         assert response == "Response"
 
