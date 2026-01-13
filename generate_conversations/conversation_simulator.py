@@ -39,8 +39,6 @@ class ConversationSimulator:
         if speaker != self.persona:
             return False
 
-        # response_lower = response.lower()
-
         # Check for exact phrase matches
         for signal in self.termination_signals:
             if signal in response:
