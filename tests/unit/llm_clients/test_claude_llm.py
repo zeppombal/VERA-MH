@@ -73,7 +73,7 @@ class TestClaudeLLM:
 
         # Create mock response with metadata
         mock_response = MagicMock()
-        mock_response.content = "This is a test response"
+        mock_response.text = "This is a test response"
         mock_response.id = "msg_12345"
         mock_response.response_metadata = {
             "model": "claude-3-5-sonnet-20241022",
@@ -115,7 +115,7 @@ class TestClaudeLLM:
         mock_llm.model = "claude-3-5-sonnet-20241022"
 
         mock_response = MagicMock()
-        mock_response.content = "Response without system prompt"
+        mock_response.text = "Response without system prompt"
         mock_response.id = "msg_67890"
         mock_response.response_metadata = {"model": "claude-3-5-sonnet-20241022"}
 
@@ -146,7 +146,7 @@ class TestClaudeLLM:
 
         # Response without usage in metadata
         mock_response = MagicMock()
-        mock_response.content = "Response"
+        mock_response.text = "Response"
         mock_response.id = "msg_abc"
         mock_response.response_metadata = {"model": "claude-3-5-sonnet-20241022"}
 
@@ -174,7 +174,7 @@ class TestClaudeLLM:
 
         # Response without response_metadata attribute
         mock_response = MagicMock()
-        mock_response.content = "Response"
+        mock_response.text = "Response"
         mock_response.id = "msg_xyz"
         del mock_response.response_metadata  # Remove attribute
 
@@ -234,7 +234,7 @@ class TestClaudeLLM:
         mock_llm.model = "claude-3-5-sonnet-20241022"
 
         mock_response = MagicMock()
-        mock_response.content = "Timed response"
+        mock_response.text = "Timed response"
         mock_response.id = "msg_time"
         mock_response.response_metadata = {}
 
@@ -299,7 +299,7 @@ class TestClaudeLLM:
 
         # Response with partial usage info
         mock_response = MagicMock()
-        mock_response.content = "Partial usage response"
+        mock_response.text = "Partial usage response"
         mock_response.id = "msg_partial"
         mock_response.response_metadata = {
             "model": "claude-3-5-sonnet-20241022",
@@ -329,7 +329,7 @@ class TestClaudeLLM:
         mock_llm.model = "claude-3-5-sonnet-20241022"
 
         mock_response = MagicMock()
-        mock_response.content = "Test"
+        mock_response.text = "Test"
         mock_response.id = "msg_obj"
         mock_response.response_metadata = {}
 
@@ -354,7 +354,7 @@ class TestClaudeLLM:
         mock_llm.model = "claude-3-5-sonnet-20241022"
 
         mock_response = MagicMock()
-        mock_response.content = "Test"
+        mock_response.text = "Test"
         mock_response.id = "msg_time"
         mock_response.response_metadata = {}
 
@@ -387,7 +387,7 @@ class TestClaudeLLM:
         mock_llm.model = "claude-3-5-sonnet-20241022"
 
         mock_response = MagicMock()
-        mock_response.content = "Stopped response"
+        mock_response.text = "Stopped response"
         mock_response.id = "msg_stop"
         mock_response.response_metadata = {
             "model": "claude-3-5-sonnet-20241022",
@@ -414,7 +414,7 @@ class TestClaudeLLM:
         mock_llm.model = "claude-3-5-sonnet-20241022"
 
         mock_response = MagicMock()
-        mock_response.content = "Test"
+        mock_response.text = "Test"
         mock_response.id = "msg_raw"
         mock_response.response_metadata = {
             "model": "claude-3-5-sonnet-20241022",
@@ -444,7 +444,7 @@ class TestClaudeLLM:
         """Test generate_response with conversation_history parameter."""
         mock_llm = MagicMock()
         mock_response = MagicMock()
-        mock_response.content = "Response with history"
+        mock_response.text = "Response with history"
         mock_response.id = "msg_history"
         mock_response.response_metadata = {
             "model": "claude-3-5-sonnet-20241022",
@@ -504,7 +504,7 @@ class TestClaudeLLM:
         """Test generate_response with empty conversation_history."""
         mock_llm = MagicMock()
         mock_response = MagicMock()
-        mock_response.content = "Response"
+        mock_response.text = "Response"
         mock_response.id = "msg_empty"
         mock_response.response_metadata = {}
 
@@ -535,7 +535,7 @@ class TestClaudeLLM:
         """Test generate_response with None conversation_history (default)."""
         mock_llm = MagicMock()
         mock_response = MagicMock()
-        mock_response.content = "Response"
+        mock_response.text = "Response"
         mock_response.id = "msg_none"
         mock_response.response_metadata = {}
 

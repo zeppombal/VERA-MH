@@ -67,7 +67,7 @@ class TestGeminiLLM:
 
         # Create mock response with Gemini-style metadata
         mock_response = MagicMock()
-        mock_response.content = "This is a Gemini response"
+        mock_response.text = "This is a Gemini response"
         mock_response.id = "gemini-12345"
 
         # Mock response_metadata object with model_name attribute
@@ -125,7 +125,7 @@ class TestGeminiLLM:
         mock_llm = MagicMock()
 
         mock_response = MagicMock()
-        mock_response.content = "Response without system prompt"
+        mock_response.text = "Response without system prompt"
         mock_response.id = "gemini-67890"
         mock_response.response_metadata = {"model_name": "gemini-1.5-pro"}
 
@@ -154,7 +154,7 @@ class TestGeminiLLM:
         mock_llm = MagicMock()
 
         mock_response = MagicMock()
-        mock_response.content = "Response with fallback"
+        mock_response.text = "Response with fallback"
         mock_response.id = "gemini-fallback"
         mock_response.response_metadata = {
             "model_name": "gemini-1.5-pro",
@@ -188,7 +188,7 @@ class TestGeminiLLM:
         mock_llm = MagicMock()
 
         mock_response = MagicMock()
-        mock_response.content = "Response"
+        mock_response.text = "Response"
         mock_response.id = "gemini-no-usage"
         mock_response.response_metadata = {"model_name": "gemini-1.5-pro"}
 
@@ -212,7 +212,7 @@ class TestGeminiLLM:
         mock_llm = MagicMock()
 
         mock_response = MagicMock()
-        mock_response.content = "Response"
+        mock_response.text = "Response"
         mock_response.id = "gemini-xyz"
         del mock_response.response_metadata  # Remove attribute
 
@@ -270,7 +270,7 @@ class TestGeminiLLM:
         mock_llm = MagicMock()
 
         mock_response = MagicMock()
-        mock_response.content = "Timed response"
+        mock_response.text = "Timed response"
         mock_response.id = "gemini-time"
         mock_response.response_metadata = {}
 
@@ -329,7 +329,7 @@ class TestGeminiLLM:
         mock_llm = MagicMock()
 
         mock_response = MagicMock()
-        mock_response.content = "Test"
+        mock_response.text = "Test"
         mock_response.id = "gemini-obj"
         mock_response.response_metadata = {}
 
@@ -353,7 +353,7 @@ class TestGeminiLLM:
         mock_llm = MagicMock()
 
         mock_response = MagicMock()
-        mock_response.content = "Test"
+        mock_response.text = "Test"
         mock_response.id = "gemini-ts"
         mock_response.response_metadata = {}
 
@@ -385,7 +385,7 @@ class TestGeminiLLM:
         mock_llm = MagicMock()
 
         mock_response = MagicMock()
-        mock_response.content = "Finished response"
+        mock_response.text = "Finished response"
         mock_response.id = "gemini-finish"
         mock_response.response_metadata = {
             "model_name": "gemini-1.5-pro",
@@ -411,7 +411,7 @@ class TestGeminiLLM:
         mock_llm = MagicMock()
 
         mock_response = MagicMock()
-        mock_response.content = "Test"
+        mock_response.text = "Test"
         mock_response.id = "gemini-raw"
         mock_response.response_metadata = {
             "model_name": "gemini-1.5-pro",
@@ -439,7 +439,7 @@ class TestGeminiLLM:
         """Test generate_response with conversation_history parameter."""
         mock_llm = MagicMock()
         mock_response = MagicMock()
-        mock_response.content = "Response with history"
+        mock_response.text = "Response with history"
         mock_response.id = "gemini-history"
         mock_response.response_metadata = {
             "model_name": "gemini-1.5-pro",
@@ -503,7 +503,7 @@ class TestGeminiLLM:
         """Test generate_response with empty conversation_history list."""
         mock_llm = MagicMock()
         mock_response = MagicMock()
-        mock_response.content = "Response"
+        mock_response.text = "Response"
         mock_response.id = "gemini-empty"
         mock_response.response_metadata = {"model_name": "gemini-1.5-pro"}
 
@@ -532,7 +532,7 @@ class TestGeminiLLM:
         """Test generate_response with None conversation_history."""
         mock_llm = MagicMock()
         mock_response = MagicMock()
-        mock_response.content = "Response"
+        mock_response.text = "Response"
         mock_response.id = "gemini-none"
         mock_response.response_metadata = {"model_name": "gemini-1.5-pro"}
 

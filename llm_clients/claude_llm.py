@@ -137,7 +137,7 @@ class ClaudeLLM(JudgeLLM):
                 # Store raw metadata
                 self.last_response_metadata["raw_metadata"] = dict(metadata)
 
-            return response.content
+            return response.text
         except Exception as e:
             # Store error metadata
             self.last_response_metadata = {
