@@ -519,3 +519,52 @@ class TestOpenAILLM:
         call_args = mock_llm.ainvoke.call_args
         messages = call_args[0][0]
         assert len(messages) == 2
+
+    @pytest.mark.asyncio
+    @patch("llm_clients.openai_llm.Config.OPENAI_API_KEY", "test-key")
+    @patch("llm_clients.openai_llm.ChatOpenAI")
+    async def test_generate_response_with_persona_role_flips_types(
+        self, mock_chat_openai
+    ):
+        """Test that persona role flips message types in conversation history."""
+        from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+        mock_llm = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = "Persona response"
+        mock_response.id = "chatcmpl-persona"
+        mock_response.response_metadata = {}
+
+        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+        mock_chat_openai.return_value = mock_llm
+
+        # Persona system prompt should trigger message type flipping
+        persona_prompt = "You are roleplaying as a human user"
+        llm = OpenAILLM(name="TestOpenAI", system_prompt=persona_prompt)
+
+        history = [
+            {"turn": 1, "speaker": "persona", "response": "Hello"},
+            {"turn": 2, "speaker": "provider", "response": "Hi there"},
+            {"turn": 3, "speaker": "persona", "response": "How are you?"},
+        ]
+
+        response = await llm.generate_response(conversation_history=history)
+
+        assert response == "Persona response"
+
+        # Verify message types are flipped for persona role
+        call_args = mock_llm.ainvoke.call_args
+        messages = call_args[0][0]
+
+        # Should have: SystemMessage + 3 history messages
+        assert len(messages) == 4
+        assert isinstance(messages[0], SystemMessage)
+        # Turn 1 (persona, odd) should be AIMessage when persona role
+        assert isinstance(messages[1], AIMessage)
+        assert messages[1].content == "Hello"
+        # Turn 2 (provider, even) should be HumanMessage when persona role
+        assert isinstance(messages[2], HumanMessage)
+        assert messages[2].content == "Hi there"
+        # Turn 3 (persona, odd) should be AIMessage when persona role
+        assert isinstance(messages[3], AIMessage)
+        assert messages[3].content == "How are you?"
