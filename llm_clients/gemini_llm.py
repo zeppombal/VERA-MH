@@ -145,7 +145,7 @@ class GeminiLLM(JudgeLLM):
                 # Store raw metadata
                 self.last_response_metadata["raw_metadata"] = dict(metadata)
 
-            return response.text
+            return response.content
         except Exception as e:
             # Store error metadata
             self.last_response_metadata = {
