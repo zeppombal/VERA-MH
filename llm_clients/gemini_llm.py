@@ -10,7 +10,7 @@ from utils.conversation_utils import build_langchain_messages
 from utils.debug import debug_print
 
 from .config import Config
-from .llm_interface import JudgeLLM
+from .llm_interface import JudgeLLM, Role
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -23,9 +23,10 @@ class GeminiLLM(JudgeLLM):
         name: str,
         system_prompt: Optional[str] = None,
         model_name: Optional[str] = None,
+        role: Optional[Role] = None,
         **kwargs,
     ):
-        super().__init__(name, system_prompt)
+        super().__init__(name, system_prompt, role)
 
         if not Config.GOOGLE_API_KEY:
             raise ValueError("GOOGLE_API_KEY not found in environment variables")
@@ -82,9 +83,7 @@ class GeminiLLM(JudgeLLM):
 
         # Build messages from history
         # Role reminder is automatically added for personas by build_langchain_messages
-        messages.extend(
-            build_langchain_messages(conversation_history, self.system_prompt)
-        )
+        messages.extend(build_langchain_messages(conversation_history, self.role))
 
         # Debug: Print messages being sent to LLM
         debug_print(f"\n[DEBUG {self.name}] Messages sent to LLM:")
@@ -146,7 +145,7 @@ class GeminiLLM(JudgeLLM):
                 # Store raw metadata
                 self.last_response_metadata["raw_metadata"] = dict(metadata)
 
-            return response.content
+            return response.text
         except Exception as e:
             # Store error metadata
             self.last_response_metadata = {

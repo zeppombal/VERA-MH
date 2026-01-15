@@ -1,9 +1,17 @@
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import Any, Dict, List, Optional, Type, TypeVar
 
 from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
+
+
+class Role(Enum):
+    """Role of the LLM in a conversation."""
+
+    PERSONA = "persona"  # User roleplaying as a human seeking help
+    AGENT = "agent"  # Chatbot providing support
 
 
 class LLMInterface(ABC):
@@ -13,9 +21,15 @@ class LLMInterface(ABC):
     must support basic text generation and system prompt management.
     """
 
-    def __init__(self, name: str, system_prompt: Optional[str] = None):
+    def __init__(
+        self,
+        name: str,
+        system_prompt: Optional[str] = None,
+        role: Optional[Role] = None,
+    ):
         self.name = name
         self.system_prompt = system_prompt or ""
+        self.role = role
 
     @abstractmethod
     async def generate_response(
@@ -46,6 +60,10 @@ class LLMInterface(ABC):
     def get_name(self) -> str:
         """Get the name of this LLM instance."""
         return self.name
+
+    def get_role(self) -> Optional[Role]:
+        """Get the role of this LLM instance."""
+        return self.role if self.role else None
 
     def __getattr__(self, name):
         """Delegate attribute access to the underlying llm object.

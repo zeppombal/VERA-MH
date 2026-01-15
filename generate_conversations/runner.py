@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from llm_clients import LLMFactory
+from llm_clients.llm_interface import Role
 from utils.logging_utils import (
     cleanup_logger,
     log_conversation_end,
@@ -87,6 +88,7 @@ class ConversationRunner:
             model_name=model_name,
             name=f"{model_short} {persona_name}",
             system_prompt=system_prompt,
+            role=Role.PERSONA,
             **self.persona_model_config,
         )
 
@@ -171,6 +173,7 @@ class ConversationRunner:
             model_name=self.agent_model_config["model"],
             name=self.agent_model_config.pop("name"),
             system_prompt=self.AGENT_SYSTEM_PROMPT,
+            role=Role.AGENT,
             **self.agent_model_config,
         )
 

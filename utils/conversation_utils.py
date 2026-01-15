@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
+from llm_clients.llm_interface import Role
+
 from .debug import debug_print
 
 
@@ -105,7 +107,7 @@ def build_persona_role_reminder() -> str:
 
 def build_langchain_messages(
     conversation_history: Optional[List[Dict[str, Any]]] = None,
-    system_prompt: Optional[str] = None,
+    role: Optional[Role] = None,
 ) -> List[BaseMessage]:
     """
     Build a list of LangChain messages from conversation history.
@@ -122,23 +124,22 @@ def build_langchain_messages(
         conversation_history: Optional list of previous conversation turns.
             Each turn is a dict with keys: 'turn', 'speaker', 'response'.
             Turn 0 contains the initial message with speaker="system".
-        system_prompt: Optional system prompt to check if this is a persona.
-            If provided and contains "roleplaying as a human user", a role
-            reminder will be automatically injected before conversation history
-            (but only for turns >= 1, not for turn 0).
+        role: Optional role of the LLM (Role.PERSONA, Role.AGENT, or None).
+            If role is Role.PERSONA, a role reminder will be automatically
+            injected before conversation history (but only for turns >= 1,
+            not for turn 0).
 
     Returns:
         List of LangChain message objects (HumanMessage, AIMessage)
     """
     messages = []
 
-    # Auto-detect persona and add role reminder if needed
+    # Add role reminder for personas if needed
     # Only add role reminder if we have real conversation history (turn >= 1)
-    is_persona = system_prompt and "roleplaying as a human user" in system_prompt
     has_real_history = conversation_history and any(
         turn.get("turn", 0) >= 1 for turn in conversation_history
     )
-    if is_persona and has_real_history:
+    if role == Role.PERSONA and has_real_history:
         debug_print("[DEBUG] Adding role reminder message for persona")
         messages.append(HumanMessage(content=build_persona_role_reminder()))
 
@@ -177,6 +178,7 @@ def build_langchain_messages(
 def format_conversation_as_string(
     conversation_history: Optional[List[Dict[str, Any]]] = None,
     system_prompt: Optional[str] = None,
+    role: Optional[Role] = None,
 ) -> str:
     """
     Format conversation history as a string for string-based LLMs (e.g., Ollama).
@@ -187,6 +189,7 @@ def format_conversation_as_string(
     Args:
         conversation_history: Optional list of previous conversation turns
         system_prompt: Optional system prompt to prepend
+        role: Optional role of the LLM (Role.PERSONA, Role.AGENT, or None)
 
     Returns:
         Formatted string with System, Human, and Assistant labels
@@ -198,7 +201,7 @@ def format_conversation_as_string(
         full_message = f"System: {system_prompt}\n\n"
 
     # Build LangChain messages using existing utility
-    messages = build_langchain_messages(conversation_history, system_prompt)
+    messages = build_langchain_messages(conversation_history, role)
 
     # Convert messages to string format
     for message in messages:

@@ -1,6 +1,6 @@
 from typing import Optional
 
-from .llm_interface import JudgeLLM, LLMInterface
+from .llm_interface import JudgeLLM, LLMInterface, Role
 
 
 class LLMFactory:
@@ -8,7 +8,11 @@ class LLMFactory:
 
     @staticmethod
     def create_llm(
-        model_name: str, name: str, system_prompt: Optional[str] = None, **kwargs
+        model_name: str,
+        name: str,
+        system_prompt: Optional[str] = None,
+        role: Optional[Role] = None,
+        **kwargs,
     ) -> LLMInterface:
         """
         Create an LLM instance based on the model name.
@@ -22,6 +26,7 @@ class LLMFactory:
                 (e.g., "claude-3-5-sonnet-20241022", "gpt-4")
             name: Display name for this LLM instance
             system_prompt: Optional system prompt
+            role: Optional role of the LLM (Role.PERSONA, Role.AGENT, or None)
             **kwargs: Additional model-specific parameters
                 (temperature, max_tokens, etc.)
 
@@ -44,25 +49,29 @@ class LLMFactory:
         if "claude" in model_lower:
             from .claude_llm import ClaudeLLM
 
-            return ClaudeLLM(name, system_prompt, model_name, **model_params)
+            return ClaudeLLM(name, system_prompt, model_name, role, **model_params)
         elif "gpt" in model_lower or "openai" in model_lower:
             from .openai_llm import OpenAILLM
 
-            return OpenAILLM(name, system_prompt, model_name, **model_params)
+            return OpenAILLM(name, system_prompt, model_name, role, **model_params)
         elif "gemini" in model_lower or "google" in model_lower:
             from .gemini_llm import GeminiLLM
 
-            return GeminiLLM(name, system_prompt, model_name, **model_params)
+            return GeminiLLM(name, system_prompt, model_name, role, **model_params)
         elif "llama" in model_lower or "ollama" in model_lower:
             from .llama_llm import LlamaLLM
 
-            return LlamaLLM(name, system_prompt, model_name, **model_params)
+            return LlamaLLM(name, system_prompt, model_name, role, **model_params)
         else:
             raise ValueError(f"Unsupported model: {model_name}")
 
     @staticmethod
     def create_judge_llm(
-        model_name: str, name: str, system_prompt: Optional[str] = None, **kwargs
+        model_name: str,
+        name: str,
+        system_prompt: Optional[str] = None,
+        role: Optional[Role] = None,
+        **kwargs,
     ) -> JudgeLLM:
         """
         Create an LLM instance with structured output capabilities.
@@ -75,6 +84,7 @@ class LLMFactory:
                 (e.g., "claude-3-5-sonnet-20241022", "gpt-4")
             name: Display name for this LLM instance
             system_prompt: Optional system prompt
+            role: Optional role of the LLM (Role.PERSONA, Role.AGENT, or None)
             **kwargs: Additional model-specific parameters
                 (temperature, max_tokens, etc.)
 
@@ -84,7 +94,7 @@ class LLMFactory:
         Raises:
             ValueError: If model doesn't support structured output (e.g., Llama/Ollama)
         """
-        llm = LLMFactory.create_llm(model_name, name, system_prompt, **kwargs)
+        llm = LLMFactory.create_llm(model_name, name, system_prompt, role, **kwargs)
 
         if not isinstance(llm, JudgeLLM):
             raise ValueError(

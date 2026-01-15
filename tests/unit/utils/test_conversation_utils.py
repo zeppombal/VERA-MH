@@ -2,8 +2,10 @@
 
 from langchain_core.messages import AIMessage, HumanMessage
 
+from llm_clients.llm_interface import Role
 from utils.conversation_utils import (
     build_langchain_messages,
+    build_persona_role_reminder,
     format_conversation_as_string,
 )
 
@@ -186,6 +188,73 @@ class TestBuildLangchainMessages:
         assert messages[0].content == "Hello"
         assert isinstance(messages[1], HumanMessage)
         assert messages[1].content == "Are you there?"
+
+    def test_build_messages_with_persona_role_reminder(self):
+        """Test that role reminder is added for persona role with real history."""
+        history = [
+            {"turn": 1, "speaker": "persona", "response": "Hello"},
+            {"turn": 2, "speaker": "agent", "response": "Hi there"},
+        ]
+
+        messages = build_langchain_messages(
+            conversation_history=history, role=Role.PERSONA
+        )
+
+        # Should have role reminder + 2 history messages = 3 total
+        assert len(messages) == 3
+        assert isinstance(messages[0], HumanMessage)
+        assert messages[0].content == build_persona_role_reminder()
+        assert isinstance(messages[1], HumanMessage)
+        assert messages[1].content == "Hello"
+        assert isinstance(messages[2], AIMessage)
+        assert messages[2].content == "Hi there"
+
+    def test_build_messages_no_role_reminder_for_agent(self):
+        """Test that role reminder is NOT added for agent role."""
+        history = [
+            {"turn": 1, "speaker": "persona", "response": "Hello"},
+            {"turn": 2, "speaker": "agent", "response": "Hi there"},
+        ]
+
+        messages = build_langchain_messages(
+            conversation_history=history, role=Role.AGENT
+        )
+
+        # Should have 2 history messages, no role reminder
+        assert len(messages) == 2
+        assert isinstance(messages[0], HumanMessage)
+        assert messages[0].content == "Hello"
+        assert isinstance(messages[1], AIMessage)
+        assert messages[1].content == "Hi there"
+
+    def test_build_messages_no_role_reminder_for_none_role(self):
+        """Test that role reminder is NOT added when role is None."""
+        history = [
+            {"turn": 1, "speaker": "persona", "response": "Hello"},
+            {"turn": 2, "speaker": "agent", "response": "Hi there"},
+        ]
+
+        messages = build_langchain_messages(conversation_history=history, role=None)
+
+        # Should have 2 history messages, no role reminder
+        assert len(messages) == 2
+        assert isinstance(messages[0], HumanMessage)
+        assert messages[0].content == "Hello"
+        assert isinstance(messages[1], AIMessage)
+        assert messages[1].content == "Hi there"
+
+    def test_build_messages_no_role_reminder_for_turn_0_only(self):
+        """Test that role reminder is NOT added when only turn 0 exists."""
+        history = [{"turn": 0, "speaker": "system", "response": "Start conversation"}]
+
+        messages = build_langchain_messages(
+            conversation_history=history, role=Role.PERSONA
+        )
+
+        # Should have only turn 0 message, no role reminder
+        assert len(messages) == 1
+        assert isinstance(messages[0], HumanMessage)
+        assert messages[0].content == "Start conversation"
 
 
 class TestFormatConversationAsString:
