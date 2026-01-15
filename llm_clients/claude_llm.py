@@ -37,8 +37,6 @@ class ClaudeLLM(JudgeLLM):
         llm_params = {
             "anthropic_api_key": Config.ANTHROPIC_API_KEY,
             "model": self.model_name,
-            # "temperature": config.get("temperature", 0.7),
-            # "max_tokens": config.get("max_tokens", 1000)
         }
 
         # Override with any provided kwargs
