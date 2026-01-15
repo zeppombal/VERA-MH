@@ -21,9 +21,11 @@ class TestLlamaLLMInit:
         call_kwargs = mock_ollama.call_args[1]
 
         assert "model" in call_kwargs
-        assert "temperature" in call_kwargs
+        # base_url has a hardcoded default for Ollama connectivity
         assert "base_url" in call_kwargs
         assert call_kwargs["base_url"] == "http://localhost:11434"
+        # temperature should NOT be set by default
+        assert "temperature" not in call_kwargs
 
     @patch("llm_clients.llama_llm.Ollama")
     def test_init_with_custom_model_name(self, mock_ollama):

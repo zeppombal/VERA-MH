@@ -37,8 +37,6 @@ class OpenAILLM(JudgeLLM):
         llm_params = {
             "openai_api_key": Config.OPENAI_API_KEY,
             "model": self.model_name,
-            # "temperature": config.get("temperature", 0.7),
-            # "max_tokens": config.get("max_tokens", 1000)
         }
 
         # Override with any provided kwargs
