@@ -54,8 +54,9 @@ class LLMInterface(ABC):
         directly on the LLM instance, which will be forwarded to the
         underlying LangChain model (self.llm).
         """
+        # Check if self.llm exists by looking in __dict__ to avoid recursion
         # Only delegate if self.llm exists and has the attribute
-        if hasattr(self, "llm") and hasattr(self.llm, name):
+        if "llm" in self.__dict__ and hasattr(self.llm, name):
             return getattr(self.llm, name)
         # If the attribute doesn't exist on self.llm, raise AttributeError
         raise AttributeError(

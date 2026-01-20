@@ -315,7 +315,8 @@ class AzureLLM(JudgeLLM):
         This method closes any HTTP client sessions to prevent resource leaks.
         Should be called when the LLM instance is no longer needed.
         """
-        if not hasattr(self, "llm") or not self.llm:
+        # Check __dict__ directly to avoid recursion through __getattr__
+        if "llm" not in self.__dict__ or not self.llm:
             return
 
         # AzureAIChatCompletionsModel has an aclose() method that closes _async_client
