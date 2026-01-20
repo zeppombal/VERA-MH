@@ -117,8 +117,8 @@ if __name__ == "__main__":
         "Sky",
     ]
 
-    MEMBER_MODEL = "claude-opus-4-1-20250805"
-    PROVIDER_MODEL = "gpt-4o"
+    MEMBER_MODEL = "gpt-4o"
+    PROVIDER_MODEL = "claude-opus-4-1-20250805"
     JUDGE_MODEL = "gpt-4o"
 
     TURNS = 10
