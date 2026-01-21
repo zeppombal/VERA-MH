@@ -292,6 +292,164 @@ class TestBuildLangchainMessages:
         assert isinstance(messages[2], HumanMessage)
         assert messages[2].content == "Hi"
 
+    def test_build_messages_provider_starts_conversation_for_provider_role(self):
+        """Test for when PROVIDER starts, messages build correctly for provider role."""
+        # Provider starts first (turn 1), then persona responds (turn 2)
+        history = [
+            {
+                "turn": 1,
+                "speaker": "provider",
+                "response": "Hello, how can I help you today?",
+                "role": "provider",
+            },
+            {
+                "turn": 2,
+                "speaker": "persona",
+                "response": "I'm feeling really anxious",
+                "role": "persona",
+            },
+            {
+                "turn": 3,
+                "speaker": "provider",
+                "response": "I understand. Can you tell me more?",
+                "role": "provider",
+            },
+            {
+                "turn": 4,
+                "speaker": "persona",
+                "response": "It's been happening for weeks",
+                "role": "persona",
+            },
+        ]
+
+        messages = build_langchain_messages(
+            conversation_history=history, role=Role.PROVIDER
+        )
+
+        assert len(messages) == 4
+        # Provider's own messages should be AIMessage (what "I" said)
+        assert isinstance(messages[0], AIMessage)
+        assert messages[0].content == "Hello, how can I help you today?"
+        # Persona's messages should be HumanMessage (what "they" said)
+        assert isinstance(messages[1], HumanMessage)
+        assert messages[1].content == "I'm feeling really anxious"
+        assert isinstance(messages[2], AIMessage)
+        assert messages[2].content == "I understand. Can you tell me more?"
+        assert isinstance(messages[3], HumanMessage)
+        assert messages[3].content == "It's been happening for weeks"
+
+    def test_build_messages_provider_starts_conversation_for_persona_role(self):
+        """Test for when PROVIDER starts, messages build correctly for persona role."""
+        # Provider starts first (turn 1), then persona responds (turn 2)
+        history = [
+            {
+                "turn": 1,
+                "speaker": "provider",
+                "response": "Hello, how can I help you today?",
+                "role": "provider",
+            },
+            {
+                "turn": 2,
+                "speaker": "persona",
+                "response": "I'm feeling really anxious",
+                "role": "persona",
+            },
+            {
+                "turn": 3,
+                "speaker": "provider",
+                "response": "I understand. Can you tell me more?",
+                "role": "provider",
+            },
+            {
+                "turn": 4,
+                "speaker": "persona",
+                "response": "It's been happening for weeks",
+                "role": "persona",
+            },
+        ]
+
+        messages = build_langchain_messages(
+            conversation_history=history, role=Role.PERSONA
+        )
+
+        assert len(messages) == 4
+        # Provider's messages should be HumanMessage (what "they" said)
+        assert isinstance(messages[0], HumanMessage)
+        assert messages[0].content == "Hello, how can I help you today?"
+        # Persona's own messages should be AIMessage (what "I" said)
+        assert isinstance(messages[1], AIMessage)
+        assert messages[1].content == "I'm feeling really anxious"
+        assert isinstance(messages[2], HumanMessage)
+        assert messages[2].content == "I understand. Can you tell me more?"
+        assert isinstance(messages[3], AIMessage)
+        assert messages[3].content == "It's been happening for weeks"
+
+    def test_build_messages_provider_starts_with_turn_0(self):
+        """Test provider role with turn 0 when provider starts the conversation."""
+        history = [
+            {"turn": 0, "speaker": "system", "response": "Initial message"},
+            {
+                "turn": 1,
+                "speaker": "provider",
+                "response": "Hello, how can I help?",
+                "role": "provider",
+            },
+            {
+                "turn": 2,
+                "speaker": "persona",
+                "response": "I need support",
+                "role": "persona",
+            },
+        ]
+
+        messages = build_langchain_messages(
+            conversation_history=history, role=Role.PROVIDER
+        )
+
+        assert len(messages) == 3  # turn 0 + 2 history messages
+        # Turn 0 should always be HumanMessage regardless of role
+        assert isinstance(messages[0], HumanMessage)
+        assert messages[0].content == "Initial message"
+        # Turn 1 (provider) should be AIMessage when provider role
+        assert isinstance(messages[1], AIMessage)
+        assert messages[1].content == "Hello, how can I help?"
+        # Turn 2 (persona) should be HumanMessage when provider role
+        assert isinstance(messages[2], HumanMessage)
+        assert messages[2].content == "I need support"
+
+    def test_build_messages_provider_starts_with_turn_0_for_persona_role(self):
+        """Test persona role with turn 0 when provider starts the conversation."""
+        history = [
+            {"turn": 0, "speaker": "system", "response": "Initial message"},
+            {
+                "turn": 1,
+                "speaker": "provider",
+                "response": "Hello, how can I help?",
+                "role": "provider",
+            },
+            {
+                "turn": 2,
+                "speaker": "persona",
+                "response": "I need support",
+                "role": "persona",
+            },
+        ]
+
+        messages = build_langchain_messages(
+            conversation_history=history, role=Role.PERSONA
+        )
+
+        assert len(messages) == 3  # turn 0 + 2 history messages
+        # Turn 0 should always be HumanMessage regardless of role
+        assert isinstance(messages[0], HumanMessage)
+        assert messages[0].content == "Initial message"
+        # Turn 1 (provider) should be HumanMessage when persona role
+        assert isinstance(messages[1], HumanMessage)
+        assert messages[1].content == "Hello, how can I help?"
+        # Turn 2 (persona) should be AIMessage when persona role
+        assert isinstance(messages[2], AIMessage)
+        assert messages[2].content == "I need support"
+
 
 class TestFormatConversationAsString:
     """Test format_conversation_as_string function."""
