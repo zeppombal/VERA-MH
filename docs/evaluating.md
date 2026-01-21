@@ -5,24 +5,26 @@ VERA-MH is ready to be used to evaluate any chat-based interface.
 Four concrete implementations of that class are provided for the APIs of ChatGPT, Claude, Gemini, and Llama (via Ollama).
 
 To test your service, you need to instantiate a concrete class and implement two key methods:
-- `generate_response()`: Returns a string (the chatbot response) given a string (the user input)
+- `generate_response()`: Returns a string (the chatbot response) given conversation history (list of conversation turns)
 - `generate_structured_response()`: Returns a Pydantic model instance for structured outputs (used by the judge system)
 
 ## Adding Support for a New LLM Provider
 
 Follow these steps to add a new LLM provider:
 
-### 1. Create a new class that inherits from `LLMInterface`
+### 1. Create a new class that inherits from `JudgeLLM` (for structured output) or `LLMInterface` (basic)
 
+**For judge evaluation (structured output support):**
 ```python
-from llm_clients.llm_interface import LLMInterface
-from typing import Optional, Type, TypeVar
+from datetime import datetime
+from llm_clients.llm_interface import JudgeLLM
+from typing import Any, Dict, List, Optional, Type, TypeVar
 from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
 
-class YourLLM(LLMInterface):
-    """Your LLM implementation."""
+class YourLLM(JudgeLLM):
+    """Your LLM implementation with structured output support."""
 
     def __init__(
         self,
@@ -32,28 +34,95 @@ class YourLLM(LLMInterface):
         **kwargs,
     ):
         super().__init__(name, system_prompt)
-        # Initialize your LLM client here
+        # Initialize your LangChain LLM client here
+        # Example: self.llm = ChatYourProvider(model=model_name, **kwargs)
+        # Store metadata
+        self.last_response_metadata: Dict[str, Any] = {}
+```
+
+**For basic conversation generation only (no structured output):**
+```python
+from datetime import datetime
+from llm_clients.llm_interface import LLMInterface
+from typing import Any, Dict, List, Optional
+
+class YourLLM(LLMInterface):
+    """Your LLM implementation (basic, no structured output)."""
+
+    def __init__(
+        self,
+        name: str,
+        system_prompt: Optional[str] = None,
+        model_name: Optional[str] = None,
+        **kwargs,
+    ):
+        super().__init__(name, system_prompt)
+        # Initialize your LangChain LLM client here
+        # Example: self.llm = ChatYourProvider(model=model_name, **kwargs)
+        # Store metadata
+        self.last_response_metadata: Dict[str, Any] = {}
 ```
 
 ### 2. Implement the required methods
 
 #### `generate_response()` - For conversation generation
 ```python
-async def generate_response(self, message: Optional[str] = None) -> str:
-    """Generate a text response.
+from langchain_core.messages import SystemMessage
+from utils.conversation_utils import build_langchain_messages
+
+async def generate_response(
+    self,
+    conversation_history: Optional[List[Dict[str, Any]]] = None,
+) -> str:
+    """Generate a response based on conversation history.
 
     Args:
-        message: The user's input message
+        conversation_history: List of previous conversation turns.
+            Each turn is a dict with keys: 'turn', 'speaker', 'response'.
+            On the first turn (turn 0), conversation_history will contain
+            a single entry with turn=0, speaker="system", and the initial
+            message in the 'response' field.
 
     Returns:
         The LLM's response as a string
     """
-    # Your implementation here
-    # Should be async and return a string
+    messages = []
+    
+    # Add system prompt if present
+    if self.system_prompt:
+        messages.append(SystemMessage(content=self.system_prompt))
+    
+    # Convert conversation history to LangChain messages
+    # This utility handles role conversion and formatting
+    messages.extend(
+        build_langchain_messages(conversation_history, self.system_prompt)
+    )
+    
+    try:
+        # Invoke the LLM
+        response = await self.llm.ainvoke(messages)
+        
+        # Store metadata (optional but recommended)
+        self.last_response_metadata = {
+            "model": self.model_name,
+            "timestamp": datetime.now().isoformat(),
+            # Add other metadata as needed
+        }
+        
+        return response.text
+    except Exception as e:
+        # Store error metadata
+        self.last_response_metadata = {
+            "error": str(e),
+            "timestamp": datetime.now().isoformat(),
+        }
+        return f"Error generating response: {str(e)}"
 ```
 
-#### `generate_structured_response()` - For judge evaluation
+#### `generate_structured_response()` - For judge evaluation (JudgeLLM only)
 ```python
+from langchain_core.messages import SystemMessage, HumanMessage
+
 async def generate_structured_response(
     self, message: Optional[str], response_model: Type[T]
 ) -> T:
@@ -65,14 +134,49 @@ async def generate_structured_response(
 
     Returns:
         Instance of the response_model with structured data
+        
+    Raises:
+        RuntimeError: If structured output generation fails
     """
-    # Option 1: Use LangChain's with_structured_output (recommended)
-    structured_llm = self.llm.with_structured_output(response_model)
-    response = await structured_llm.ainvoke(message)
-    return response
-
-    # Option 2: If your provider doesn't support structured output,
-    # parse the text response and construct the Pydantic model
+    messages = []
+    
+    # Add system prompt if present
+    if self.system_prompt:
+        messages.append(SystemMessage(content=self.system_prompt))
+    
+    # Add the user message
+    messages.append(HumanMessage(content=message))
+    
+    try:
+        # Create structured LLM using LangChain's with_structured_output
+        structured_llm = self.llm.with_structured_output(response_model)
+        
+        # Invoke and get structured response
+        response = await structured_llm.ainvoke(messages)
+        
+        # Validate response type
+        if not isinstance(response, response_model):
+            raise ValueError(
+                f"Response is not an instance of {response_model.__name__}"
+            )
+        
+        # Store metadata (optional)
+        self.last_response_metadata = {
+            "model": self.model_name,
+            "timestamp": datetime.now().isoformat(),
+            "structured_output": True,
+        }
+        
+        return response
+    except Exception as e:
+        # Store error metadata
+        self.last_response_metadata = {
+            "error": str(e),
+            "timestamp": datetime.now().isoformat(),
+        }
+        raise RuntimeError(
+            f"Error generating structured response: {str(e)}"
+        ) from e
 ```
 
 #### `set_system_prompt()` - For updating prompts
@@ -80,6 +184,13 @@ async def generate_structured_response(
 def set_system_prompt(self, system_prompt: str) -> None:
     """Set or update the system prompt."""
     self.system_prompt = system_prompt
+```
+
+#### `get_last_response_metadata()` - Get response metadata (optional but recommended)
+```python
+def get_last_response_metadata(self) -> Dict[str, Any]:
+    """Get metadata from the last response."""
+    return self.last_response_metadata.copy()
 ```
 
 ### 3. Add the new LLM client to the factory
@@ -92,9 +203,10 @@ from .your_llm import YourLLM
 class LLMFactory:
     @staticmethod
     def create_llm(model_name: str, name: str, system_prompt: Optional[str] = None, **kwargs):
-        if "your-model-prefix" in model_name.lower():
-            return YourLLM(name, system_prompt, model_name, **kwargs)
-        # ... existing conditions
+        model_lower = model_name.lower()
+        if "your-model-prefix" in model_lower:
+            return YourLLM(name=name, system_prompt=system_prompt, model_name=model_name, **kwargs)
+        # ... existing conditions for other models
 ```
 
 ### 4. Update configuration (if needed)
@@ -121,6 +233,14 @@ python3 judge.py -f conversations/{YOUR_FOLDER} -j your-model-name
 Claude, OpenAI, and Gemini support structured output natively through their APIs via LangChain's `with_structured_output()`:
 
 ```python
+# Build messages list (include system prompt if needed)
+messages = []
+if self.system_prompt:
+    from langchain_core.messages import SystemMessage
+    messages.append(SystemMessage(content=self.system_prompt))
+from langchain_core.messages import HumanMessage
+messages.append(HumanMessage(content=message))
+
 structured_llm = self.llm.with_structured_output(response_model)
 response = await structured_llm.ainvoke(messages)
 ```

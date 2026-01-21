@@ -150,9 +150,9 @@ python judge.py -f conversations/{YOUR_FOLDER} -j gpt-4o:2 claude-sonnet-4-20250
 
 Most of the interesting data is contained in the [`data`](data) folder, specifically:
 - _personas.tsv_ has the data for the personas
-- *personas_prompt_template.txt* has the meta-prompt for the user-agent
+- *persona_prompt_template.txt* has the meta-prompt for the user-agent
 - _rubric.tsv_ is the clinically developed rubric
-- *rubric_prompt_template.txt* for the judge meta prompt 
+- *rubric_prompt_beginning.txt* for the judge meta prompt 
 
 
 # LLM Conversation Simulator
@@ -286,7 +286,8 @@ reasoning = structured_response.reasoning  # Type-safe
 ### Basic Conversation Generation
 
 ```python
-from generate import generate_conversations
+from generate_conversations import ConversationRunner
+import asyncio
 
 # Persona model configuration (the "patient")
 persona_model_config = {
@@ -305,14 +306,20 @@ agent_model_config = {
 }
 
 # Generate conversations
-results = await generate_conversations(
-    persona_model_config=persona_model_config,
-    agent_model_config=agent_model_config,
-    max_turns=5,
-    runs_per_prompt=3,
-    persona_names=["Alex M.", "Chloe Kim"],  # Optional: filter specific personas
-    folder_name="custom_experiment"  # Optional: custom output folder
-)
+async def run():
+    runner = ConversationRunner(
+        persona_model_config=persona_model_config,
+        agent_model_config=agent_model_config,
+        run_id="custom_experiment",
+        max_turns=5,
+        runs_per_prompt=3,
+        folder_name="custom_experiment"
+    )
+    results = await runner.run()
+    return results
+
+# Run the async function
+results = asyncio.run(run())
 ```
 
 ### Command Line Usage
