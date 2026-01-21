@@ -1,6 +1,7 @@
 """Utilities for conversation management and file operations."""
 
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
@@ -39,6 +40,9 @@ def save_conversation_to_file(
         folder: Output folder
         llm1_name: Name of LLM1 to identify it as 'user'
     """
+    # Ensure folder exists
+    Path(folder).mkdir(parents=True, exist_ok=True)
+
     summary = format_conversation_summary(conversation_history, llm1_name)
     with open(f"{folder}/{filename}", "w", encoding="utf-8") as f:
         f.write(summary)
@@ -114,8 +118,14 @@ def build_langchain_messages(
 
     Uses turn indices to determine message type since speaker names can be custom:
     - Turn 0: Initial message (HumanMessage)
+
+    When LLM is playing persona role (is_persona=True):
+    - Odd turns (1, 3, 5...): Persona responses (AIMessage)
+    - Even turns (2, 4, 6...): Provider responses (HumanMessage)
+
+    When LLM is playing provider role (is_persona=False):
     - Odd turns (1, 3, 5...): Persona responses (HumanMessage)
-    - Even turns (2, 4, 6...): Agent responses (AIMessage)
+    - Even turns (2, 4, 6...): Provider responses (AIMessage)
 
     IMPORTANT: This assumes persona always speaks first (see ConversationSimulator
     line 90-92). If the speaker order changes, this logic must be updated.
@@ -161,16 +171,30 @@ def build_langchain_messages(
                 messages.append(HumanMessage(content=text))
                 continue
 
-            # Handle regular turns (1, 2, 3, ...)
-            # Odd turns (1, 3, 5...) = persona (HumanMessage)
-            # Even turns (2, 4, 6...) = agent (AIMessage)
-            msg_type = "HumanMessage" if turn_number % 2 == 1 else "AIMessage"
+            # Determine message type based on turn number and role
+            # Persona speaks on odd turns (1, 3, 5...), provider on even (2, 4, 6...)
+            is_persona_turn = turn_number % 2 == 1
+
+            # Flip message types when LLM is playing persona role
+            if is_persona:
+                # Persona responses are AIMessage, provider inputs are HumanMessage
+                message = (
+                    AIMessage(content=text)
+                    if is_persona_turn
+                    else HumanMessage(content=text)
+                )
+            else:
+                # Persona inputs are HumanMessage, provider responses are AIMessage
+                message = (
+                    HumanMessage(content=text)
+                    if is_persona_turn
+                    else AIMessage(content=text)
+                )
+
+            msg_type = type(message).__name__
             preview = text[:50] + "..." if len(text) > 50 else text
             debug_print(f"  Turn {turn_number} -> {msg_type}: {preview}")
-            if turn_number % 2 == 1:
-                messages.append(HumanMessage(content=text))
-            else:
-                messages.append(AIMessage(content=text))
+            messages.append(message)
 
     return messages
 
