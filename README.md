@@ -3,18 +3,27 @@
 [![CI](https://github.com/SpringCare/VERA-MH/workflows/CI/badge.svg)](https://github.com/SpringCare/VERA-MH/actions/workflows/ci.yml)
 [![Docker](https://github.com/SpringCare/VERA-MH/workflows/Docker%20Build%20Validation/badge.svg)](https://github.com/SpringCare/VERA-MH/actions/workflows/docker.yml)
 
-This is the main repo for [VERA-MH](https://arxiv.org/abs/2510.15297) (Validation of Ethical and Responsible AI in Mental Health).
+VERA-MH (Validation of Ethical and Responsible AI in Mental Health) is a comprehensive framework for evaluating AI systems designed for mental health applications. This toolkit enables researchers, developers, and clinicians to systematically assess how well AI systems handle sensitive mental health conversations across detecting potential risk, confirming risk, guiding to human support, communicaticating effectively, and holding safe boundaries. By simulating realistic patient-provider interactions using clinically-developed personas and rubrics, VERA-MH provides standardized evaluation metrics that help ensure AI mental health tools are safe, effective, and responsible before deployment.
 
 This code should be considered a work in progress (including this documentation), and the main avenue to offer feedback.
 We value every interaction that follows the [Code of Conduct](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
 There are many quirks of the current structure, which will be simplified and streamlined.
 
-# What happens during the RFC
-We have an open [Request For Comment](https://4so24.share.hsforms.com/2gKComtOTS7K9-23uI9hQSQ) (RFC) in which we are gathering feedback on both clinical and technical levels.
+## Table of Contents
 
-During the RFC, we keep iterating on our both the code and the clincal side, that get merged into main from time to time. The idea is that by downloading and running the code, you are able to directly use the latest version.
+- [Getting Started](#getting-started)
+- [Using Extra Parameters](#using-extra-parameters)
+- [Data Files](#data-files)
+- [LLM Conversation Simulator](#llm-conversation-simulator)
+- [Using Claude Code](#using-claude-code)
+- [License](#license)
 
-The RFC-version are frozen in this [branch](https://github.com/SpringCare/VERA-MH/tree/RFC), with the [rubric](https://github.com/SpringCare/VERA-MH/blob/RFC/data/rubric.tsv), [personas](https://github.com/SpringCare/VERA-MH/blob/RFC/data/personas.tsv) and [persona meta prompt](https://github.com/SpringCare/VERA-MH/blob/RFC/data/persona_prompt_template.txt) in the [data](https://github.com/SpringCare/VERA-MH/tree/RFC/data) folder.
+## Additional Resources
+
+<!-- Placeholder: Link to blog post or VERA-MH website -->
+<!-- Placeholder: Link to Kate's paper (publication details TBD) -->
+<!-- Placeholder: AI version of the paper - NeurIPS -->
+<!-- Placeholder: Other content from Kelly -->
 
 # Getting started
 0. **Install uv** (if not already installed):
@@ -41,31 +50,62 @@ The RFC-version are frozen in this [branch](https://github.com/SpringCare/VERA-M
 
 4. **(Optional) Create an LLM class for your agent**: see guidance [here](docs/evaluating.MD)
 
-5. **Run the simulation**:
+5. **Run the simulation** (quick test with 6 turns for cost-effective trial):
    ```bash
    python generate.py -u gpt-4o -uep temperature=1 -p gpt-4o -pep temperature=1 -t 6 -r 1
    ```
+   
+   **5a. Quick test**: The command above generates a small set of conversations for initial testing.
+   
+   **5b. For production-quality evaluations**: To generate conversations that reproduce published VERA scores, achieve valid scoring, or use scoring features, we recommend:
+   ```bash
+   python generate.py -u gemini-3-pro-preview -p <your-AI-product> -pep <your-AI-product-extras> -t 20 -r 20 -c 10
+   ```
+   - **20 conversation turns** over **20 runs** per persona for reliable scoring
+   - **Max concurrent** of **10** conversations (use `-c 10`) to manage API rate limits
+   - **Model recommendation**: **Gemini 3 Pro** makes the most realistic conversations as evaluated by our clinicians
 
-Where:
-- `u` is the user model
-- `uep` are the user model extra parameters
-- `p` is the provider model
-- `pep` is the provider extra parameters
-- `t` is the number of turns
-- `r` is the run per turns
-- `f` is the folder name (defaults to conversations and a subfolder named based on other paramters and datetime)
-- `c` is the maximum concurrent conversations to run (defaults to None, but try this if the provider you're testing times out)
-This will generate conversations and store them in a subfolder of `conversations`
+**Parameters for `generate.py`:**
+
+| Short | Full | Description |
+|-------|------|-------------|
+| `-u` | `--user-agent` | Model for the user-agent (persona). Examples: `claude-3-5-sonnet-20241022`, `gemini-1.5-pro`, `llama3:8b` |
+| `-uep` | `--user-agent-extra-params` | Extra parameters for the user-agent. Examples: `temperature=0.7`, `max_tokens=1000` |
+| `-p` | `--provider-agent` | Model for the provider-agent (AI system being evaluated). Examples: `claude-3-5-sonnet-20241022`, `gemini-1.5-pro`, `llama3:8b` |
+| `-pep` | `--provider-agent-extra-params` | Extra parameters for the provider-agent. Examples: `temperature=0.7`, `max_tokens=1000` |
+| `-t` | `--turns` | Number of turns per conversation (required) (e.g., 2 turns means both persona and provider spoke once) |
+| `-r` | `--runs` | Number of runs per prompt (required) |
+| `-f` | `--folder-name` | Folder name for output (defaults to `conversations` with a subfolder named based on other parameters and datetime) |
+| `-c` | `--max-concurrent` | Maximum number of concurrent conversations (defaults to None; use this if the provider you're testing times out) |
+| `-w` | `--max-total-words` | Optional maximum total words across all responses in a conversation |
+| `-i` | `--run-id` | Run ID for the conversations (if not provided, a default will be generated) |
+| `-mp` | `--max-personas` | Maximum number of personas to use (limits personas loaded from [data/personas.tsv](data/personas.tsv)) |
+| `-d` | `--debug` | Enable debug logging for conversation generation |
+
+This will generate conversations and store them in a subfolder of `conversations` unless specified otherwise.
 
 6. **Judge the conversations**:
    ```bash
    python judge.py -f conversations/{YOUR_FOLDER} -j gpt-4o
    ```
 
-Where
-- `f` points to the folder with the conversations
-- `j` is the flag for selecting the judge model(s)
-- `jep` are the judge model extra parameters (optional)
+**Judge model recommendations**: **GPT-4o** and **Claude Sonnet** have the highest inter-rater reliability with human clinicians as judge models.
+
+**Parameters for `judge.py`:**
+
+| Short | Full | Description |
+|-------|------|-------------|
+| `-f` | `--folder` | Folder containing conversation files (default: `conversations`) |
+| `-c` | `--conversation` | Path to a single conversation file to judge (mutually exclusive with `--folder`) |
+| `-j` | `--judge-model` | Model(s) to use for judging (required). Format: `model` or `model:count` for multiple instances. Can specify multiple: `--judge-model model1 model2:3`. Examples: `claude-3-5-sonnet-20241022`, `claude-3-5-sonnet-20241022:3`, `claude-3-5-sonnet-20241022:2 gpt-4o:1` |
+| `-jep` | `--judge-model-extra-params` | Extra parameters for the judge model (optional). Examples: `temperature=0.7`, `max_tokens=1000`. Default: `temperature=0` (unless overridden) |
+| `-r` | `--rubrics` | Rubric file(s) to use (default: `data/rubric.tsv`) |
+| `-l` | `--limit` | Limit number of conversations to judge (for debugging) |
+| `-o` | `--output` | Output folder for evaluation results (default: `evaluations`) |
+| `-m` | `--max-concurrent` | Maximum number of concurrent workers (default: None). Set to a high number or omit for unlimited concurrency |
+| `--per-judge` | | If set, `--max-concurrent` applies per judge model. Otherwise, it applies to total workers across all judges |
+| `--verbose-workers` | | Enable verbose worker logging to show concurrency behavior |
+
 
 ### Using Extra Parameters
 
@@ -105,6 +145,8 @@ python judge.py -f conversations/{YOUR_FOLDER} -j gpt-4o:3
 python judge.py -f conversations/{YOUR_FOLDER} -j gpt-4o:2 claude-sonnet-4-20250514:3
 ```
 
+## Data Files
+
 Most of the interesting data is contained in the [`data`](data) folder, specifically:
 - _personas.csv_ has the data for the personas
 - *personas_prompt_template.txt* has the meta-prompt for the user-agent
@@ -112,46 +154,9 @@ Most of the interesting data is contained in the [`data`](data) folder, specific
 - *rubric_prompt_template.txt* for the judge meta prompt 
 
 
-# Using Claude Code
+# LLM Conversation Simulator
 
-This project is configured with [Claude Code](https://claude.ai/claude-code), Anthropic's CLI tool that helps with development tasks.
-
-## Quick Start
-
-If you have Claude Code installed, you can use these custom commands:
-
-**Development & Setup:**
-- `/setup-dev` - Set up complete development environment (includes test infrastructure)
-
-**Code Quality:**
-- `/format` - Run code formatting and linting (ruff + pyright)
-
-**Running VERA-MH:**
-- `/run-generator` - Interactive conversation generator
-- `/run-judge` - Interactive conversation evaluator
-
-**Testing:**
-- `/test` - Run test suite (with coverage by default)
-- `/fix-tests` - Fix failing tests iteratively, show branch-focused coverage
-- `/create-tests [module_path] [--layer=unit|integration|e2e]` - Create tests (focused: single module, or coverage analysis: find and fix gaps)
-
-**Git Workflow:**
-- `/create-commits` - Create logical, organized commits (with optional branch creation)
-- `/create-pr` - Create GitHub pull request with auto-generated summary
-
-## Configuration
-
-Team-shared configuration is in `.claude/settings.json`, which defines allowed operations without approval. Personal settings can be added to `.claude/settings.local.json` (not committed to git).
-
-For more details on custom commands and creating your own, see [`.claude/commands/README.md`](.claude/commands/README.md).
-
-# License
-We use a MIT license with conditions. We changed the reference from "software" to "materials" and more accurately describe the nature of the project.
-
-
-# LLM Conversation Simulator [LLM generated doc from now on, potentially outdated]
-
-A Python application that simulates conversations between Large Language Models (LLMs) for mental health care simulation. The system uses a CSV-based persona system to generate realistic patient conversations with AI agents, designed to improve mental health care chatbot training and evaluation.
+VERA-MH simulates realistic conversations between Large Language Models (LLMs) for mental health care evaluation. The system uses clinically-developed personas and rubrics to generate patient-provider interactions, enabling systematic assessment of AI mental health tools. Conversations are generated between persona models (representing patients) and provider models (representing therapists), then evaluated by judge models against clinical rubrics to assess performance across multiple dimensions including risk detection, resource provision, and ethical considerations.
 
 ## Features
 
@@ -371,15 +376,13 @@ persona_model_config = {
 
 ### Output Organization
 
-Conversations are automatically organized into timestamped folders:
+Conversations are organized into timestamped folders by default:
 
 ```
 conversations/
 ├── p_claude_sonnet_4_20250514__a_claude_sonnet_4_20250514_20250120_143022_t5_r3/
 │   ├── abc123_Alex_M_c3s_run1_20250120_143022_123.txt
-│   ├── abc123_Alex_M_c3s_run1_20250120_143022_123.log
 │   ├── def456_Chloe_Kim_c3s_run1_20250120_143022_456.txt
-│   └── def456_Chloe_Kim_c3s_run1_20250120_143022_456.log
 ```
 
 ### Logging
@@ -390,3 +393,52 @@ Comprehensive logging tracks:
 - Early termination events
 - Performance metrics (duration, turn count)
 - Error handling and debugging information
+
+Conversation logs are organized into timestamped folders by default:
+
+```
+logging/
+├── p_claude_sonnet_4_20250514__a_claude_sonnet_4_20250514_t5_r3_20250120_143022/
+│   ├── abc123_Alex_M_c3s_run1.log
+│   └── def456_Chloe_Kim_c3s_run1.log
+```
+
+# Development with Agents
+This project has multiple instructions/insights for agents to utilize as helpful context in assisting development.
+See [AGENTS.md](./AGENTS.md) for more info.
+
+
+## Claude Development
+This project is configured with [Claude Code](https://claude.ai/claude-code), Anthropic's CLI tool that helps with development tasks.
+
+If you have Claude Code installed, you can use these custom commands:
+
+**Development & Setup:**
+- `/setup-dev` - Set up complete development environment (includes test infrastructure)
+
+**Code Quality:**
+- `/format` - Run code formatting and linting (ruff + pyright)
+
+**Running VERA-MH:**
+- `/run-generator` - Interactive conversation generator
+- `/run-judge` - Interactive conversation evaluator
+
+**Testing:**
+- `/test` - Run test suite (with coverage by default)
+- `/fix-tests` - Fix failing tests iteratively, show branch-focused coverage
+- `/create-tests [module_path] [--layer=unit|integration|e2e]` - Create tests (focused: single module, or coverage analysis: find and fix gaps)
+
+**Git Workflow:**
+- `/create-commits` - Create logical, organized commits (with optional branch creation)
+- `/create-pr` - Create GitHub pull request with auto-generated summary
+
+## Configuration
+See [CLAUDE.md](./CLAUDE.md) and [.claude/](./.claude/) for all options.
+
+Team-shared configuration is in [`.claude/settings.json`](./.claude/settings.json), which defines allowed operations without approval. Personal settings can be added to `.claude/settings.local.json` (not committed to git).
+
+For more details on custom commands and creating your own, see [`.claude/commands/README.md`](.claude/commands/README.md).
+
+# License
+
+We use a MIT license with conditions. We changed the reference from "software" to "materials" and more accurately describe the nature of the project. See the [LICENSE](./LICENSE) file for full details.
