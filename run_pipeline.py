@@ -103,7 +103,9 @@ Example:
         type=int,
         help="Maximum number of personas to load (for testing)",
     )
-    parser.add_argument("--folder-name", help="Custom folder name for conversations")
+    parser.add_argument(
+        "--folder-name", "-f", help="Custom folder name for conversations"
+    )
     parser.add_argument(
         "--run-id",
         "-i",
