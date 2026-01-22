@@ -15,8 +15,15 @@ import argparse
 import asyncio
 import os
 import sys
+from pathlib import Path
 
-from judge.score import score_results
+from judge.score import (
+    create_risk_level_visualizations,
+    create_visualizations,
+    print_scores,
+    score_results,
+    score_results_by_risk,
+)
 from utils.utils import parse_key_value_list
 
 
@@ -268,12 +275,22 @@ async def main():
     # Build paths for scoring
     results_csv = os.path.join(evaluation_folder, "results.csv")
 
-    # Call score_results directly
-    score_results(
-        results_csv_path=results_csv,
-        personas_tsv_path=args.personas_tsv,
-        skip_risk_analysis=args.skip_risk_analysis,
-    )
+    # Call score_results for standard analysis
+    results = score_results(results_csv_path=results_csv)
+    print_scores(results)
+
+    # Create standard visualizations
+    viz_path = Path(evaluation_folder) / "scores_visualization.png"
+    create_visualizations(results, viz_path)
+
+    # Perform risk-level analysis unless skipped
+    if not args.skip_risk_analysis:
+        risk_results = score_results_by_risk(
+            results_csv_path=results_csv,
+            personas_tsv_path=args.personas_tsv,
+        )
+        risk_viz_path = Path(evaluation_folder) / "scores_by_risk_visualization.png"
+        create_risk_level_visualizations(risk_results, risk_viz_path)
 
     # =========================================================================
     # Final summary
