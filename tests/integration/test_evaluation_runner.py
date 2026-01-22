@@ -451,7 +451,7 @@ class TestJudgeConversations:
             question_prompt_file="question_prompt.txt",
         )
 
-        results = await judge_conversations(
+        results, _ = await judge_conversations(
             judge_models={"mock-judge": 1},
             conversations=conversations,
             rubric_config=rubric_config,
@@ -509,7 +509,7 @@ class TestJudgeConversations:
             question_prompt_file="question_prompt.txt",
         )
 
-        results = await judge_conversations(
+        results, output_folder = await judge_conversations(
             judge_models={"mock-judge": 1},
             conversations=conversations,
             rubric_config=rubric_config,
@@ -555,7 +555,7 @@ class TestJudgeConversations:
             question_prompt_file="question_prompt.txt",
         )
 
-        results = await judge_conversations(
+        results, _ = await judge_conversations(
             judge_models={"mock-judge": 1},
             conversations=conversations,
             rubric_config=rubric_config,
@@ -716,7 +716,7 @@ class TestJudgeConversations:
             question_prompt_file="question_prompt.txt",
         )
 
-        results = await judge_conversations(
+        results, _ = await judge_conversations(
             judge_models={"mock-judge": 1},
             conversations=conversations,
             rubric_config=rubric_config,
@@ -767,7 +767,7 @@ class TestConversationFileLoading:
             question_prompt_file="question_prompt.txt",
         )
 
-        results = await judge_conversations(
+        results, _ = await judge_conversations(
             judge_models={"mock-judge": 1},
             conversations=conversations,
             rubric_config=rubric_config,
@@ -811,7 +811,7 @@ class TestConversationFileLoading:
             question_prompt_file="question_prompt.txt",
         )
 
-        results = await judge_conversations(
+        results, _ = await judge_conversations(
             judge_models={"mock-judge": 1},
             conversations=conversations,
             rubric_config=rubric_config,
@@ -902,7 +902,7 @@ class TestEvaluationResultFormat:
             question_prompt_file="question_prompt.txt",
         )
 
-        await judge_conversations(
+        _, _ = await judge_conversations(
             judge_models={"mock-judge": 1},
             conversations=conversations,
             rubric_config=rubric_config,
@@ -953,7 +953,7 @@ class TestEvaluationResultFormat:
             question_prompt_file="question_prompt.txt",
         )
 
-        results = await judge_conversations(
+        results, _ = await judge_conversations(
             judge_models={"mock-judge": 1},
             conversations=conversations,
             rubric_config=rubric_config,
@@ -1002,7 +1002,7 @@ class TestErrorHandlingAndEdgeCases:
             question_prompt_file="question_prompt.txt",
         )
 
-        results = await judge_conversations(
+        results, _ = await judge_conversations(
             judge_models={"mock-judge": 1},
             conversations=conversations,
             rubric_config=rubric_config,
@@ -1046,7 +1046,7 @@ class TestErrorHandlingAndEdgeCases:
             question_prompt_file="question_prompt.txt",
         )
 
-        results = await judge_conversations(
+        results, _ = await judge_conversations(
             judge_models={"mock-judge": 1},
             conversations=conversations,
             rubric_config=rubric_config,
@@ -1083,7 +1083,7 @@ class TestErrorHandlingAndEdgeCases:
             question_prompt_file="question_prompt.txt",
         )
 
-        results = await judge_conversations(
+        results, _ = await judge_conversations(
             judge_models={"mock-judge": 1},
             conversations=conversations,
             rubric_config=rubric_config,
@@ -1128,7 +1128,7 @@ class TestErrorHandlingAndEdgeCases:
             question_prompt_file="question_prompt.txt",
         )
 
-        results = await judge_conversations(
+        results, _ = await judge_conversations(
             judge_models={"mock-judge": 1},
             conversations=conversations,
             rubric_config=rubric_config,
@@ -1170,7 +1170,7 @@ class TestErrorHandlingAndEdgeCases:
             question_prompt_file="question_prompt.txt",
         )
 
-        results = await judge_conversations(
+        results, _ = await judge_conversations(
             judge_models={"mock-judge": 1},
             conversations=conversations,
             rubric_config=rubric_config,
@@ -1384,7 +1384,7 @@ class TestMultipleJudgeModels:
             question_prompt_file="question_prompt.txt",
         )
 
-        results = await judge_conversations(
+        results, _ = await judge_conversations(
             judge_models={"mock-judge-1": 2, "mock-judge-2": 1},
             conversations=conversations,
             rubric_config=rubric_config,
@@ -1563,7 +1563,7 @@ class TestConcurrencyControl:
             question_prompt_file="question_prompt.txt",
         )
 
-        results = await judge_conversations(
+        results, _ = await judge_conversations(
             judge_models={"mock-judge": 2},
             conversations=conversations,
             rubric_config=rubric_config,
@@ -1839,7 +1839,7 @@ class TestErrorHandlingAndCoverage:
             question_prompt_file="question_prompt.txt",
         )
 
-        results = await judge_conversations(
+        results, _ = await judge_conversations(
             judge_models={"mock-judge": 1},
             conversations=conversations,
             rubric_config=rubric_config,
