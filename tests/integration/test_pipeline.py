@@ -312,11 +312,11 @@ class TestPipelineConfiguration:
         judge_args = argparse.Namespace(
             conversation=None,
             folder=conv_folder,
-            rubrics=["data/rubric.tsv"],
+            rubrics=pipeline_args.rubrics,
             judge_model=pipeline_args.judge_model,
             judge_model_extra_params=pipeline_args.judge_model_extra_params,
             limit=pipeline_args.judge_limit,
-            output="evaluations",
+            output=pipeline_args.judge_output,
             max_concurrent=pipeline_args.judge_max_concurrent,
             per_judge=pipeline_args.judge_per_judge,
             verbose_workers=pipeline_args.judge_verbose_workers,
@@ -326,9 +326,9 @@ class TestPipelineConfiguration:
         assert isinstance(judge_args, argparse.Namespace)
         assert judge_args.conversation is None
         assert judge_args.folder == conv_folder
-        assert judge_args.rubrics == ["data/rubric.tsv"]
+        assert judge_args.rubrics == pipeline_args.rubrics
         assert judge_args.judge_model == ["claude-3-5-sonnet-20241022"]
-        assert judge_args.output == "evaluations"
+        assert judge_args.output == pipeline_args.judge_output
 
     def test_empty_extra_params_dont_pollute_config(self):
         """Test that empty extra params don't add unwanted keys."""
