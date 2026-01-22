@@ -65,3 +65,16 @@ class Config:
         is hardcoded in llama_llm.py for connectivity purposes.
         """
         return {"model": "llama3:8b"}
+
+    @classmethod
+    def get_ollama_config(cls) -> Dict[str, Any]:
+        """Get default Ollama configuration.
+
+        Returns model name and base_url. Runtime parameters (temperature, max_tokens)
+        should be passed explicitly via CLI arguments. This is a general config
+        for any Ollama-hosted model (phi4, mistral, codellama, etc.), not just Llama.
+        """
+        return {
+            "model": "phi4",
+            "base_url": "http://localhost:11434",  # Default Ollama URL
+        }

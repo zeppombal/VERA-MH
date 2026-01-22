@@ -53,10 +53,29 @@ class LLMFactory:
             from .gemini_llm import GeminiLLM
 
             return GeminiLLM(name, system_prompt, model_name, **model_params)
-        elif "llama" in model_lower or "ollama" in model_lower:
-            from .llama_llm import LlamaLLM
+        elif (
+            "llama" in model_lower
+            or "ollama" in model_lower
+            or any(
+                prefix in model_lower
+                for prefix in [
+                    "phi",
+                    "mistral",
+                    "codellama",
+                    "neural-chat",
+                    "starling",
+                    "vicuna",
+                    "orca",
+                    "falcon",
+                    "wizard",
+                    "nous",
+                ]
+            )
+        ):
+            # Ollama-hosted models (Llama, Phi, Mistral, CodeLlama, etc.)
+            from .ollama_llm import OllamaLLM
 
-            return LlamaLLM(name, system_prompt, model_name, **model_params)
+            return OllamaLLM(name, system_prompt, model_name, **model_params)
         else:
             raise ValueError(f"Unsupported model: {model_name}")
 
@@ -109,8 +128,26 @@ class LLMFactory:
             True if model supports structured output, False otherwise
         """
         model_lower = model_name.lower()
-        # Llama/Ollama models don't support structured output
-        if "llama" in model_lower or "ollama" in model_lower:
+        # Ollama-hosted models don't support structured output
+        if (
+            "llama" in model_lower
+            or "ollama" in model_lower
+            or any(
+                prefix in model_lower
+                for prefix in [
+                    "phi",
+                    "mistral",
+                    "codellama",
+                    "neural-chat",
+                    "starling",
+                    "vicuna",
+                    "orca",
+                    "falcon",
+                    "wizard",
+                    "nous",
+                ]
+            )
+        ):
             return False
         # All other supported models do
         return True
