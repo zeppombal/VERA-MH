@@ -105,6 +105,11 @@ Example:
     )
     parser.add_argument("--folder-name", help="Custom folder name for conversations")
     parser.add_argument(
+        "--run-id",
+        "-i",
+        help="Custom run ID for conversation folder (default: timestamp)",
+    )
+    parser.add_argument(
         "--debug", action="store_true", help="Enable debug logging for generation"
     )
 
@@ -131,6 +136,17 @@ Example:
         "--judge-verbose-workers",
         action="store_true",
         help="Enable verbose worker logging",
+    )
+    parser.add_argument(
+        "--rubrics",
+        nargs="+",
+        default=["data/rubric.tsv"],
+        help="Rubric file(s) to use for evaluation (default: data/rubric.tsv)",
+    )
+    parser.add_argument(
+        "--judge-output",
+        default="evaluations",
+        help="Output folder for evaluation results (default: evaluations)",
     )
 
     # Optional arguments for scoring
@@ -202,6 +218,7 @@ async def main():
             if k not in ["model", "model_name", "name", "temperature", "max_tokens"]
         },
         folder_name=args.folder_name,
+        run_id=args.run_id,
         max_concurrent=args.max_concurrent,
         max_total_words=args.max_total_words,
         max_personas=args.max_personas,
@@ -220,11 +237,11 @@ async def main():
     judge_args = argparse.Namespace(
         conversation=None,  # Not using single conversation mode
         folder=conversation_folder,
-        rubrics=["data/rubric.tsv"],
+        rubrics=args.rubrics,
         judge_model=args.judge_model,
         judge_model_extra_params=args.judge_model_extra_params,
         limit=args.judge_limit,
-        output="evaluations",
+        output=args.judge_output,
         max_concurrent=args.judge_max_concurrent,
         per_judge=args.judge_per_judge,
         verbose_workers=args.judge_verbose_workers,

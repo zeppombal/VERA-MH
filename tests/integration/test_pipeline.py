@@ -31,12 +31,15 @@ def pipeline_args():
         max_concurrent=None,
         max_personas=2,
         folder_name=None,
+        run_id=None,
         debug=False,
         judge_model_extra_params={},
         judge_max_concurrent=None,
         judge_per_judge=False,
         judge_limit=None,
         judge_verbose_workers=False,
+        rubrics=["data/rubric.tsv"],
+        judge_output="evaluations",
         skip_risk_analysis=False,
         personas_tsv="data/personas.tsv",
     )
@@ -381,3 +384,154 @@ class TestPipelineDataFlow:
         # Test with True
         pipeline_args.skip_risk_analysis = True
         assert pipeline_args.skip_risk_analysis is True
+
+
+@pytest.mark.integration
+class TestPipelineNewArguments:
+    """Test newly added arguments for consistency with individual scripts."""
+
+    def test_run_id_argument_exists(self, pipeline_args):
+        """Test that run_id argument exists in pipeline args."""
+        assert hasattr(pipeline_args, "run_id")
+        assert pipeline_args.run_id is None  # Default value
+
+    def test_run_id_passed_to_generate(self, pipeline_args):
+        """Test that run_id is correctly structured for generate_main."""
+        # Set custom run_id
+        pipeline_args.run_id = "custom_test_run"
+
+        # Verify it's accessible
+        assert pipeline_args.run_id == "custom_test_run"
+
+    def test_rubrics_argument_exists(self, pipeline_args):
+        """Test that rubrics argument exists in pipeline args."""
+        assert hasattr(pipeline_args, "rubrics")
+        assert pipeline_args.rubrics == ["data/rubric.tsv"]  # Default value
+
+    def test_rubrics_passed_to_judge(self, pipeline_args):
+        """Test that rubrics are correctly passed to judge args."""
+        # Set custom rubrics
+        pipeline_args.rubrics = ["data/rubric.tsv", "data/custom_rubric.tsv"]
+
+        # As done in main(): judge receives these rubrics
+        judge_args = argparse.Namespace(
+            rubrics=pipeline_args.rubrics,
+        )
+
+        assert judge_args.rubrics == ["data/rubric.tsv", "data/custom_rubric.tsv"]
+        assert len(judge_args.rubrics) == 2
+
+    def test_judge_output_argument_exists(self, pipeline_args):
+        """Test that judge_output argument exists in pipeline args."""
+        assert hasattr(pipeline_args, "judge_output")
+        assert pipeline_args.judge_output == "evaluations"  # Default value
+
+    def test_judge_output_passed_to_judge(self, pipeline_args):
+        """Test that judge_output is correctly passed to judge args."""
+        # Set custom output folder
+        pipeline_args.judge_output = "custom_evaluations"
+
+        # As done in main(): judge receives this output folder
+        judge_args = argparse.Namespace(
+            output=pipeline_args.judge_output,
+        )
+
+        assert judge_args.output == "custom_evaluations"
+
+    def test_parse_arguments_with_run_id(self):
+        """Test parsing arguments with --run-id."""
+        from run_pipeline import parse_arguments
+
+        test_args = [
+            "--user-agent",
+            "claude-3-5-sonnet-20241022",
+            "--provider-agent",
+            "gpt-4o",
+            "--runs",
+            "1",
+            "--turns",
+            "4",
+            "--judge-model",
+            "claude-3-5-sonnet-20241022",
+            "--run-id",
+            "test_run_123",
+        ]
+
+        with patch("sys.argv", ["run_pipeline.py"] + test_args):
+            args = parse_arguments()
+
+            assert args.run_id == "test_run_123"
+
+    def test_parse_arguments_with_rubrics(self):
+        """Test parsing arguments with --rubrics."""
+        from run_pipeline import parse_arguments
+
+        test_args = [
+            "--user-agent",
+            "claude-3-5-sonnet-20241022",
+            "--provider-agent",
+            "gpt-4o",
+            "--runs",
+            "1",
+            "--turns",
+            "4",
+            "--judge-model",
+            "claude-3-5-sonnet-20241022",
+            "--rubrics",
+            "data/rubric.tsv",
+            "data/custom_rubric.tsv",
+        ]
+
+        with patch("sys.argv", ["run_pipeline.py"] + test_args):
+            args = parse_arguments()
+
+            assert args.rubrics == ["data/rubric.tsv", "data/custom_rubric.tsv"]
+
+    def test_parse_arguments_with_judge_output(self):
+        """Test parsing arguments with --judge-output."""
+        from run_pipeline import parse_arguments
+
+        test_args = [
+            "--user-agent",
+            "claude-3-5-sonnet-20241022",
+            "--provider-agent",
+            "gpt-4o",
+            "--runs",
+            "1",
+            "--turns",
+            "4",
+            "--judge-model",
+            "claude-3-5-sonnet-20241022",
+            "--judge-output",
+            "custom_evals",
+        ]
+
+        with patch("sys.argv", ["run_pipeline.py"] + test_args):
+            args = parse_arguments()
+
+            assert args.judge_output == "custom_evals"
+
+    def test_parse_arguments_defaults_for_new_args(self):
+        """Test that new arguments have correct defaults."""
+        from run_pipeline import parse_arguments
+
+        test_args = [
+            "--user-agent",
+            "claude-3-5-sonnet-20241022",
+            "--provider-agent",
+            "gpt-4o",
+            "--runs",
+            "1",
+            "--turns",
+            "4",
+            "--judge-model",
+            "claude-3-5-sonnet-20241022",
+        ]
+
+        with patch("sys.argv", ["run_pipeline.py"] + test_args):
+            args = parse_arguments()
+
+            # Check defaults
+            assert args.run_id is None
+            assert args.rubrics == ["data/rubric.tsv"]
+            assert args.judge_output == "evaluations"
