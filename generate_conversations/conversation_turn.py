@@ -89,18 +89,25 @@ class ConversationTurn:
         # Extract role if present, otherwise infer from speaker (backward compatibility)
         role = None
         if "role" in data:
-            role = Role(data["role"])
-        elif speaker == "persona":
-            role = Role.PERSONA
-        elif speaker in ("chatbot", "agent"):
-            role = Role.PROVIDER
+            try:
+                role = Role(data["role"])
+            except ValueError:
+                # Fall back to inferring role from speaker if role string is invalid
+                if speaker == "persona":
+                    role = Role.PERSONA
+                elif speaker in ("chatbot", "agent"):
+                    role = Role.PROVIDER
+       elif speaker == "persona":
+           role = Role.PERSONA
+       elif speaker in ("chatbot", "agent"):
+           role = Role.PROVIDER
 
-        return cls(
-            turn=data["turn"],
-            speaker=speaker,
-            input_message=data["input"],
-            message=message,
-            role=role,
-            early_termination=data.get("early_termination", False),
-            logging_metadata=data.get("logging"),
-        )
+       return cls(
+           turn=data["turn"],
+           speaker=speaker,
+           input_message=data["input"],
+           message=message,
+           role=role,
+           early_termination=data.get("early_termination", False),
+           logging_metadata=data.get("logging"),
+       )
