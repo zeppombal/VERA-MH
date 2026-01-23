@@ -197,7 +197,7 @@ async def main():
 
     # Set debug mode if flag is provided
     if args.debug:
-        from utils.logger import set_debug
+        from utils.debug import set_debug
 
         set_debug(True)
 
