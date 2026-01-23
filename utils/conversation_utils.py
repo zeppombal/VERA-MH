@@ -89,6 +89,24 @@ def format_conversation_summary(
     return summary
 
 
+def build_persona_role_reminder() -> str:
+    """
+    Build a role reminder message for personas to prevent role confusion.
+    This reminder is injected before conversation history to reinforce that
+    the persona should maintain their character as a user in distress, not
+    adopt the chatbot's supportive counselor role.
+    Returns:
+        The role reminder text to inject as a HumanMessage
+    """
+    return (
+        "REMINDER: You are the USER seeking help from the chatbot. "
+        "The conversation below shows YOUR messages (what you said) and "
+        "the CHATBOT's responses (what it said). Continue responding AS "
+        "YOURSELF - the user in distress. Do NOT provide advice, support, "
+        "or counseling. Do NOT copy the chatbot's supportive language."
+    )
+
+
 def build_langchain_messages(
     conversation_history: Optional[List[Dict[str, Any]]] = None,
     role: Optional[Role] = None,
