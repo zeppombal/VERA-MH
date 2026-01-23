@@ -97,17 +97,19 @@ class ConversationTurn:
                     role = Role.PERSONA
                 elif speaker in ("chatbot", "agent"):
                     role = Role.PROVIDER
-       elif speaker == "persona":
-           role = Role.PERSONA
-       elif speaker in ("chatbot", "agent"):
-           role = Role.PROVIDER
+        elif speaker == "persona":
+            role = Role.PERSONA
+        elif speaker in ("chatbot", "agent"):
+            role = Role.PROVIDER
+        else:
+            raise ValueError(f"Invalid speaker: {speaker}")
 
-       return cls(
-           turn=data["turn"],
-           speaker=speaker,
-           input_message=data["input"],
-           message=message,
-           role=role,
-           early_termination=data.get("early_termination", False),
-           logging_metadata=data.get("logging"),
-       )
+        return cls(
+            turn=data["turn"],
+            speaker=speaker,
+            input_message=data["input"],
+            message=message,
+            role=role,
+            early_termination=data.get("early_termination", False),
+            logging_metadata=data.get("logging"),
+        )
