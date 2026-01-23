@@ -1,6 +1,11 @@
 """
 LLM Clients Package - Shared LLM abstraction layer
-Provides unified interface for different LLM providers (OpenAI, Claude, Gemini, Llama)
+Provides unified interface for different LLM providers
+  - OpenAI (gpt-*)
+  - Claude (claude-*)
+  - Gemini (gemini-*)
+  - Azure (azure-*)
+  - Llama (llama-*)
 """
 
 from .config import Config

@@ -1,10 +1,13 @@
 import time
 from datetime import datetime
-from typing import Any, Dict, Optional, Type, TypeVar
+from typing import Any, Dict, List, Optional, Type, TypeVar
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel
+
+from utils.conversation_utils import build_langchain_messages
+from utils.debug import debug_print
 
 from .config import Config
 from .llm_interface import JudgeLLM
@@ -34,8 +37,6 @@ class GeminiLLM(JudgeLLM):
         llm_params = {
             "google_api_key": Config.GOOGLE_API_KEY,
             "model": self.model_name,
-            # "temperature": config.get("temperature", 0.7),
-            # "max_tokens": config.get("max_tokens", 1000)
         }
 
         # Override with any provided kwargs
@@ -63,14 +64,33 @@ class GeminiLLM(JudgeLLM):
         # Store metadata from last response
         self.last_response_metadata: Dict[str, Any] = {}
 
-    async def generate_response(self, message: Optional[str] = None) -> str:
-        """Generate a response to the given message asynchronously."""
+    async def generate_response(
+        self,
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
+    ) -> str:
+        """Generate a response based on conversation history.
+
+        Args:
+            conversation_history: Optional list of previous conversation turns
+        """
         messages = []
 
         if self.system_prompt:
             messages.append(SystemMessage(content=self.system_prompt))
 
-        messages.append(HumanMessage(content=message))
+        # Build messages from history
+        # Role reminder is automatically added for personas by build_langchain_messages
+        messages.extend(
+            build_langchain_messages(conversation_history, self.system_prompt)
+        )
+
+        # Debug: Print messages being sent to LLM
+        debug_print(f"\n[DEBUG {self.name}] Messages sent to LLM:")
+        for i, msg in enumerate(messages):
+            msg_type = type(msg).__name__
+            preview = msg.content[:100]
+            content_preview = preview + "..." if len(msg.content) > 100 else msg.content
+            debug_print(f"  {i + 1}. {msg_type}: {content_preview}")
 
         try:
             start_time = time.time()
@@ -124,7 +144,7 @@ class GeminiLLM(JudgeLLM):
                 # Store raw metadata
                 self.last_response_metadata["raw_metadata"] = dict(metadata)
 
-            return response.content
+            return response.text
         except Exception as e:
             # Store error metadata
             self.last_response_metadata = {

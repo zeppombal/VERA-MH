@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Tuple, Type, TypeVar
+from typing import Any, Dict, List, Optional, Type, TypeVar
 
 from pydantic import BaseModel
 
@@ -19,12 +19,22 @@ class LLMInterface(ABC):
 
     @abstractmethod
     async def generate_response(
-        self, message: Optional[str] = None
-    ) -> Tuple[str, Dict[str, Any]]:
-        """Generate a response to the given message asynchronously.
+        self,
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
+    ) -> str:
+        """Generate a response based on conversation history.
+
+        Args:
+            conversation_history: List of previous conversation turns.
+                Each turn is a dict with keys: 'turn', 'speaker', 'response'.
+                On the first turn (turn 0), conversation_history will contain
+                a single entry with turn=0, speaker="system", and the initial
+                message in the 'response' field. This provides context for
+                starting the conversation.
 
         Returns:
-            Tuple of (response_text, metadata_dict)
+            str: The response text. Metadata available via
+                get_last_response_metadata()
         """
         pass
 
@@ -37,6 +47,14 @@ class LLMInterface(ABC):
         """Get the name of this LLM instance."""
         return self.name
 
+    async def cleanup(self) -> None:
+        """Clean up any resources used by this LLM instance.
+
+        Subclasses that need cleanup (like AzureLLM) should override this method.
+        Default implementation does nothing.
+        """
+        pass
+
     def __getattr__(self, name):
         """Delegate attribute access to the underlying llm object.
 
@@ -44,8 +62,9 @@ class LLMInterface(ABC):
         directly on the LLM instance, which will be forwarded to the
         underlying LangChain model (self.llm).
         """
+        # Check if self.llm exists by looking in __dict__ to avoid recursion
         # Only delegate if self.llm exists and has the attribute
-        if hasattr(self, "llm") and hasattr(self.llm, name):
+        if "llm" in self.__dict__ and hasattr(self.llm, name):
             return getattr(self.llm, name)
         # If the attribute doesn't exist on self.llm, raise AttributeError
         raise AttributeError(
@@ -60,7 +79,7 @@ class JudgeLLM(LLMInterface):
     as judges, where structured output (using Pydantic models) is necessary
     for reliable evaluation results.
 
-    Implementations: Claude, OpenAI, Gemini
+    Implementations: Claude, OpenAI, Gemini, Azure
     Not supported by: Llama (via Ollama)
     """
 

@@ -33,6 +33,7 @@ class ConversationRunner:
         folder_name: str = "conversations",
         max_concurrent: Optional[int] = None,
         max_total_words: Optional[int] = None,
+        max_personas: Optional[int] = None,
     ):
         self.persona_model_config = persona_model_config
         self.agent_model_config = agent_model_config
@@ -45,6 +46,7 @@ class ConversationRunner:
         # Default: None - run all conversations concurrently
         self.max_concurrent = max_concurrent
         self.max_total_words = max_total_words
+        self.max_personas = max_personas
 
         self.AGENT_SYSTEM_PROMPT = self.agent_model_config.get(
             "system_prompt", "You are a helpful AI assistant."
@@ -66,8 +68,6 @@ class ConversationRunner:
 
         # Generate filename base using persona name, model, and run number
         tag = uuid.uuid4().hex[:6]
-        # TODO: consider removing timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
         # TODO: should this be inside the LLM class?
         model_short = (
             model_name.replace("claude-3-", "c3-")
@@ -107,56 +107,67 @@ class ConversationRunner:
         simulator = ConversationSimulator(persona, agent)
         # Run the conversation - let first speaker start naturally with None
 
-        conversation = await simulator.start_conversation(
-            initial_message=None,
-            max_turns=max_turns,
-            max_total_words=self.max_total_words,
-        )
-
-        # Log each conversation turn
-        for i, turn in enumerate(conversation, 1):
-            log_conversation_turn(
-                logger=logger,
-                turn_number=i,
-                speaker=turn.get("speaker", "Unknown"),
-                input_message=turn.get("input", ""),
-                response=turn.get("response", ""),
-                early_termination=turn.get("early_termination", False),
-                logging=turn.get("logging", {}),
+        result = None
+        try:
+            conversation = await simulator.start_conversation(
+                initial_message=None,
+                max_turns=max_turns,
+                max_total_words=self.max_total_words,
             )
 
-        # Calculate timing and check early termination
-        end_time = time.time()
-        conversation_time = end_time - start_time
-        early_termination = any(
-            turn.get("early_termination", False) for turn in conversation
-        )
+            # Log each conversation turn
+            for i, turn in enumerate(conversation, 1):
+                log_conversation_turn(
+                    logger=logger,
+                    turn_number=i,
+                    speaker=turn.get("speaker", "Unknown"),
+                    input_message=turn.get("input", ""),
+                    response=turn.get("response", ""),
+                    early_termination=turn.get("early_termination", False),
+                    logging=turn.get("logging", {}),
+                )
 
-        # Log conversation end
-        log_conversation_end(
-            logger=logger,
-            total_turns=len(conversation),
-            early_termination=early_termination,
-            total_time=conversation_time,
-        )
+            # Calculate timing and check early termination
+            end_time = time.time()
+            conversation_time = end_time - start_time
+            early_termination = any(
+                turn.get("early_termination", False) for turn in conversation
+            )
 
-        # Save conversation file
-        simulator.save_conversation(f"{filename_base}.txt", self.folder_name)
+            # Log conversation end
+            log_conversation_end(
+                logger=logger,
+                total_turns=len(conversation),
+                early_termination=early_termination,
+                total_time=conversation_time,
+            )
 
-        result = {
-            "id": conversation_id,
-            "llm1_model": model_name,
-            "llm1_prompt": persona_name,
-            "run_number": run_number,
-            "turns": len(conversation),
-            "filename": f"{self.folder_name}/{filename_base}.txt",
-            "log_file": f"{self.folder_name}/{filename_base}.log",
-            "duration": conversation_time,
-            "early_termination": early_termination,
-            "conversation": conversation,
-        }
+            # Save conversation file
+            simulator.save_conversation(f"{filename_base}.txt", self.folder_name)
 
-        cleanup_logger(logger)
+            result = {
+                "id": conversation_id,
+                "llm1_model": model_name,
+                "llm1_prompt": persona_name,
+                "run_number": run_number,
+                "turns": len(conversation),
+                "filename": f"{self.folder_name}/{filename_base}.txt",
+                "log_file": f"{self.folder_name}/{filename_base}.log",
+                "duration": conversation_time,
+                "early_termination": early_termination,
+                "conversation": conversation,
+            }
+        finally:
+            cleanup_logger(logger)
+
+            # Cleanup LLM resources (e.g., close HTTP sessions for Azure)
+            # Always cleanup, even if conversation failed
+            try:
+                await persona.cleanup()
+            except Exception as e:
+                # Log but don't fail if cleanup fails
+                print(f"Warning: Failed to cleanup persona LLM: {e}")
+
         return result
 
     async def run_conversations(
@@ -164,7 +175,7 @@ class ConversationRunner:
     ) -> List[Dict[str, Any]]:
         """Run multiple conversations concurrently."""
         # Load prompts from CSV based on persona names
-        personas = load_prompts_from_csv(persona_names)
+        personas = load_prompts_from_csv(persona_names, max_personas=self.max_personas)
 
         # Load agent configuration (fixed, shared across all conversations)
         agent = LLMFactory.create_llm(
@@ -209,7 +220,8 @@ class ConversationRunner:
                     return await task
 
             print(
-                f"Running {len(tasks)} conversations with max concurrency: {self.max_concurrent}"
+                f"Running {len(tasks)} conversations with max concurrency: "
+                f"{self.max_concurrent}"
             )
             results = await asyncio.gather(*[run_with_limit(task) for task in tasks])
         else:
@@ -221,4 +233,12 @@ class ConversationRunner:
         total_time = (end_time - start_time).total_seconds()
 
         print(f"\nCompleted {len(results)} conversations in {total_time:.2f} seconds")
+
+        # Cleanup agent LLM resources (e.g., close HTTP sessions for Azure)
+        try:
+            await agent.cleanup()
+        except Exception as e:
+            # Log but don't fail if cleanup fails
+            print(f"Warning: Failed to cleanup agent LLM: {e}")
+
         return results
