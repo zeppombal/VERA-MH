@@ -65,6 +65,14 @@ class LLMInterface(ABC):
         """Get the role of this LLM instance."""
         return self.role
 
+    async def cleanup(self) -> None:
+        """Clean up any resources used by this LLM instance.
+
+        Subclasses that need cleanup (like AzureLLM) should override this method.
+        Default implementation does nothing.
+        """
+        pass
+
     def __getattr__(self, name):
         """Delegate attribute access to the underlying llm object.
 
@@ -72,8 +80,9 @@ class LLMInterface(ABC):
         directly on the LLM instance, which will be forwarded to the
         underlying LangChain model (self.llm).
         """
+        # Check if self.llm exists by looking in __dict__ to avoid recursion
         # Only delegate if self.llm exists and has the attribute
-        if hasattr(self, "llm") and hasattr(self.llm, name):
+        if "llm" in self.__dict__ and hasattr(self.llm, name):
             return getattr(self.llm, name)
         # If the attribute doesn't exist on self.llm, raise AttributeError
         raise AttributeError(
@@ -88,7 +97,7 @@ class JudgeLLM(LLMInterface):
     as judges, where structured output (using Pydantic models) is necessary
     for reliable evaluation results.
 
-    Implementations: Claude, OpenAI, Gemini
+    Implementations: Claude, OpenAI, Gemini, Azure
     Not supported by: Llama (via Ollama)
     """
 

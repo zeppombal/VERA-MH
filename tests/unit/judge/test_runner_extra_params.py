@@ -139,7 +139,7 @@ class TestRunnerExtraParams:
                 }
             ]
 
-            results = await judge_conversations(
+            results, _ = await judge_conversations(
                 judge_models={"claude-3-7-sonnet": 1},
                 conversations=[conversation],
                 rubric_config=rubric_config,
@@ -182,7 +182,7 @@ class TestRunnerExtraParams:
                 }
             ]
 
-            results = await judge_conversations(
+            results, _ = await judge_conversations(
                 judge_models={"claude-3-7-sonnet": 1},
                 conversations=[conversation],
                 rubric_config=rubric_config,

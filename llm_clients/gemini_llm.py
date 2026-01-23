@@ -88,7 +88,7 @@ class GeminiLLM(JudgeLLM):
             msg_type = type(msg).__name__
             preview = msg.content[:100]
             content_preview = preview + "..." if len(msg.content) > 100 else msg.content
-            debug_print(f"  {i+1}. {msg_type}: {content_preview}")
+            debug_print(f"  {i + 1}. {msg_type}: {content_preview}")
 
         try:
             start_time = time.time()

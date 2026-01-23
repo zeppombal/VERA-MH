@@ -23,7 +23,7 @@ class TestConfig:
 
         assert isinstance(config, dict)
         assert "model" in config
-        assert config["model"] == "claude-3-5-sonnet-20241022"
+        assert config["model"] == "claude-sonnet-4-5-20250929"
         # Temperature and max_tokens should NOT be in config
         assert "temperature" not in config
         assert "max_tokens" not in config
