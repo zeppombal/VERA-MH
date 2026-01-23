@@ -424,9 +424,11 @@ async def main():
     print(f"  Conversations:     {conversation_folder}/")
     print(f"  Evaluations:       {evaluation_folder}/")
     print(f"  Scores (JSON):     {evaluation_folder}/scores.json")
-    print(f"                     {evaluation_folder}/scores_by_risk.json")
+    if not args.skip_risk_analysis:
+        print(f"                     {evaluation_folder}/scores_by_risk.json")
     print(f"  Visualizations:    {evaluation_folder}/scores_visualization.png")
-    print(f"                     {evaluation_folder}/scores_by_risk_visualization.png")
+    if not args.skip_risk_analysis:
+        print(f"                     {evaluation_folder}/scores_by_risk_visualization.png")
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 
