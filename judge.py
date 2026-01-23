@@ -114,9 +114,9 @@ if __name__ == "__main__":
             "Model(s) to use for judging. "
             "Format: 'model' or 'model:count' for multiple instances. "
             "Can specify multiple models: --judge-model model1 model2:3. "
-            "Examples: claude-3-5-sonnet-20241022, "
-            "claude-3-5-sonnet-20241022:3, "
-            "claude-3-5-sonnet-20241022:2 gpt-4o:1"
+            "Examples: claude-sonnet-4-5-20250929, "
+            "claude-sonnet-4-5-20250929:3, "
+            "claude-sonnet-4-5-20250929:2 gpt-4o:1"
         ),
     )
 

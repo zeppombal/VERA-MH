@@ -19,7 +19,7 @@ class TestLoadModelConfig:
                 "persona_depressed": "claude-3-opus",
                 "chatbot_therapist": "claude-3-5-sonnet",
             },
-            "default_model": "claude-3-5-sonnet-20241022",
+            "default_model": "claude-sonnet-4-5-20250929",
             "temperature": 0.7,
         }
 
@@ -29,7 +29,7 @@ class TestLoadModelConfig:
         result = load_model_config(str(config_file))
 
         assert result == config_data
-        assert result["default_model"] == "claude-3-5-sonnet-20241022"
+        assert result["default_model"] == "claude-sonnet-4-5-20250929"
         assert result["prompt_models"]["persona_anxious"] == "gpt-4"
         assert result["temperature"] == 0.7
 
@@ -53,7 +53,7 @@ class TestLoadModelConfig:
 
         # Should return default config
         assert result["prompt_models"] == {}
-        assert result["default_model"] == "claude-3-5-sonnet-20241022"
+        assert result["default_model"] == "claude-sonnet-4-5-20250929"
 
         # Should print warning
         captured = capsys.readouterr()
@@ -69,7 +69,7 @@ class TestLoadModelConfig:
 
         # Should return default config
         assert result["prompt_models"] == {}
-        assert result["default_model"] == "claude-3-5-sonnet-20241022"
+        assert result["default_model"] == "claude-sonnet-4-5-20250929"
 
         # Should print error
         captured = capsys.readouterr()
@@ -84,7 +84,7 @@ class TestLoadModelConfig:
 
         # Should return default config
         assert result["prompt_models"] == {}
-        assert result["default_model"] == "claude-3-5-sonnet-20241022"
+        assert result["default_model"] == "claude-sonnet-4-5-20250929"
 
         captured = capsys.readouterr()
         assert "Error loading model config" in captured.out
@@ -106,7 +106,7 @@ class TestLoadModelConfig:
                 "persona_日本語": "gpt-4",
                 "persona_émotionnel": "claude-3-opus",
             },
-            "default_model": "claude-3-5-sonnet-20241022",
+            "default_model": "claude-sonnet-4-5-20250929",
         }
 
         config_file = tmp_path / "unicode_config.json"
@@ -123,7 +123,7 @@ class TestLoadModelConfig:
         """Test loading config with nested data structures."""
         config_data = {
             "prompt_models": {"persona_1": "gpt-4"},
-            "default_model": "claude-3-5-sonnet-20241022",
+            "default_model": "claude-sonnet-4-5-20250929",
             "model_params": {
                 "temperature": 0.7,
                 "max_tokens": 1000,
@@ -154,7 +154,7 @@ class TestLoadModelConfig:
 
             # Should return default config
             assert result["prompt_models"] == {}
-            assert result["default_model"] == "claude-3-5-sonnet-20241022"
+            assert result["default_model"] == "claude-sonnet-4-5-20250929"
 
             # Restore permissions for cleanup
             config_file.chmod(0o644)
@@ -171,7 +171,7 @@ class TestGetModelForPrompt:
                 "persona_anxious": "gpt-4-turbo",
                 "persona_happy": "claude-3-opus",
             },
-            "default_model": "claude-3-5-sonnet-20241022",
+            "default_model": "claude-sonnet-4-5-20250929",
         }
 
         config_file = tmp_path / "config.json"
@@ -185,7 +185,7 @@ class TestGetModelForPrompt:
         """Test getting model for prompt not in config returns default."""
         config_data = {
             "prompt_models": {"persona_known": "gpt-4"},
-            "default_model": "claude-3-5-sonnet-20241022",
+            "default_model": "claude-sonnet-4-5-20250929",
         }
 
         config_file = tmp_path / "config.json"
@@ -193,7 +193,7 @@ class TestGetModelForPrompt:
 
         model = get_model_for_prompt("persona_unknown", str(config_file))
 
-        assert model == "claude-3-5-sonnet-20241022"
+        assert model == "claude-sonnet-4-5-20250929"
 
     def test_get_model_for_prompt_with_empty_prompt_models(self, tmp_path):
         """Test getting model when prompt_models is empty."""
@@ -211,7 +211,7 @@ class TestGetModelForPrompt:
         model = get_model_for_prompt("test_prompt", "nonexistent_file.json")
 
         # Should return default model from load_model_config fallback
-        assert model == "claude-3-5-sonnet-20241022"
+        assert model == "claude-sonnet-4-5-20250929"
 
     def test_get_model_for_prompt_case_sensitivity(self, tmp_path):
         """Test that prompt name matching is case-sensitive."""
@@ -220,7 +220,7 @@ class TestGetModelForPrompt:
                 "PersonaAnxious": "gpt-4",
                 "persona_anxious": "claude-3-opus",
             },
-            "default_model": "claude-3-5-sonnet-20241022",
+            "default_model": "claude-sonnet-4-5-20250929",
         }
 
         config_file = tmp_path / "config.json"
@@ -233,7 +233,7 @@ class TestGetModelForPrompt:
 
         assert model1 == "gpt-4"
         assert model2 == "claude-3-opus"
-        assert model3 == "claude-3-5-sonnet-20241022"  # Falls back to default
+        assert model3 == "claude-sonnet-4-5-20250929"  # Falls back to default
 
     def test_get_model_for_prompt_with_special_characters(self, tmp_path):
         """Test prompt names with special characters."""
@@ -243,7 +243,7 @@ class TestGetModelForPrompt:
                 "persona_with_underscores": "claude-3-opus",
                 "persona.with.dots": "gpt-3.5-turbo",
             },
-            "default_model": "claude-3-5-sonnet-20241022",
+            "default_model": "claude-sonnet-4-5-20250929",
         }
 
         config_file = tmp_path / "config.json"
@@ -263,7 +263,7 @@ class TestGetModelForPrompt:
         """Test that multiple calls with same prompt return consistent results."""
         config_data = {
             "prompt_models": {"test_prompt": "gpt-4"},
-            "default_model": "claude-3-5-sonnet-20241022",
+            "default_model": "claude-sonnet-4-5-20250929",
         }
 
         config_file = tmp_path / "config.json"

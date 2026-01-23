@@ -39,11 +39,11 @@ def parse_arguments():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Example:
-  %(prog)s --user-agent claude-3-5-sonnet-20241022 \\
+  %(prog)s --user-agent claude-sonnet-4-5-20250929 \\
            --provider-agent gpt-4o \\
            --runs 2 \\
            --turns 10 \\
-           --judge-model claude-3-5-sonnet-20241022 \\
+           --judge-model claude-sonnet-4-5-20250929 \\
            --max-personas 5
         """,
     )
@@ -53,7 +53,7 @@ Example:
         "--user-agent",
         "-u",
         required=True,
-        help="User/persona model (e.g., claude-3-5-sonnet-20241022)",
+        help="User/persona model (e.g., claude-sonnet-4-5-20250929)",
     )
     parser.add_argument(
         "--provider-agent",

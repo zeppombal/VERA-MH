@@ -23,14 +23,14 @@ class TestClaudeLLM:
     def test_init_with_default_model(self, mock_chat_anthropic):
         """Test initialization with default model from config."""
         mock_llm = MagicMock()
-        mock_llm.model = "claude-3-5-sonnet-20241022"
+        mock_llm.model = "claude-sonnet-4-5-20250929"
         mock_chat_anthropic.return_value = mock_llm
 
         llm = ClaudeLLM(name="TestClaude", system_prompt="Test prompt")
 
         assert llm.name == "TestClaude"
         assert llm.system_prompt == "Test prompt"
-        assert llm.model_name == "claude-3-5-sonnet-20241022"
+        assert llm.model_name == "claude-sonnet-4-5-20250929"
         assert llm.last_response_metadata == {}
 
     @patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key")
@@ -50,7 +50,7 @@ class TestClaudeLLM:
     def test_init_with_kwargs(self, mock_chat_anthropic):
         """Test initialization with additional kwargs."""
         mock_llm = MagicMock()
-        mock_llm.model = "claude-3-5-sonnet-20241022"
+        mock_llm.model = "claude-sonnet-4-5-20250929"
         mock_chat_anthropic.return_value = mock_llm
 
         ClaudeLLM(name="TestClaude", temperature=0.5, max_tokens=500, top_p=0.9)
@@ -69,14 +69,14 @@ class TestClaudeLLM:
     ):
         """Test successful response generation with system prompt (lines 49-97)."""
         mock_llm = MagicMock()
-        mock_llm.model = "claude-3-5-sonnet-20241022"
+        mock_llm.model = "claude-sonnet-4-5-20250929"
 
         # Create mock response with metadata
         mock_response = MagicMock()
         mock_response.text = "This is a test response"
         mock_response.id = "msg_12345"
         mock_response.response_metadata = {
-            "model": "claude-3-5-sonnet-20241022",
+            "model": "claude-sonnet-4-5-20250929",
             "usage": {"input_tokens": 10, "output_tokens": 20},
             "stop_reason": "end_turn",
         }
@@ -96,7 +96,7 @@ class TestClaudeLLM:
         # Verify metadata was extracted (lines 62-95)
         metadata = llm.get_last_response_metadata()
         assert metadata["response_id"] == "msg_12345"
-        assert metadata["model"] == "claude-3-5-sonnet-20241022"
+        assert metadata["model"] == "claude-sonnet-4-5-20250929"
         assert metadata["provider"] == "claude"
         assert "timestamp" in metadata
         assert "response_time_seconds" in metadata
@@ -112,12 +112,12 @@ class TestClaudeLLM:
     async def test_generate_response_without_system_prompt(self, mock_chat_anthropic):
         """Test response generation without system prompt."""
         mock_llm = MagicMock()
-        mock_llm.model = "claude-3-5-sonnet-20241022"
+        mock_llm.model = "claude-sonnet-4-5-20250929"
 
         mock_response = MagicMock()
         mock_response.text = "Response without system prompt"
         mock_response.id = "msg_67890"
-        mock_response.response_metadata = {"model": "claude-3-5-sonnet-20241022"}
+        mock_response.response_metadata = {"model": "claude-sonnet-4-5-20250929"}
 
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
         mock_chat_anthropic.return_value = mock_llm
@@ -142,13 +142,13 @@ class TestClaudeLLM:
     async def test_generate_response_without_usage_metadata(self, mock_chat_anthropic):
         """Test response when usage metadata is not available."""
         mock_llm = MagicMock()
-        mock_llm.model = "claude-3-5-sonnet-20241022"
+        mock_llm.model = "claude-sonnet-4-5-20250929"
 
         # Response without usage in metadata
         mock_response = MagicMock()
         mock_response.text = "Response"
         mock_response.id = "msg_abc"
-        mock_response.response_metadata = {"model": "claude-3-5-sonnet-20241022"}
+        mock_response.response_metadata = {"model": "claude-sonnet-4-5-20250929"}
 
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
         mock_chat_anthropic.return_value = mock_llm
@@ -170,7 +170,7 @@ class TestClaudeLLM:
     ):
         """Test response when response_metadata attribute is missing."""
         mock_llm = MagicMock()
-        mock_llm.model = "claude-3-5-sonnet-20241022"
+        mock_llm.model = "claude-sonnet-4-5-20250929"
 
         # Response without response_metadata attribute
         mock_response = MagicMock()
@@ -188,7 +188,7 @@ class TestClaudeLLM:
 
         assert response == "Response"
         metadata = llm.get_last_response_metadata()
-        assert metadata["model"] == "claude-3-5-sonnet-20241022"
+        assert metadata["model"] == "claude-sonnet-4-5-20250929"
         assert metadata["usage"] == {}
         assert metadata["stop_reason"] is None
 
@@ -198,7 +198,7 @@ class TestClaudeLLM:
     async def test_generate_response_api_error(self, mock_chat_anthropic):
         """Test error handling when API call fails (lines 98-108)."""
         mock_llm = MagicMock()
-        mock_llm.model = "claude-3-5-sonnet-20241022"
+        mock_llm.model = "claude-sonnet-4-5-20250929"
 
         # Simulate API error
         mock_llm.ainvoke = AsyncMock(side_effect=Exception("API rate limit exceeded"))
@@ -218,7 +218,7 @@ class TestClaudeLLM:
         # Verify error metadata was stored (lines 100-107)
         metadata = llm.get_last_response_metadata()
         assert metadata["response_id"] is None
-        assert metadata["model"] == "claude-3-5-sonnet-20241022"
+        assert metadata["model"] == "claude-sonnet-4-5-20250929"
         assert metadata["provider"] == "claude"
         assert "timestamp" in metadata
         assert "error" in metadata
@@ -231,7 +231,7 @@ class TestClaudeLLM:
     async def test_generate_response_tracks_timing(self, mock_chat_anthropic):
         """Test that response timing is tracked correctly (lines 57-59)."""
         mock_llm = MagicMock()
-        mock_llm.model = "claude-3-5-sonnet-20241022"
+        mock_llm.model = "claude-sonnet-4-5-20250929"
 
         mock_response = MagicMock()
         mock_response.text = "Timed response"
@@ -256,7 +256,7 @@ class TestClaudeLLM:
         with patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key"):
             with patch("llm_clients.claude_llm.ChatAnthropic") as mock_chat:
                 mock_llm = MagicMock()
-                mock_llm.model = "claude-3-5-sonnet-20241022"
+                mock_llm.model = "claude-sonnet-4-5-20250929"
                 mock_chat.return_value = mock_llm
 
                 llm = ClaudeLLM(name="TestClaude")
@@ -278,7 +278,7 @@ class TestClaudeLLM:
         with patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key"):
             with patch("llm_clients.claude_llm.ChatAnthropic") as mock_chat:
                 mock_llm = MagicMock()
-                mock_llm.model = "claude-3-5-sonnet-20241022"
+                mock_llm.model = "claude-sonnet-4-5-20250929"
                 mock_chat.return_value = mock_llm
 
                 llm = ClaudeLLM(name="TestClaude", system_prompt="Initial prompt")
@@ -295,14 +295,14 @@ class TestClaudeLLM:
     ):
         """Test response with incomplete usage metadata."""
         mock_llm = MagicMock()
-        mock_llm.model = "claude-3-5-sonnet-20241022"
+        mock_llm.model = "claude-sonnet-4-5-20250929"
 
         # Response with partial usage info
         mock_response = MagicMock()
         mock_response.text = "Partial usage response"
         mock_response.id = "msg_partial"
         mock_response.response_metadata = {
-            "model": "claude-3-5-sonnet-20241022",
+            "model": "claude-sonnet-4-5-20250929",
             "usage": {"input_tokens": 15},  # Missing output_tokens
         }
 
@@ -326,7 +326,7 @@ class TestClaudeLLM:
     async def test_metadata_includes_response_object(self, mock_chat_anthropic):
         """Test that metadata includes the full response object (line 74)."""
         mock_llm = MagicMock()
-        mock_llm.model = "claude-3-5-sonnet-20241022"
+        mock_llm.model = "claude-sonnet-4-5-20250929"
 
         mock_response = MagicMock()
         mock_response.text = "Test"
@@ -351,7 +351,7 @@ class TestClaudeLLM:
     async def test_timestamp_format(self, mock_chat_anthropic):
         """Test that timestamp is in ISO format (line 70)."""
         mock_llm = MagicMock()
-        mock_llm.model = "claude-3-5-sonnet-20241022"
+        mock_llm.model = "claude-sonnet-4-5-20250929"
 
         mock_response = MagicMock()
         mock_response.text = "Test"
@@ -384,13 +384,13 @@ class TestClaudeLLM:
     async def test_metadata_with_stop_reason(self, mock_chat_anthropic):
         """Test metadata extraction of stop_reason (line 92)."""
         mock_llm = MagicMock()
-        mock_llm.model = "claude-3-5-sonnet-20241022"
+        mock_llm.model = "claude-sonnet-4-5-20250929"
 
         mock_response = MagicMock()
         mock_response.text = "Stopped response"
         mock_response.id = "msg_stop"
         mock_response.response_metadata = {
-            "model": "claude-3-5-sonnet-20241022",
+            "model": "claude-sonnet-4-5-20250929",
             "stop_reason": "max_tokens",
         }
 
@@ -411,13 +411,13 @@ class TestClaudeLLM:
     async def test_raw_metadata_stored(self, mock_chat_anthropic):
         """Test that raw metadata is stored (line 95)."""
         mock_llm = MagicMock()
-        mock_llm.model = "claude-3-5-sonnet-20241022"
+        mock_llm.model = "claude-sonnet-4-5-20250929"
 
         mock_response = MagicMock()
         mock_response.text = "Test"
         mock_response.id = "msg_raw"
         mock_response.response_metadata = {
-            "model": "claude-3-5-sonnet-20241022",
+            "model": "claude-sonnet-4-5-20250929",
             "custom_field": "custom_value",
             "nested": {"key": "value"},
         }
@@ -447,7 +447,7 @@ class TestClaudeLLM:
         mock_response.text = "Response with history"
         mock_response.id = "msg_history"
         mock_response.response_metadata = {
-            "model": "claude-3-5-sonnet-20241022",
+            "model": "claude-sonnet-4-5-20250929",
             "usage": {"input_tokens": 50, "output_tokens": 20},
         }
 

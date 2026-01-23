@@ -36,7 +36,7 @@ class Config:
         Returns only the model name. Runtime parameters (temperature, max_tokens)
         should be passed explicitly via CLI arguments.
         """
-        return {"model": "claude-3-5-sonnet-20241022"}
+        return {"model": "claude-sonnet-4-5-20250929"}
 
     @classmethod
     def get_openai_config(cls) -> Dict[str, Any]:

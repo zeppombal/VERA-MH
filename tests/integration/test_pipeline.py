@@ -20,11 +20,11 @@ import pytest
 def pipeline_args():
     """Minimal valid pipeline arguments."""
     return argparse.Namespace(
-        user_agent="claude-3-5-sonnet-20241022",
+        user_agent="claude-sonnet-4-5-20250929",
         provider_agent="gpt-4o",
         runs=1,
         turns=4,
-        judge_model=["claude-3-5-sonnet-20241022"],
+        judge_model=["claude-sonnet-4-5-20250929"],
         user_agent_extra_params={},
         provider_agent_extra_params={},
         max_total_words=None,
@@ -58,7 +58,7 @@ class TestPipelineArgumentParsing:
 
         test_args = [
             "--user-agent",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             "--provider-agent",
             "gpt-4o",
             "--runs",
@@ -66,17 +66,17 @@ class TestPipelineArgumentParsing:
             "--turns",
             "4",
             "--judge-model",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
         ]
 
         with patch("sys.argv", ["run_pipeline.py"] + test_args):
             args = parse_arguments()
 
-            assert args.user_agent == "claude-3-5-sonnet-20241022"
+            assert args.user_agent == "claude-sonnet-4-5-20250929"
             assert args.provider_agent == "gpt-4o"
             assert args.runs == 1
             assert args.turns == 4
-            assert args.judge_model == ["claude-3-5-sonnet-20241022"]
+            assert args.judge_model == ["claude-sonnet-4-5-20250929"]
 
     def test_parse_arguments_with_extra_params(self):
         """Test parsing with extra model parameters."""
@@ -84,7 +84,7 @@ class TestPipelineArgumentParsing:
 
         test_args = [
             "--user-agent",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             "--provider-agent",
             "gpt-4o",
             "--runs",
@@ -92,7 +92,7 @@ class TestPipelineArgumentParsing:
             "--turns",
             "4",
             "--judge-model",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             "--user-agent-extra-params",
             "temperature=0.7,max_tokens=1000",
             "--provider-agent-extra-params",
@@ -117,7 +117,7 @@ class TestPipelineArgumentParsing:
 
         test_args = [
             "--user-agent",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             "--provider-agent",
             "gpt-4o",
             "--runs",
@@ -125,14 +125,14 @@ class TestPipelineArgumentParsing:
             "--turns",
             "4",
             "--judge-model",
-            "claude-3-5-sonnet-20241022:2",
+            "claude-sonnet-4-5-20250929:2",
             "gpt-4o",
         ]
 
         with patch("sys.argv", ["run_pipeline.py"] + test_args):
             args = parse_arguments()
 
-            assert args.judge_model == ["claude-3-5-sonnet-20241022:2", "gpt-4o"]
+            assert args.judge_model == ["claude-sonnet-4-5-20250929:2", "gpt-4o"]
 
     def test_parse_arguments_missing_required(self):
         """Test that missing required arguments raises error."""
@@ -140,7 +140,7 @@ class TestPipelineArgumentParsing:
 
         test_args = [
             "--user-agent",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             # Missing other required args
         ]
 
@@ -154,7 +154,7 @@ class TestPipelineArgumentParsing:
 
         test_args = [
             "--user-agent",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             "--provider-agent",
             "gpt-4o",
             "--runs",
@@ -162,7 +162,7 @@ class TestPipelineArgumentParsing:
             "--turns",
             "4",
             "--judge-model",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             "--debug",
             "--judge-per-judge",
             "--judge-verbose-workers",
@@ -183,7 +183,7 @@ class TestPipelineArgumentParsing:
 
         test_args = [
             "--user-agent",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             "--provider-agent",
             "gpt-4o",
             "--runs",
@@ -191,7 +191,7 @@ class TestPipelineArgumentParsing:
             "--turns",
             "10",
             "--judge-model",
-            "claude-3-5-sonnet-20241022:2",
+            "claude-sonnet-4-5-20250929:2",
             "gpt-4o",
             "--user-agent-extra-params",
             "temperature=0.7",
@@ -257,7 +257,7 @@ class TestPipelineConfiguration:
         }
 
         assert "model" in persona_config
-        assert persona_config["model"] == "claude-3-5-sonnet-20241022"
+        assert persona_config["model"] == "claude-sonnet-4-5-20250929"
         assert isinstance(persona_config, dict)
 
     def test_agent_model_config_dict_structure(self, pipeline_args):
@@ -278,7 +278,7 @@ class TestPipelineConfiguration:
     def test_extra_params_merge_into_config(self):
         """Test that extra params correctly merge into model configs."""
         args = argparse.Namespace(
-            user_agent="claude-3-5-sonnet-20241022",
+            user_agent="claude-sonnet-4-5-20250929",
             provider_agent="gpt-4o",
             user_agent_extra_params={"temperature": 0.7, "max_tokens": 1000},
             provider_agent_extra_params={"temperature": 0.5},
@@ -296,7 +296,7 @@ class TestPipelineConfiguration:
         }
 
         # Check persona config
-        assert persona_config["model"] == "claude-3-5-sonnet-20241022"
+        assert persona_config["model"] == "claude-sonnet-4-5-20250929"
         assert persona_config["temperature"] == 0.7
         assert persona_config["max_tokens"] == 1000
 
@@ -327,13 +327,13 @@ class TestPipelineConfiguration:
         assert judge_args.conversation is None
         assert judge_args.folder == conv_folder
         assert judge_args.rubrics == pipeline_args.rubrics
-        assert judge_args.judge_model == ["claude-3-5-sonnet-20241022"]
+        assert judge_args.judge_model == ["claude-sonnet-4-5-20250929"]
         assert judge_args.output == pipeline_args.judge_output
 
     def test_empty_extra_params_dont_pollute_config(self):
         """Test that empty extra params don't add unwanted keys."""
         args = argparse.Namespace(
-            user_agent="claude-3-5-sonnet-20241022",
+            user_agent="claude-sonnet-4-5-20250929",
             user_agent_extra_params={},
         )
 
@@ -454,7 +454,7 @@ class TestPipelineNewArguments:
 
         test_args = [
             "--user-agent",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             "--provider-agent",
             "gpt-4o",
             "--runs",
@@ -462,7 +462,7 @@ class TestPipelineNewArguments:
             "--turns",
             "4",
             "--judge-model",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             "--run-id",
             "test_run_123",
         ]
@@ -478,7 +478,7 @@ class TestPipelineNewArguments:
 
         test_args = [
             "--user-agent",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             "--provider-agent",
             "gpt-4o",
             "--runs",
@@ -486,7 +486,7 @@ class TestPipelineNewArguments:
             "--turns",
             "4",
             "--judge-model",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             "--rubrics",
             "data/rubric.tsv",
             "data/custom_rubric.tsv",
@@ -503,7 +503,7 @@ class TestPipelineNewArguments:
 
         test_args = [
             "--user-agent",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             "--provider-agent",
             "gpt-4o",
             "--runs",
@@ -511,7 +511,7 @@ class TestPipelineNewArguments:
             "--turns",
             "4",
             "--judge-model",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             "--judge-output",
             "custom_evals",
         ]
@@ -527,7 +527,7 @@ class TestPipelineNewArguments:
 
         test_args = [
             "--user-agent",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             "--provider-agent",
             "gpt-4o",
             "--runs",
@@ -535,7 +535,7 @@ class TestPipelineNewArguments:
             "--turns",
             "4",
             "--judge-model",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
         ]
 
         with patch("sys.argv", ["run_pipeline.py"] + test_args):
@@ -552,7 +552,7 @@ class TestPipelineNewArguments:
 
         test_args = [
             "--user-agent",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             "--provider-agent",
             "gpt-4o",
             "--runs",
@@ -560,7 +560,7 @@ class TestPipelineNewArguments:
             "--turns",
             "4",
             "--judge-model",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             "-uep",
             "temperature=0.7,max_tokens=1000",
             "-pep",
@@ -585,7 +585,7 @@ class TestPipelineNewArguments:
 
         test_args = [
             "--user-agent",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             "--provider-agent",
             "gpt-4o",
             "--runs",
@@ -593,7 +593,7 @@ class TestPipelineNewArguments:
             "--turns",
             "4",
             "--judge-model",
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-5-20250929",
             "-i",
             "custom_run",
         ]

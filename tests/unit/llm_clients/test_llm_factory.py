@@ -18,7 +18,7 @@ class TestLLMFactory:
     def test_create_claude_llm(self, mock_chat_anthropic):
         """Test that factory correctly creates Claude LLM instance."""
         # Arrange
-        model_name = "claude-3-5-sonnet-20241022"
+        model_name = "claude-sonnet-4-5-20250929"
         name = "TestClaude"
         system_prompt = "You are a helpful assistant."
         mock_chat_anthropic.return_value = MagicMock()
@@ -114,7 +114,7 @@ class TestLLMFactory:
     def test_factory_passes_kwargs(self, mock_chat_anthropic):
         """Test that factory correctly forwards kwargs to LLM implementations."""
         # Arrange
-        model_name = "claude-3-5-sonnet-20241022"
+        model_name = "claude-sonnet-4-5-20250929"
         name = "TestKwargs"
         temperature = 0.5
         max_tokens = 500

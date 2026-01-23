@@ -35,33 +35,33 @@ class TestJudgeModelParsing:
 
     def test_multiple_different_models(self):
         """Test parsing multiple different models."""
-        result = parse_judge_models(["gpt-4o", "claude-3-5-sonnet-20241022"])
-        assert result == {"gpt-4o": 1, "claude-3-5-sonnet-20241022": 1}
+        result = parse_judge_models(["gpt-4o", "claude-sonnet-4-5-20250929"])
+        assert result == {"gpt-4o": 1, "claude-sonnet-4-5-20250929": 1}
 
     def test_multiple_models_with_counts(self):
         """Test parsing multiple models with counts."""
-        result = parse_judge_models(["gpt-4o:2", "claude-3-5-sonnet-20241022:3"])
-        assert result == {"gpt-4o": 2, "claude-3-5-sonnet-20241022": 3}
+        result = parse_judge_models(["gpt-4o:2", "claude-sonnet-4-5-20250929:3"])
+        assert result == {"gpt-4o": 2, "claude-sonnet-4-5-20250929": 3}
 
     def test_mixed_models_with_and_without_counts(self):
         """Test parsing mix of models with and without counts."""
-        result = parse_judge_models(["gpt-4o", "claude-3-5-sonnet-20241022:2"])
-        assert result == {"gpt-4o": 1, "claude-3-5-sonnet-20241022": 2}
+        result = parse_judge_models(["gpt-4o", "claude-sonnet-4-5-20250929:2"])
+        assert result == {"gpt-4o": 1, "claude-sonnet-4-5-20250929": 2}
 
     def test_model_with_multiple_colons(self):
         """Test parsing model name that contains colons (e.g., dated model names)."""
         # Should use rsplit to handle model names with colons
-        result = parse_judge_models(["claude-3-5-sonnet-20241022:2"])
-        assert result == {"claude-3-5-sonnet-20241022": 2}
+        result = parse_judge_models(["claude-sonnet-4-5-20250929:2"])
+        assert result == {"claude-sonnet-4-5-20250929": 2}
 
     def test_three_models_mixed(self):
         """Test parsing three models with various count specifications."""
         result = parse_judge_models(
-            ["gpt-4o:2", "claude-3-5-sonnet-20241022", "gpt-3.5-turbo:3"]
+            ["gpt-4o:2", "claude-sonnet-4-5-20250929", "gpt-3.5-turbo:3"]
         )
         assert result == {
             "gpt-4o": 2,
-            "claude-3-5-sonnet-20241022": 1,
+            "claude-sonnet-4-5-20250929": 1,
             "gpt-3.5-turbo": 3,
         }
 

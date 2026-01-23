@@ -127,7 +127,7 @@ if __name__ == "__main__":
         "--user-agent",
         "-u",
         help=(
-            "Model for the user-agent. Examples: claude-3-5-sonnet-20241022, "
+            "Model for the user-agent. Examples: claude-sonnet-4-5-20250929, "
             "gemini-1.5-pro, llama3:8b"
         ),
         required=True,
@@ -147,7 +147,7 @@ if __name__ == "__main__":
         "--provider-agent",
         "-p",
         help=(
-            "Model for the provider-agent. Examples: claude-3-5-sonnet-20241022, "
+            "Model for the provider-agent. Examples: claude-sonnet-4-5-20250929, "
             "gemini-1.5-pro, llama3:8b"
         ),
         required=True,
