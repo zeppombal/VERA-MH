@@ -201,13 +201,13 @@ except ValueError as e:
 ## Troubleshooting
 
 ### Issue: LLM returns wrong format
-**Solution**: Check that your LLM provider supports structured output. Claude, OpenAI, and Gemini are recommended.
+**Solution**: Check that your LLM provider supports structured output. Claude, OpenAI, Gemini, and Azure are recommended.
 
 ### Issue: Answer doesn't match valid options
 **Solution**: The judge includes fallback logic that matches answers case-insensitively. If matching fails, it logs a warning and uses the first valid option.
 
 ### Issue: NotImplementedError
-**Solution**: Your LLM provider doesn't support structured output. Use Claude, OpenAI, or Gemini for judge evaluation.
+**Solution**: Your LLM provider doesn't support structured output. Use Claude, OpenAI, Gemini, or Azure for judge evaluation.
 
 ## Future Enhancements
 

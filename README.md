@@ -31,7 +31,7 @@ The RFC-version are frozen in this [branch](https://github.com/SpringCare/VERA-M
 2. **Set up environment variables**:
    ```bash
    cp .env.example .env
-   # Edit .env and add your API keys (e.g., OpenAI/Anthropic)
+   # Edit .env and add your API keys (e.g., ANTHROPIC_API_KEY, OPENAI_API_KEY, AZURE_API_KEY, AZURE_ENDPOINT)
    ```
 
 3. **(Optional) Install pre-commit hooks** for automatic code formatting/linting:
@@ -207,6 +207,7 @@ A Python application that simulates conversations between Large Language Models 
 - **Claude Support**: Full implementation of Claude models via Anthropic's API with structured output
 - **OpenAI Support**: Complete integration with GPT models via OpenAI's API with structured output
 - **Gemini Support**: Google Gemini integration with structured output
+- **Azure Support**: Azure OpenAI and Azure AI Foundry integration with structured output
 - **Llama Support**: Local Llama models via Ollama (limited structured output support)
 
 
@@ -233,6 +234,7 @@ A Python application that simulates conversations between Large Language Models 
   - **`claude_llm.py`**: Claude implementation using LangChain with structured output
   - **`openai_llm.py`**: OpenAI implementation with structured output
   - **`gemini_llm.py`**: Google Gemini implementation with structured output
+  - **`azure_llm.py`**: Azure OpenAI and Azure AI Foundry implementation with structured output
   - **`llama_llm.py`**: Llama implementation via Ollama
   - **`config.py`**: Configuration management for API keys and model settings
 - **`utils/`**: Utility functions and helpers
@@ -285,7 +287,7 @@ The judge evaluation system uses **structured output** to ensure reliable and ty
    ```
 
 3. **Provider Implementation**: Each LLM client implements structured output using LangChain's `with_structured_output()`
-   - Claude, OpenAI, and Gemini: Native structured output support via API
+   - Claude, OpenAI, Gemini, and Azure: Native structured output support via API
    - Llama: Limited support (may require prompt-based parsing)
 
 #### Benefits

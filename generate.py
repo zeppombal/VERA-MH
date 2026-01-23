@@ -264,12 +264,28 @@ if __name__ == "__main__":
             persona_extra_run_params={
                 k: v
                 for k, v in persona_model_config.items()
-                if k not in ["model", "model_name", "name", "temperature", "max_tokens"]
+                if k
+                not in [
+                    "model",
+                    "model_name",
+                    "name",
+                    "temperature",
+                    "max_tokens",
+                    "top_p",
+                ]
             },
             agent_extra_run_params={
                 k: v
                 for k, v in agent_model_config.items()
-                if k not in ["model", "model_name", "name", "temperature", "max_tokens"]
+                if k
+                not in [
+                    "model",
+                    "model_name",
+                    "name",
+                    "temperature",
+                    "max_tokens",
+                    "top_p",
+                ]
             },
             folder_name=args.folder_name,
             max_concurrent=args.max_concurrent,

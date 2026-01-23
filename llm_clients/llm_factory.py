@@ -41,7 +41,12 @@ class LLMFactory:
             if k not in ["model", "name", "prompt_name", "system_prompt"]
         }
 
-        if "claude" in model_lower:
+        # Check Azure first to avoid matching "gpt" in "azure-gpt-4"
+        if "azure" in model_lower:
+            from .azure_llm import AzureLLM
+
+            return AzureLLM(name, system_prompt, model_name, **model_params)
+        elif "claude" in model_lower:
             from .claude_llm import ClaudeLLM
 
             return ClaudeLLM(name, system_prompt, model_name, **model_params)
@@ -91,7 +96,7 @@ class LLMFactory:
                 f"Model '{model_name}' does not support structured output "
                 f"generation. Judge operations require models with structured "
                 f"output support. Supported models: Claude (claude-*), "
-                f"OpenAI (gpt-*), Gemini (gemini-*). "
+                f"OpenAI (gpt-*), Gemini (gemini-*), Azure (azure-*). "
                 f"Not supported: Llama/Ollama models."
             )
 

@@ -27,6 +27,9 @@ class Config:
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
     GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")  # For Gemini
+    AZURE_API_KEY = os.getenv("AZURE_API_KEY")
+    AZURE_ENDPOINT = os.getenv("AZURE_ENDPOINT")
+    AZURE_API_VERSION = os.getenv("AZURE_API_VERSION")  # Optional
     # Note: Llama via Ollama doesn't require an API key
 
     @classmethod
@@ -65,3 +68,13 @@ class Config:
         is hardcoded in llama_llm.py for connectivity purposes.
         """
         return {"model": "llama3:8b"}
+
+    @classmethod
+    def get_azure_config(cls) -> Dict[str, Any]:
+        """Get default Azure model name.
+
+        Returns only the model name. Runtime parameters (temperature, max_tokens)
+        should be passed explicitly via CLI arguments. The endpoint and API key
+        are loaded from environment variables.
+        """
+        return {"model": "azure-gpt-4"}
