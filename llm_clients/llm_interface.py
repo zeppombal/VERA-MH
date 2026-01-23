@@ -63,7 +63,7 @@ class LLMInterface(ABC):
 
     def get_role(self) -> Optional[Role]:
         """Get the role of this LLM instance."""
-        return self.role if self.role else None
+        return self.role
 
     def __getattr__(self, name):
         """Delegate attribute access to the underlying llm object.
