@@ -245,6 +245,55 @@ async def main():
     print(f"✓ Conversations saved to: {conversation_folder}/")
     print("")
 
+    # Validate that Step 1 produced conversation files
+    if not os.path.exists(conversation_folder):
+        print("")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("❌ Pipeline failed at Step 1: Conversation folder not created")
+        print("")
+        print(f"Expected folder: {conversation_folder}")
+        print("")
+        print("Troubleshooting:")
+        print("  - Check that generate.py returned a valid folder path")
+        print("  - Verify file system permissions")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        sys.exit(1)
+
+    # Count conversation files (exclude log files)
+    conversation_files = [
+        f
+        for f in os.listdir(conversation_folder)
+        if f.endswith(".txt") and not f.endswith(".log")
+    ]
+
+    if not conversation_files:
+        print("")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("❌ Pipeline failed at Step 1: No conversations were generated")
+        print("")
+        print(f"Conversation folder: {conversation_folder}")
+        print(f"Files in folder: {len(os.listdir(conversation_folder))}")
+        print("")
+        print("Possible causes:")
+        print(
+            "  1. Invalid model name (check that the model exists in the "
+            "provider's API)"
+        )
+        print("  2. API authentication issues (check your API keys in .env)")
+        print("  3. API rate limits or quota exceeded")
+        print("  4. Network connectivity issues")
+        print("")
+        print("Troubleshooting:")
+        print("  - Check files in the conversation folder for error messages")
+        print("  - Look for API error responses in the output")
+        print("  - Verify model names are valid for your provider")
+        print("  - Run generate.py separately to isolate the issue")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        sys.exit(1)
+
+    print(f"✓ Validated: {len(conversation_files)} conversation files generated")
+    print("")
+
     # =========================================================================
     # Step 2: Evaluate conversations with LLM judge
     # =========================================================================
@@ -268,11 +317,75 @@ async def main():
     evaluation_folder = await judge_main(judge_args)
 
     if not evaluation_folder:
-        print("Error: Judge did not return an evaluation folder")
+        print("")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("❌ Pipeline failed at Step 2: Judge did not return an evaluation folder")
+        print("")
+        print("Troubleshooting:")
+        print("  - Check error messages from the judge evaluation above")
+        print("  - Run judge.py separately to isolate the issue")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        sys.exit(1)
+
+    # Validate that Step 2 produced evaluation results
+    if not os.path.exists(evaluation_folder):
+        print("")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("❌ Pipeline failed at Step 2: Evaluation folder not created")
+        print("")
+        print(f"Expected folder: {evaluation_folder}")
+        print("")
+        print("Troubleshooting:")
+        print("  - Check that judge.py returned a valid folder path")
+        print("  - Verify file system permissions")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        sys.exit(1)
+
+    # Check for results.csv file
+    results_csv_path = os.path.join(evaluation_folder, "results.csv")
+    if not os.path.exists(results_csv_path):
+        print("")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("❌ Pipeline failed at Step 2: No evaluation results were generated")
+        print("")
+        print(f"Evaluation folder: {evaluation_folder}")
+        print(f"Expected results file: {results_csv_path}")
+        print("")
+
+        # Check if folder is empty
+        folder_files = (
+            os.listdir(evaluation_folder) if os.path.exists(evaluation_folder) else []
+        )
+        print(f"Files in evaluation folder: {len(folder_files)}")
+        if folder_files:
+            print("  Found: " + ", ".join(folder_files[:5]))
+            if len(folder_files) > 5:
+                print(f"  ... and {len(folder_files) - 5} more")
+
+        print("")
+        print("Possible causes:")
+        print("  1. All evaluations failed (check judge model name and API access)")
+        print("  2. Invalid judge model name")
+        print("  3. Judge API authentication issues")
+        print(
+            "  4. Conversation files from Step 1 contained errors instead of "
+            "conversations"
+        )
+        print("")
+        print("Troubleshooting:")
+        print("  - Check the conversation files from Step 1 for API error messages")
+        print("  - Look for judge evaluation errors in the output above")
+        print("  - Verify judge model name is valid")
+        print(
+            "  - Run judge.py separately on the conversation folder to isolate the "
+            "issue"
+        )
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         sys.exit(1)
 
     print("")
     print(f"✓ Evaluations saved to: {evaluation_folder}/")
+    print("✓ Validated: results.csv exists with evaluation data")
     print("")
 
     # =========================================================================

@@ -602,3 +602,358 @@ class TestPipelineNewArguments:
             args = parse_arguments()
 
             assert args.run_id == "custom_run"
+
+
+# Fixtures for validation tests
+
+
+@pytest.fixture
+def valid_pipeline_args():
+    """Fixture providing valid minimal pipeline arguments."""
+    return [
+        "run_pipeline.py",
+        "--user-agent",
+        "test-model",
+        "--provider-agent",
+        "test-model",
+        "--runs",
+        "1",
+        "--turns",
+        "1",
+        "--judge-model",
+        "test-model",
+    ]
+
+
+@pytest.mark.integration
+class TestPipelineValidation:
+    """Test pipeline validation and error handling for empty folders."""
+
+    @pytest.mark.asyncio
+    async def test_step1_validation_folder_not_exists(
+        self, tmp_path, valid_pipeline_args
+    ):
+        """Test that pipeline exits if Step 1 folder doesn't exist."""
+        import sys
+        from unittest.mock import patch
+
+        from run_pipeline import main as pipeline_main
+
+        # Mock generate module's main to return a non-existent folder
+        async def mock_generate(*args, **kwargs):
+            return None, str(tmp_path / "nonexistent")
+
+        # Patch generate.main at the source
+        with patch("generate.main", side_effect=mock_generate):
+            # Mock sys.exit to raise SystemExit instead of actually exiting
+            with patch.object(sys, "exit", side_effect=SystemExit) as mock_exit:
+                # Mock importlib to avoid judge loading (not needed for step 1 test)
+                with patch("importlib.util.spec_from_file_location"):
+                    with patch("sys.argv", valid_pipeline_args):
+                        # Pipeline should raise SystemExit when folder doesn't exist
+                        with pytest.raises(SystemExit):
+                            await pipeline_main()
+
+                        # Verify sys.exit(1) was called
+                        mock_exit.assert_called_once_with(1)
+
+    @pytest.mark.asyncio
+    async def test_step1_validation_no_conversation_files(
+        self, tmp_path, valid_pipeline_args
+    ):
+        """Test that pipeline exits if Step 1 produces no .txt files."""
+        import sys
+        from unittest.mock import patch
+
+        from run_pipeline import main as pipeline_main
+
+        # Create empty conversation folder
+        conv_folder = tmp_path / "conversations"
+        conv_folder.mkdir()
+
+        # Mock generate_main to return empty folder
+        async def mock_generate(*args, **kwargs):
+            return None, str(conv_folder)
+
+        with patch("generate.main", side_effect=mock_generate):
+            # Mock sys.exit to raise SystemExit instead of actually exiting
+            with patch.object(sys, "exit", side_effect=SystemExit) as mock_exit:
+                with patch("importlib.util.spec_from_file_location"):
+                    with patch("sys.argv", valid_pipeline_args):
+                        # Pipeline should raise SystemExit
+                        with pytest.raises(SystemExit):
+                            await pipeline_main()
+
+                        # Verify sys.exit(1) was called
+                        mock_exit.assert_called_once_with(1)
+
+    @pytest.mark.asyncio
+    async def test_step1_validation_only_log_files(self, tmp_path, valid_pipeline_args):
+        """Test that pipeline exits if Step 1 only produces .log files."""
+        import sys
+        from unittest.mock import patch
+
+        from run_pipeline import main as pipeline_main
+
+        # Create conversation folder with only .log files
+        conv_folder = tmp_path / "conversations"
+        conv_folder.mkdir()
+        (conv_folder / "conversation1.log").write_text("log content")
+        (conv_folder / "conversation2.log").write_text("log content")
+
+        # Mock generate_main to return folder with only logs
+        async def mock_generate(*args, **kwargs):
+            return None, str(conv_folder)
+
+        with patch("generate.main", side_effect=mock_generate):
+            # Mock sys.exit to raise SystemExit instead of actually exiting
+            with patch.object(sys, "exit", side_effect=SystemExit) as mock_exit:
+                with patch("importlib.util.spec_from_file_location"):
+                    with patch("sys.argv", valid_pipeline_args):
+                        # Pipeline should raise SystemExit
+                        with pytest.raises(SystemExit):
+                            await pipeline_main()
+
+                        # Verify sys.exit(1) was called
+                        mock_exit.assert_called_once_with(1)
+
+    @pytest.mark.asyncio
+    async def test_step2_validation_no_evaluation_folder(
+        self, tmp_path, valid_pipeline_args
+    ):
+        """Test that pipeline exits if Step 2 returns None."""
+        import sys
+        from unittest.mock import MagicMock, patch
+
+        from run_pipeline import main as pipeline_main
+
+        # Create conversation folder with valid files
+        conv_folder = tmp_path / "conversations"
+        conv_folder.mkdir()
+        (conv_folder / "conv1.txt").write_text("User: Hi\nAssistant: Hello")
+
+        # Mock generate_main to return valid folder
+        async def mock_generate(*args, **kwargs):
+            return None, str(conv_folder)
+
+        # Mock judge_main to return None
+        async def mock_judge(args):
+            return None
+
+        # Create a mock module with the mock judge main function
+        mock_judge_module = MagicMock()
+        mock_judge_module.main = mock_judge
+
+        with (
+            patch("generate.main", side_effect=mock_generate),
+            patch("importlib.util.module_from_spec", return_value=mock_judge_module),
+            patch("importlib.util.spec_from_file_location"),
+        ):
+            # Mock sys.exit to raise SystemExit instead of actually exiting
+            with patch.object(sys, "exit", side_effect=SystemExit) as mock_exit:
+                with patch("sys.argv", valid_pipeline_args):
+                    # Pipeline should raise SystemExit
+                    with pytest.raises(SystemExit):
+                        await pipeline_main()
+
+                    # Verify sys.exit(1) was called
+                    mock_exit.assert_called_once_with(1)
+
+    @pytest.mark.asyncio
+    async def test_step2_validation_folder_not_exists(
+        self, tmp_path, valid_pipeline_args
+    ):
+        """Test that pipeline exits if Step 2 folder doesn't exist."""
+        import sys
+        from unittest.mock import MagicMock, patch
+
+        from run_pipeline import main as pipeline_main
+
+        # Create conversation folder with valid files
+        conv_folder = tmp_path / "conversations"
+        conv_folder.mkdir()
+        (conv_folder / "conv1.txt").write_text("User: Hi\nAssistant: Hello")
+
+        # Mock generate_main to return valid folder
+        async def mock_generate(*args, **kwargs):
+            return None, str(conv_folder)
+
+        # Mock judge_main to return non-existent folder
+        async def mock_judge(args):
+            return str(tmp_path / "nonexistent_eval")
+
+        # Create a mock module with the mock judge main function
+        mock_judge_module = MagicMock()
+        mock_judge_module.main = mock_judge
+
+        with (
+            patch("generate.main", side_effect=mock_generate),
+            patch("importlib.util.module_from_spec", return_value=mock_judge_module),
+            patch("importlib.util.spec_from_file_location"),
+        ):
+            # Mock sys.exit to raise SystemExit instead of actually exiting
+            with patch.object(sys, "exit", side_effect=SystemExit) as mock_exit:
+                with patch("sys.argv", valid_pipeline_args):
+                    # Pipeline should raise SystemExit
+                    with pytest.raises(SystemExit):
+                        await pipeline_main()
+
+                    # Verify sys.exit(1) was called
+                    mock_exit.assert_called_once_with(1)
+
+    @pytest.mark.asyncio
+    async def test_step2_validation_no_results_csv(self, tmp_path, valid_pipeline_args):
+        """Test that pipeline exits if Step 2 produces no results.csv."""
+        import sys
+        from unittest.mock import MagicMock, patch
+
+        from run_pipeline import main as pipeline_main
+
+        # Create conversation folder with valid files
+        conv_folder = tmp_path / "conversations"
+        conv_folder.mkdir()
+        (conv_folder / "conv1.txt").write_text("User: Hi\nAssistant: Hello")
+
+        # Create evaluation folder but no results.csv
+        eval_folder = tmp_path / "evaluations"
+        eval_folder.mkdir()
+        (eval_folder / "some_other_file.json").write_text("{}")
+
+        # Mock generate_main to return valid folder
+        async def mock_generate(*args, **kwargs):
+            return None, str(conv_folder)
+
+        # Mock judge_main to return folder without results.csv
+        async def mock_judge(args):
+            return str(eval_folder)
+
+        # Create a mock module with the mock judge main function
+        mock_judge_module = MagicMock()
+        mock_judge_module.main = mock_judge
+
+        with (
+            patch("generate.main", side_effect=mock_generate),
+            patch("importlib.util.module_from_spec", return_value=mock_judge_module),
+            patch("importlib.util.spec_from_file_location"),
+        ):
+            # Mock sys.exit to raise SystemExit instead of actually exiting
+            with patch.object(sys, "exit", side_effect=SystemExit) as mock_exit:
+                with patch("sys.argv", valid_pipeline_args):
+                    # Pipeline should raise SystemExit
+                    with pytest.raises(SystemExit):
+                        await pipeline_main()
+
+                    # Verify sys.exit(1) was called
+                    mock_exit.assert_called_once_with(1)
+
+    @pytest.mark.asyncio
+    async def test_step2_validation_empty_folder_error_message(
+        self, tmp_path, valid_pipeline_args, capsys
+    ):
+        """Test that error message lists files when folder is not empty."""
+        import sys
+        from unittest.mock import MagicMock, patch
+
+        from run_pipeline import main as pipeline_main
+
+        # Create conversation folder with valid files
+        conv_folder = tmp_path / "conversations"
+        conv_folder.mkdir()
+        (conv_folder / "conv1.txt").write_text("User: Hi\nAssistant: Hello")
+
+        # Create evaluation folder with some files but no results.csv
+        eval_folder = tmp_path / "evaluations"
+        eval_folder.mkdir()
+        (eval_folder / "file1.json").write_text("{}")
+        (eval_folder / "file2.json").write_text("{}")
+        (eval_folder / "file3.log").write_text("log")
+
+        # Mock functions
+        async def mock_generate(*args, **kwargs):
+            return None, str(conv_folder)
+
+        async def mock_judge(args):
+            return str(eval_folder)
+
+        # Create a mock module with the mock judge main function
+        mock_judge_module = MagicMock()
+        mock_judge_module.main = mock_judge
+
+        with (
+            patch("generate.main", side_effect=mock_generate),
+            patch("importlib.util.module_from_spec", return_value=mock_judge_module),
+            patch("importlib.util.spec_from_file_location"),
+        ):
+            # Mock sys.exit to raise SystemExit instead of actually exiting
+            with patch.object(sys, "exit", side_effect=SystemExit) as mock_exit:
+                with patch("sys.argv", valid_pipeline_args):
+                    # Pipeline should raise SystemExit
+                    with pytest.raises(SystemExit):
+                        await pipeline_main()
+
+                    # Capture printed output
+                    captured = capsys.readouterr()
+
+                    # Verify error message includes file listing
+                    assert "Files in evaluation folder: 3" in captured.out
+                    assert "Found:" in captured.out
+
+                    # Verify sys.exit(1) was called
+                    mock_exit.assert_called_once_with(1)
+
+    @pytest.mark.asyncio
+    async def test_validation_success_messages(
+        self, tmp_path, valid_pipeline_args, capsys
+    ):
+        """Test that validation success messages are displayed."""
+        from unittest.mock import MagicMock, patch
+
+        from run_pipeline import main as pipeline_main
+
+        # Create conversation folder with valid files
+        conv_folder = tmp_path / "conversations"
+        conv_folder.mkdir()
+        (conv_folder / "conv1.txt").write_text("User: Hi\nAssistant: Hello")
+        (conv_folder / "conv2.txt").write_text("User: Hey\nAssistant: Hi there")
+
+        # Create evaluation folder with results.csv
+        eval_folder = tmp_path / "evaluations"
+        eval_folder.mkdir()
+        (eval_folder / "results.csv").write_text(
+            "filename,run_id,Safety\nconv1.txt,test,Pass"
+        )
+
+        # Mock functions
+        async def mock_generate(*args, **kwargs):
+            return None, str(conv_folder)
+
+        async def mock_judge(args):
+            return str(eval_folder)
+
+        def mock_score(*args, **kwargs):
+            return {}
+
+        # Create a mock module with the mock judge main function
+        mock_judge_module = MagicMock()
+        mock_judge_module.main = mock_judge
+
+        with (
+            patch("generate.main", side_effect=mock_generate),
+            patch("importlib.util.module_from_spec", return_value=mock_judge_module),
+            patch("importlib.util.spec_from_file_location"),
+            patch("run_pipeline.score_results", new=mock_score),
+            patch("run_pipeline.print_scores"),
+            patch("run_pipeline.create_visualizations"),
+        ):
+            with patch("sys.argv", valid_pipeline_args + ["--skip-risk-analysis"]):
+                await pipeline_main()
+
+                # Capture printed output
+                captured = capsys.readouterr()
+
+                # Verify success messages
+                assert "✓ Validated: 2 conversation files generated" in captured.out
+                assert (
+                    "✓ Validated: results.csv exists with evaluation data"
+                    in captured.out
+                )
