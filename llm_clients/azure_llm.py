@@ -21,6 +21,8 @@ T = TypeVar("T", bound=BaseModel)
 class AzureLLM(JudgeLLM):
     """Azure OpenAI implementation using LangChain."""
 
+    DEFAULT_API_VERSION = "2024-05-01-preview"
+
     def __init__(
         self,
         name: str,
@@ -71,7 +73,7 @@ class AzureLLM(JudgeLLM):
         else:
             # Default API version if not specified
             # This is often required for Azure AI Foundry services
-            self.api_version = "2024-05-01-preview"
+            self.api_version = self.DEFAULT_API_VERSION
         llm_params["api_version"] = self.api_version
 
         # Enable logging to see actual requests (helps debug 404s)

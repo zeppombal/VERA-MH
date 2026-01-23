@@ -16,40 +16,66 @@ class DictWithAttr(dict):
         return self.get(key)
 
 
+@pytest.fixture
+def mock_azure_config():
+    """Fixture to patch Azure config values."""
+    with (
+        patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key"),
+        patch(
+            "llm_clients.azure_llm.Config.AZURE_ENDPOINT",
+            "https://test.openai.azure.com",
+        ),
+        patch(
+            "llm_clients.azure_llm.Config.get_azure_config",
+            return_value={"model": "gpt-4"},
+        ),
+    ):
+        yield
+
+
+@pytest.fixture
+def mock_azure_model():
+    """Fixture to patch AzureAIChatCompletionsModel."""
+    with patch("llm_clients.azure_llm.AzureAIChatCompletionsModel") as mock:
+        yield mock
+
+
+def create_mock_response(
+    text="Test response", response_id="chatcmpl-12345", **metadata
+):
+    """Helper to create a mock Azure response."""
+    mock_response = MagicMock()
+    mock_response.text = text
+    mock_response.id = response_id
+    mock_response.response_metadata = DictWithAttr({"model": "gpt-4", **metadata})
+    return mock_response
+
+
 @pytest.mark.unit
 class TestAzureLLM:
     """Unit tests for AzureLLM class."""
 
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", None)
     def test_init_missing_api_key_raises_error(self):
         """Test that missing AZURE_API_KEY raises ValueError."""
-        with pytest.raises(ValueError) as exc_info:
-            AzureLLM(name="TestAzure")
+        with patch("llm_clients.azure_llm.Config.AZURE_API_KEY", None):
+            with pytest.raises(ValueError) as exc_info:
+                AzureLLM(name="TestAzure")
 
-        assert "AZURE_API_KEY not found" in str(exc_info.value)
+            assert "AZURE_API_KEY not found" in str(exc_info.value)
 
-    @patch("llm_clients.azure_llm.Config.AZURE_ENDPOINT", None)
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
     def test_init_missing_endpoint_raises_error(self):
         """Test that missing AZURE_ENDPOINT raises ValueError."""
-        with pytest.raises(ValueError) as exc_info:
-            AzureLLM(name="TestAzure")
+        with (
+            patch("llm_clients.azure_llm.Config.AZURE_ENDPOINT", None),
+            patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key"),
+        ):
+            with pytest.raises(ValueError) as exc_info:
+                AzureLLM(name="TestAzure")
 
-        assert "AZURE_ENDPOINT not found" in str(exc_info.value)
+            assert "AZURE_ENDPOINT not found" in str(exc_info.value)
 
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT", "https://test.openai.azure.com"
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
-    def test_init_with_default_model(self, mock_azure_model, mock_get_config):
+    def test_init_with_default_model(self, mock_azure_config, mock_azure_model):
         """Test initialization with default model from config."""
-        mock_get_config.return_value = {"model": "gpt-4"}
-        mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
-        mock_azure_model.return_value = mock_llm
-
         llm = AzureLLM(name="TestAzure", system_prompt="Test prompt")
 
         assert llm.name == "TestAzure"
@@ -57,53 +83,14 @@ class TestAzureLLM:
         assert llm.model_name == "gpt-4"
         assert llm.last_response_metadata == {}
 
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT", "https://test.openai.azure.com"
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
-    def test_init_with_custom_model(self, mock_azure_model, mock_get_config):
-        """Test initialization with custom model name."""
-        mock_get_config.return_value = {"model": "gpt-4"}
-        mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4-turbo"
-        mock_azure_model.return_value = mock_llm
+    def test_init_with_custom_model(self, mock_azure_config, mock_azure_model):
+        """Test initialization with custom model name instead of config default."""
+        llm = AzureLLM(name="TestAzure", model_name="azure-some-made-up-model")
 
-        llm = AzureLLM(name="TestAzure", model_name="azure-gpt-4-turbo")
+        assert llm.model_name == "some-made-up-model"  # azure- prefix should be removed
 
-        assert llm.model_name == "gpt-4-turbo"  # azure- prefix should be removed
-
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT", "https://test.openai.azure.com"
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
-    def test_init_removes_azure_prefix(self, mock_azure_model, mock_get_config):
-        """Test that azure- prefix is removed from model name."""
-        mock_get_config.return_value = {"model": "gpt-4"}
-        mock_llm = MagicMock()
-        mock_llm.model_name = "grok-4"
-        mock_azure_model.return_value = mock_llm
-
-        llm = AzureLLM(name="TestAzure", model_name="azure-grok-4")
-
-        assert llm.model_name == "grok-4"
-
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT", "https://test.openai.azure.com"
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
-    def test_init_with_kwargs(self, mock_azure_model, mock_get_config):
+    def test_init_with_kwargs(self, mock_azure_config, mock_azure_model):
         """Test initialization with additional kwargs."""
-        mock_get_config.return_value = {"model": "gpt-4"}
-        mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
-        mock_azure_model.return_value = mock_llm
-
         AzureLLM(name="TestAzure", temperature=0.5, max_tokens=500, top_p=0.9)
 
         # Verify kwargs were passed to AzureAIChatCompletionsModel
@@ -112,157 +99,103 @@ class TestAzureLLM:
         assert call_kwargs["max_tokens"] == 500
         assert call_kwargs["top_p"] == 0.9
 
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT", "https://test.openai.azure.com"
-    )
-    @patch("llm_clients.azure_llm.Config.AZURE_API_VERSION", "2024-05-01-preview")
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
-    def test_init_with_api_version(self, mock_azure_model, mock_get_config):
+    def test_init_with_api_version(self, mock_azure_config, mock_azure_model):
         """Test initialization with API version from config."""
-        mock_get_config.return_value = {"model": "gpt-4"}
-        mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
-        mock_azure_model.return_value = mock_llm
+        with patch(
+            "llm_clients.azure_llm.Config.AZURE_API_VERSION", "2024-05-01-preview"
+        ):
+            llm = AzureLLM(name="TestAzure")
 
-        llm = AzureLLM(name="TestAzure")
+            assert llm.api_version == "2024-05-01-preview"
+            call_kwargs = mock_azure_model.call_args[1]
+            assert call_kwargs["api_version"] == "2024-05-01-preview"
 
-        assert llm.api_version == "2024-05-01-preview"
-        call_kwargs = mock_azure_model.call_args[1]
-        assert call_kwargs["api_version"] == "2024-05-01-preview"
-
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT", "https://test.openai.azure.com"
-    )
-    @patch("llm_clients.azure_llm.Config.AZURE_API_VERSION", None)
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
-    def test_init_with_default_api_version(self, mock_azure_model, mock_get_config):
+    def test_init_with_default_api_version(self, mock_azure_config, mock_azure_model):
         """Test initialization with default API version when not configured."""
-        mock_get_config.return_value = {"model": "gpt-4"}
-        mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
-        mock_azure_model.return_value = mock_llm
+        with patch("llm_clients.azure_llm.Config.AZURE_API_VERSION", None):
+            llm = AzureLLM(name="TestAzure")
 
-        llm = AzureLLM(name="TestAzure")
+            assert llm.api_version == AzureLLM.DEFAULT_API_VERSION
+            call_kwargs = mock_azure_model.call_args[1]
+            assert call_kwargs["api_version"] == AzureLLM.DEFAULT_API_VERSION
 
-        assert llm.api_version == "2024-05-01-preview"
-        call_kwargs = mock_azure_model.call_args[1]
-        assert call_kwargs["api_version"] == "2024-05-01-preview"
-
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT",
-        "https://test.openai.azure.com/",
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
     def test_init_strips_endpoint_trailing_slash(
-        self, mock_azure_model, mock_get_config
+        self, mock_azure_config, mock_azure_model
     ):
         """Test that endpoint trailing slash is removed."""
-        mock_get_config.return_value = {"model": "gpt-4"}
-        mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
-        mock_azure_model.return_value = mock_llm
+        with patch(
+            "llm_clients.azure_llm.Config.AZURE_ENDPOINT",
+            "https://test.openai.azure.com/",
+        ):
+            llm = AzureLLM(name="TestAzure")
 
-        llm = AzureLLM(name="TestAzure")
+            assert llm.endpoint == "https://test.openai.azure.com"
+            call_kwargs = mock_azure_model.call_args[1]
+            assert call_kwargs["endpoint"] == "https://test.openai.azure.com"
 
-        assert llm.endpoint == "https://test.openai.azure.com"
-        call_kwargs = mock_azure_model.call_args[1]
-        assert call_kwargs["endpoint"] == "https://test.openai.azure.com"
-
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT",
-        "https://test.services.ai.azure.com",
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
     def test_init_adds_models_suffix_for_ai_foundry(
-        self, mock_azure_model, mock_get_config
+        self, mock_azure_config, mock_azure_model
     ):
         """Test that /models suffix is added for Azure AI Foundry endpoints."""
-        mock_get_config.return_value = {"model": "gpt-4"}
-        mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
-        mock_azure_model.return_value = mock_llm
+        with patch(
+            "llm_clients.azure_llm.Config.AZURE_ENDPOINT",
+            "https://test.services.ai.azure.com",
+        ):
+            llm = AzureLLM(name="TestAzure")
 
-        llm = AzureLLM(name="TestAzure")
+            assert llm.endpoint == "https://test.services.ai.azure.com/models"
+            call_kwargs = mock_azure_model.call_args[1]
+            assert (
+                call_kwargs["endpoint"] == "https://test.services.ai.azure.com/models"
+            )
 
-        assert llm.endpoint == "https://test.services.ai.azure.com/models"
-        call_kwargs = mock_azure_model.call_args[1]
-        assert call_kwargs["endpoint"] == "https://test.services.ai.azure.com/models"
-
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT",
-        "https://test.services.ai.azure.com/models",
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
     def test_init_does_not_duplicate_models_suffix(
-        self, mock_azure_model, mock_get_config
+        self, mock_azure_config, mock_azure_model
     ):
         """Test that /models suffix is not duplicated if already present."""
-        mock_get_config.return_value = {"model": "gpt-4"}
-        mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
-        mock_azure_model.return_value = mock_llm
+        with patch(
+            "llm_clients.azure_llm.Config.AZURE_ENDPOINT",
+            "https://test.services.ai.azure.com/models",
+        ):
+            llm = AzureLLM(name="TestAzure")
 
-        llm = AzureLLM(name="TestAzure")
+            assert llm.endpoint == "https://test.services.ai.azure.com/models"
+            call_kwargs = mock_azure_model.call_args[1]
+            assert (
+                call_kwargs["endpoint"] == "https://test.services.ai.azure.com/models"
+            )
 
-        assert llm.endpoint == "https://test.services.ai.azure.com/models"
-        call_kwargs = mock_azure_model.call_args[1]
-        assert call_kwargs["endpoint"] == "https://test.services.ai.azure.com/models"
-
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT", "http://test.openai.azure.com"
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    def test_init_invalid_endpoint_raises_error(self, mock_get_config):
+    def test_init_invalid_endpoint_raises_error(self, mock_azure_config):
         """Test that non-HTTPS endpoint raises ValueError."""
-        mock_get_config.return_value = {"model": "gpt-4"}
+        with (
+            patch(
+                "llm_clients.azure_llm.Config.AZURE_ENDPOINT",
+                "http://test.openai.azure.com",
+            ),
+            patch("llm_clients.azure_llm.AzureAIChatCompletionsModel"),
+        ):
+            with pytest.raises(ValueError) as exc_info:
+                AzureLLM(name="TestAzure")
 
-        with pytest.raises(ValueError) as exc_info:
-            AzureLLM(name="TestAzure")
-
-        assert "must start with 'https://'" in str(exc_info.value)
+            assert "must start with 'https://'" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT", "https://test.openai.azure.com"
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
     async def test_generate_response_success_with_system_prompt(
-        self, mock_azure_model, mock_get_config
+        self, mock_azure_config, mock_azure_model
     ):
         """Test successful response generation with system prompt."""
-        mock_get_config.return_value = {"model": "gpt-4"}
         mock_llm = MagicMock()
         mock_llm.model_name = "gpt-4"
 
-        # Create mock response with metadata
-        # Azure treats response_metadata as a dict-like object that also supports
-        # attribute access
-        mock_response = MagicMock()
-        mock_response.text = "This is an Azure response"
-        mock_response.id = "chatcmpl-12345"
-        mock_response.response_metadata = DictWithAttr(
-            {
-                "model": "gpt-4",
-                "token_usage": {
-                    "input_tokens": 10,
-                    "output_tokens": 20,
-                    "total_tokens": 30,
-                },
-                "finish_reason": "stop",
-            }
+        mock_response = create_mock_response(
+            text="This is an Azure response",
+            response_id="chatcmpl-12345",
+            token_usage={
+                "input_tokens": 10,
+                "output_tokens": 20,
+                "total_tokens": 30,
+            },
+            finish_reason="stop",
         )
 
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
@@ -291,24 +224,16 @@ class TestAzureLLM:
         assert "raw_metadata" in metadata
 
     @pytest.mark.asyncio
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT", "https://test.openai.azure.com"
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
     async def test_generate_response_without_system_prompt(
-        self, mock_azure_model, mock_get_config
+        self, mock_azure_config, mock_azure_model
     ):
         """Test response generation without system prompt."""
-        mock_get_config.return_value = {"model": "gpt-4"}
         mock_llm = MagicMock()
         mock_llm.model_name = "gpt-4"
 
-        mock_response = MagicMock()
-        mock_response.text = "Response without system prompt"
-        mock_response.id = "chatcmpl-67890"
-        mock_response.response_metadata = DictWithAttr({"model": "gpt-4"})
+        mock_response = create_mock_response(
+            text="Response without system prompt", response_id="chatcmpl-67890"
+        )
 
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
         mock_azure_model.return_value = mock_llm
@@ -328,26 +253,17 @@ class TestAzureLLM:
         assert call_args[0].content == "Test message"
 
     @pytest.mark.asyncio
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT", "https://test.openai.azure.com"
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
     async def test_generate_response_without_usage_metadata(
-        self, mock_azure_model, mock_get_config
+        self, mock_azure_config, mock_azure_model
     ):
         """Test response when usage metadata is not available."""
-        mock_get_config.return_value = {"model": "gpt-4"}
         mock_llm = MagicMock()
         mock_llm.model_name = "gpt-4"
 
         # Response without usage in metadata
-        mock_response = MagicMock()
-        mock_response.text = "Response"
-        mock_response.id = "chatcmpl-abc"
-        mock_response.response_metadata = DictWithAttr({"model": "gpt-4"})
-        # No token_usage in metadata
+        mock_response = create_mock_response(
+            text="Response", response_id="chatcmpl-abc"
+        )
 
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
         mock_azure_model.return_value = mock_llm
@@ -362,17 +278,10 @@ class TestAzureLLM:
         assert metadata["usage"] == {}
 
     @pytest.mark.asyncio
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT", "https://test.openai.azure.com"
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
     async def test_generate_response_without_response_metadata(
-        self, mock_azure_model, mock_get_config
+        self, mock_azure_config, mock_azure_model
     ):
         """Test response when response_metadata attribute is missing."""
-        mock_get_config.return_value = {"model": "gpt-4"}
         mock_llm = MagicMock()
         mock_llm.model_name = "gpt-4"
 
@@ -397,15 +306,10 @@ class TestAzureLLM:
         assert metadata["finish_reason"] is None
 
     @pytest.mark.asyncio
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT", "https://test.openai.azure.com"
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
-    async def test_generate_response_api_error(self, mock_azure_model, mock_get_config):
+    async def test_generate_response_api_error(
+        self, mock_azure_config, mock_azure_model
+    ):
         """Test error handling when API call fails."""
-        mock_get_config.return_value = {"model": "gpt-4"}
         mock_llm = MagicMock()
         mock_llm.model_name = "gpt-4"
 
@@ -435,17 +339,10 @@ class TestAzureLLM:
         assert metadata["usage"] == {}
 
     @pytest.mark.asyncio
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT", "https://test.openai.azure.com"
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
     async def test_generate_response_404_error_with_helpful_message(
-        self, mock_azure_model, mock_get_config
+        self, mock_azure_config, mock_azure_model
     ):
         """Test that 404 errors provide helpful error messages."""
-        mock_get_config.return_value = {"model": "gpt-4"}
         mock_llm = MagicMock()
         mock_llm.model_name = "gpt-4"
 
@@ -475,24 +372,16 @@ class TestAzureLLM:
         assert "Model name" in response or "deployment name" in response
 
     @pytest.mark.asyncio
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT", "https://test.openai.azure.com"
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
     async def test_generate_response_tracks_timing(
-        self, mock_azure_model, mock_get_config
+        self, mock_azure_config, mock_azure_model
     ):
         """Test that response timing is tracked correctly."""
-        mock_get_config.return_value = {"model": "gpt-4"}
         mock_llm = MagicMock()
         mock_llm.model_name = "gpt-4"
 
-        mock_response = MagicMock()
-        mock_response.text = "Timed response"
-        mock_response.id = "chatcmpl-time"
-        mock_response.response_metadata = DictWithAttr({"model": "gpt-4"})
+        mock_response = create_mock_response(
+            text="Timed response", response_id="chatcmpl-time"
+        )
 
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
         mock_azure_model.return_value = mock_llm
@@ -507,76 +396,42 @@ class TestAzureLLM:
         assert isinstance(metadata["response_time_seconds"], (int, float))
         assert metadata["response_time_seconds"] >= 0
 
-    def test_get_last_response_metadata_returns_copy(self):
+    def test_get_last_response_metadata_returns_copy(
+        self, mock_azure_config, mock_azure_model
+    ):
         """Test that get_last_response_metadata returns a copy."""
-        with patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key"):
-            with patch(
-                "llm_clients.azure_llm.Config.AZURE_ENDPOINT",
-                "https://test.openai.azure.com",
-            ):
-                with patch(
-                    "llm_clients.azure_llm.Config.get_azure_config"
-                ) as mock_get_config:
-                    mock_get_config.return_value = {"model": "gpt-4"}
-                    with patch(
-                        "llm_clients.azure_llm.AzureAIChatCompletionsModel"
-                    ) as mock_azure_model:
-                        mock_llm = MagicMock()
-                        mock_llm.model_name = "gpt-4"
-                        mock_azure_model.return_value = mock_llm
+        llm = AzureLLM(name="TestAzure")
+        llm.last_response_metadata = {"test": "value"}
 
-                        llm = AzureLLM(name="TestAzure")
-                        llm.last_response_metadata = {"test": "value"}
+        metadata1 = llm.get_last_response_metadata()
+        metadata2 = llm.get_last_response_metadata()
 
-                        metadata1 = llm.get_last_response_metadata()
-                        metadata2 = llm.get_last_response_metadata()
+        # Should be equal but not the same object
+        assert metadata1 == metadata2
+        assert metadata1 is not metadata2
 
-                        # Should be equal but not the same object
-                        assert metadata1 == metadata2
-                        assert metadata1 is not metadata2
+        # Modifying returned copy shouldn't affect internal state
+        metadata1["modified"] = True
+        assert "modified" not in llm.last_response_metadata
 
-                        # Modifying returned copy shouldn't affect internal state
-                        metadata1["modified"] = True
-                        assert "modified" not in llm.last_response_metadata
-
-    def test_set_system_prompt(self):
+    def test_set_system_prompt(self, mock_azure_config, mock_azure_model):
         """Test set_system_prompt method."""
-        with patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key"):
-            with patch(
-                "llm_clients.azure_llm.Config.AZURE_ENDPOINT",
-                "https://test.openai.azure.com",
-            ):
-                with patch(
-                    "llm_clients.azure_llm.Config.get_azure_config"
-                ) as mock_get_config:
-                    mock_get_config.return_value = {"model": "gpt-4"}
-                    with patch(
-                        "llm_clients.azure_llm.AzureAIChatCompletionsModel"
-                    ) as mock_azure_model:
-                        mock_llm = MagicMock()
-                        mock_llm.model_name = "gpt-4"
-                        mock_azure_model.return_value = mock_llm
+        llm = AzureLLM(
+            model_name="azure-gpt-4",
+            name="TestAzure",
+            system_prompt="Initial prompt",
+        )
+        assert llm.system_prompt == "Initial prompt"
 
-                        llm = AzureLLM(name="TestAzure", system_prompt="Initial prompt")
-                        assert llm.system_prompt == "Initial prompt"
-
-                        llm.set_system_prompt("Updated prompt")
-                        assert llm.system_prompt == "Updated prompt"
+        llm.set_system_prompt("Updated prompt")
+        assert llm.system_prompt == "Updated prompt"
 
     @pytest.mark.asyncio
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT", "https://test.openai.azure.com"
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
     async def test_generate_structured_response_success(
-        self, mock_azure_model, mock_get_config
+        self, mock_azure_config, mock_azure_model
     ):
         """Test successful structured response generation."""
-        mock_get_config.return_value = {"model": "gpt-4"}
         mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
 
         # Create a test Pydantic model
         class TestResponse(BaseModel):
@@ -609,19 +464,11 @@ class TestAzureLLM:
         assert "response_time_seconds" in metadata
 
     @pytest.mark.asyncio
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT", "https://test.openai.azure.com"
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
     async def test_generate_structured_response_error(
-        self, mock_azure_model, mock_get_config
+        self, mock_azure_config, mock_azure_model
     ):
         """Test error handling in structured response generation."""
-        mock_get_config.return_value = {"model": "gpt-4"}
         mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
 
         class TestResponse(BaseModel):
             answer: str
@@ -649,31 +496,19 @@ class TestAzureLLM:
         assert "Structured output failed" in metadata["error"]
 
     @pytest.mark.asyncio
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT", "https://test.openai.azure.com"
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
     async def test_generate_response_with_conversation_history(
-        self, mock_azure_model, mock_get_config
+        self, mock_azure_config, mock_azure_model
     ):
         """Test generate_response with conversation_history parameter."""
-        mock_get_config.return_value = {"model": "gpt-4"}
         mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
 
-        mock_response = MagicMock()
-        mock_response.text = "Response with history"
-        mock_response.id = "chatcmpl-history"
-        mock_response.response_metadata = DictWithAttr(
-            {
-                "model": "gpt-4",
-                "token_usage": {
-                    "input_tokens": 50,
-                    "output_tokens": 20,
-                },
-            }
+        mock_response = create_mock_response(
+            text="Response with history",
+            response_id="chatcmpl-history",
+            token_usage={
+                "input_tokens": 50,
+                "output_tokens": 20,
+            },
         )
 
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
@@ -713,22 +548,11 @@ class TestAzureLLM:
         assert len(messages) == 3
 
     @pytest.mark.asyncio
-    @patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key")
-    @patch(
-        "llm_clients.azure_llm.Config.AZURE_ENDPOINT", "https://test.openai.azure.com"
-    )
-    @patch("llm_clients.azure_llm.Config.get_azure_config")
-    @patch("llm_clients.azure_llm.AzureAIChatCompletionsModel")
-    async def test_timestamp_format(self, mock_azure_model, mock_get_config):
+    async def test_timestamp_format(self, mock_azure_config, mock_azure_model):
         """Test that timestamp is in ISO format."""
-        mock_get_config.return_value = {"model": "gpt-4"}
         mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
 
-        mock_response = MagicMock()
-        mock_response.text = "Test"
-        mock_response.id = "chatcmpl-ts"
-        mock_response.response_metadata = DictWithAttr({"model": "gpt-4"})
+        mock_response = create_mock_response(text="Test", response_id="chatcmpl-ts")
 
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
         mock_azure_model.return_value = mock_llm
