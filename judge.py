@@ -49,6 +49,7 @@ async def main(args) -> Optional[str]:
         )
         await judge_single_conversation(judge, conversation, args.output)
         # Single conversation mode doesn't need output folder for pipeline
+        print("ℹ️  Single conversation mode: output folder not needed for pipeline")
         return None
     else:
         # Load all conversations at startup
