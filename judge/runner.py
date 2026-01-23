@@ -434,7 +434,7 @@ async def judge_conversations(
     max_concurrent: Optional[int] = None,
     per_judge: bool = False,
     verbose_workers: bool = False,
-) -> List[Dict[str, Any]]:
+) -> tuple[List[Dict[str, Any]], str]:
     """
     Judge conversations with multiple judge models.
 
@@ -454,8 +454,9 @@ async def judge_conversations(
         per_judge: If True, max_concurrent applies per judge model; if False, total
 
     Returns:
-        Flattened list of evaluation results with one row per
-        (conversation, judge_model, judge_instance) tuple
+        Tuple of (results, output_folder) where results is a flattened list of
+        evaluation results with one row per (conversation, judge_model, judge_instance)
+        tuple, and output_folder is the path where evaluations were saved
     """
     if output_folder is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
@@ -519,7 +520,7 @@ async def judge_conversations(
     if verbose:
         print(f"✅ Completed {len(results)} evaluations → {output_folder}/")
 
-    return results
+    return results, output_folder
 
 
 async def judge_single_conversation(

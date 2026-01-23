@@ -67,6 +67,36 @@ Where
 - `j` is the flag for selecting the judge model(s)
 - `jep` are the judge model extra parameters (optional)
 
+7. **Score and visualize the results**:
+   ```bash
+   python -m judge.score -r evaluations/{YOUR_EVAL_FOLDER}/results.csv
+   ```
+
+## Quick Start: End-to-End Pipeline
+
+For convenience, you can run the entire workflow (generation → evaluation → scoring) with a single command:
+
+```bash
+python3 run_pipeline.py \
+  --user-agent claude-sonnet-4-5-20250929 \
+  --provider-agent gpt-4o \
+  --runs 2 \
+  --turns 10 \
+  --judge-model claude-sonnet-4-5-20250929 \
+  --max-personas 5
+```
+
+The pipeline script:
+- Runs `generate.py` with your specified arguments
+- Automatically passes the output folder to `judge.py`
+- Automatically runs `judge/score.py` on the evaluation results
+- Displays a summary with all output locations
+
+For help and all available options:
+```bash
+python3 run_pipeline.py --help
+```
+
 ### Using Extra Parameters
 
 Both `generate.py` and `judge.py` support extra parameters for fine-tuning model behavior:
@@ -74,7 +104,7 @@ Both `generate.py` and `judge.py` support extra parameters for fine-tuning model
 **Generate with temperature control:**
 ```bash
 # Lower temperature (0.3) for more consistent responses
-python generate.py -u gpt-4o -uep temperature=0.3 -p claude-3-5-sonnet-20241022 -pep temperature=0.5 -t 6 -r 2
+python generate.py -u gpt-4o -uep temperature=0.3 -p claude-sonnet-4-5-20250929 -pep temperature=0.5 -t 6 -r 2
 
 # Higher temperature (1.0) with max tokens
 python generate.py -u gpt-4o -uep temperature=1,max_tokens=2000 -p gpt-4o -pep temperature=1 -t 6 -r 1
@@ -83,7 +113,7 @@ python generate.py -u gpt-4o -uep temperature=1,max_tokens=2000 -p gpt-4o -pep t
 **Judge with custom parameters:**
 ```bash
 # Use lower temperature for more consistent evaluation
-python judge.py -f conversations/my_experiment -j claude-3-5-sonnet-20241022 -jep temperature=0.3
+python judge.py -f conversations/my_experiment -j claude-sonnet-4-5-20250929 -jep temperature=0.3
 
 # Multiple parameters
 python judge.py -f conversations/my_experiment -j gpt-4o -jep temperature=0.5,max_tokens=1500
