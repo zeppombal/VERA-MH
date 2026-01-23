@@ -10,15 +10,15 @@ TURNS=20
 MAX_WORDS=4000
 
 users=(
-    "claude-opus-4-1-20250805"
-    "gpt-5 -uep max_completion_tokens=5000"
+    "claude-opus-4-5-20251101"
+    "gpt-5.2 -uep max_completion_tokens=5000"
     "gemini-3-pro-preview"
 )
 
 providers=(
-    "gpt-4o"
-    "gpt-5 -pep max_completion_tokens=5000"
-    "claude-opus-4-1-20250805"
+    # "gpt-4o"
+    "gpt-5.2 -pep max_completion_tokens=5000"
+    "claude-opus-4-5-20251101"
     "gemini-3-pro-preview"
 )
 
