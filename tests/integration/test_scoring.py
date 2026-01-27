@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -11,10 +12,12 @@ from typing import Any, Dict
 import pytest
 
 # ruff: noqa: E402
-repo_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(repo_root))
+REPO_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(REPO_ROOT))
 
 import generate
+from judge.rubric_config import RubricConfig, load_conversations
+from judge.runner import judge_conversations as judge_conversations_fn
 
 # Test configuration constants
 TEST_CONFIG = {
@@ -38,9 +41,8 @@ def validate_test_environment():
         pytest.skip(f"Missing required environment variables: {missing}")
 
     # Validate repo structure
-    repo_root = Path(__file__).parent.parent.parent
     required_files = ["generate.py", "judge.py", "data/personas.tsv"]
-    missing_files = [f for f in required_files if not (repo_root / f).exists()]
+    missing_files = [f for f in required_files if not (REPO_ROOT / f).exists()]
     if missing_files:
         pytest.skip(f"Missing required files: {missing_files}")
 
@@ -58,32 +60,51 @@ def test_workspace():
 @pytest.fixture
 def repo_root():
     """Get repository root path."""
-    return Path(__file__).parent.parent.parent
+    return REPO_ROOT
 
 
+@pytest.mark.integration
 class TestVERAMHPipeline:
     """Integration tests for the complete VERA-MH pipeline."""
 
     def run_cmd(
-        self, cmd: list[str], cwd: Path | None = None
+        self, cmd: list[str], cwd: Path | None = None, verbose: bool = False
     ) -> subprocess.CompletedProcess:
-        """Run a command and return the completed process with error checking."""
+        """Run a command and return the completed process with error checking.
+
+        Args:
+            cmd: Command and arguments to run
+            cwd: Working directory for the command
+            verbose: Whether to log command output (useful for debugging test failures)
+        """
+        logger = logging.getLogger(__name__)
+
         p = subprocess.run(
             cmd,
             cwd=str(cwd) if cwd else None,
             capture_output=True,
             text=True,
         )
-        print("cmd:", " ".join(map(str, cmd)))
-        print("returncode:", p.returncode)
-        if p.stdout:
-            print("stdout:\n", p.stdout)
-        if p.stderr:
-            print("stderr:\n", p.stderr)
+
+        if verbose:
+            logger.info("Command: %s", " ".join(map(str, cmd)))
+            logger.info("Return code: %d", p.returncode)
+            if p.stdout:
+                logger.info("STDOUT:\n%s", p.stdout)
+            if p.stderr:
+                logger.info("STDERR:\n%s", p.stderr)
+
+        # Always log errors, regardless of verbose setting
+        if p.returncode != 0:
+            logger.error("Command failed: %s", " ".join(map(str, cmd)))
+            logger.error("Return code: %d", p.returncode)
+            if p.stderr:
+                logger.error("STDERR:\n%s", p.stderr)
+
         p.check_returncode()
         return p
 
-    def generate_one_persona(
+    def generate_one_conversation(
         self,
         persona_name: str,
         member_model: str,
@@ -94,7 +115,29 @@ class TestVERAMHPipeline:
         temp_member: float,
         temp_provider: float,
     ) -> Path:
-        """Generate conversations for one persona and return directory."""
+        """Generate conversations for one persona and return directory.
+
+        This method assumes generate.main() creates exactly one new directory when:
+        - persona_names contains only one persona
+        - max_concurrent=1 to avoid race conditions
+        - runs_per_prompt creates conversations in a single directory
+
+        Args:
+            persona_name: Single persona to generate conversations for
+            member_model: Model for the user/member role
+            provider_model: Model for the assistant/provider role
+            conversations_root: Root directory for conversation output
+            turns: Number of conversation turns
+            runs: Number of conversation runs per persona
+            temp_member: Temperature for member model
+            temp_provider: Temperature for provider model
+
+        Returns:
+            Path to the generated conversation directory
+
+        Raises:
+            RuntimeError: If no directories or multiple directories are created
+        """
         conversations_root.mkdir(parents=True, exist_ok=True)
 
         persona_model_config = {
@@ -120,7 +163,7 @@ class TestVERAMHPipeline:
                 max_turns=turns,
                 runs_per_prompt=runs,
                 folder_name=str(conversations_root),
-                max_concurrent=1,
+                max_concurrent=1,  # prevent concurrent directory creation
                 verbose=True,
             )
         )
@@ -130,10 +173,33 @@ class TestVERAMHPipeline:
         created_dirs = new_subdirs - existing_subdirs
 
         if not created_dirs:
-            raise RuntimeError(f"No new directories created in {conversations_root}")
-        if len(created_dirs) > 1:
+            # More helpful error message with debugging info
+            all_dirs = (
+                list(conversations_root.iterdir())
+                if conversations_root.exists()
+                else []
+            )
             raise RuntimeError(
-                f"Multiple directories created: {created_dirs}. Expected only one."
+                f"No new directories created in {conversations_root}.\n"
+                f"Expected: One new directory for persona '{persona_name}'\n"
+                f"All items in directory: {[p.name for p in all_dirs]}\n"
+                f"Existing directories before: {sorted(existing_subdirs)}\n"
+                f"Check if generate.main() completed successfully."
+            )
+
+        if len(created_dirs) > 1:
+            # Provide more context about what happened
+            raise RuntimeError(
+                f"Multiple directories created: {sorted(created_dirs)}.\n"
+                f"Expected exactly one directory for persona '{persona_name}'.\n"
+                f"This could indicate:\n"
+                f"  - Multiple personas were processed "
+                f"(check persona_names parameter)\n"
+                f"  - Concurrent execution created race conditions "
+                f"(check max_concurrent=1)\n"
+                f"  - Multiple runs created separate directories "
+                f"(unexpected behavior)\n"
+                f"Consider using a more specific directory detection method."
             )
 
         new_dir_name = created_dirs.pop()
@@ -143,51 +209,63 @@ class TestVERAMHPipeline:
         if not conv_dir.exists() or not conv_dir.is_dir():
             raise RuntimeError(f"Generated directory {conv_dir} is not valid")
 
+        # Additional validation: check if directory has expected content
+        conv_files = list(conv_dir.glob("*.txt")) + list(conv_dir.glob("*.json"))
+        if not conv_files:
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Generated directory {conv_dir} exists but contains no "
+                f"conversation files (.txt/.json). "
+                f"Contents: {[f.name for f in conv_dir.iterdir()]}"
+            )
+
         print(f"Generated conversations in {conv_dir}")
         return conv_dir
 
-    def judge_conversations(
+    async def judge_conversations(
         self,
         conversations_dir: Path,
         judge_model: str,
         repo_root: Path,
+        test_workspace: Path,
         instances: int = 5,
     ) -> Path:
-        """Judge conversations and return the evaluation directory."""
+        """Judge conversations and return the evaluation directory.
 
-        # Store the evaluations state before judging
-        eval_root = repo_root / "evaluations"
-        eval_root.mkdir(exist_ok=True)
-        existing_subdirs = set(p.name for p in eval_root.iterdir() if p.is_dir())
+        Args:
+            conversations_dir: Directory containing conversation files
+            judge_model: Model to use for judging
+            repo_root: Repository root (for rubric data only)
+            test_workspace: Test workspace for evaluation outputs
+                          (prevents repo pollution)
+            instances: Number of judge instances
 
-        self.run_cmd(
-            [
-                sys.executable,
-                "judge.py",
-                "-f",
-                str(conversations_dir),
-                "-j",
-                f"{judge_model}:{instances}",
-            ],
-            cwd=repo_root,
+        Returns:
+            Path to the evaluation directory in test_workspace
+        """
+
+        # Load conversations and rubric config
+        conversations = await load_conversations(str(conversations_dir))
+        rubric_config = await RubricConfig.load(rubric_folder=str(repo_root / "data"))
+
+        # Use direct function call instead of subprocess
+        judge_models = {judge_model: instances}
+        folder_name = conversations_dir.name
+        eval_root = test_workspace / "evaluations"  # Use test workspace, not repo
+        eval_root.mkdir(exist_ok=True)  # Ensure directory exists
+
+        _, output_folder = await judge_conversations_fn(
+            judge_models=judge_models,
+            conversations=conversations,
+            rubric_config=rubric_config,
+            output_root=str(eval_root),
+            conversation_folder_name=folder_name,
+            verbose=True,
         )
 
-        # Find the newly created evaluation directory
-        new_subdirs = set(p.name for p in eval_root.iterdir() if p.is_dir())
-        created_dirs = new_subdirs - existing_subdirs
+        eval_dir = Path(output_folder)
 
-        if not created_dirs:
-            raise RuntimeError(f"No new evaluation directories created in {eval_root}")
-        if len(created_dirs) > 1:
-            raise RuntimeError(
-                f"Multiple evaluation directories created: {created_dirs}. "
-                f"Expected only one."
-            )
-
-        new_dir_name = created_dirs.pop()
-        eval_dir = eval_root / new_dir_name
-
-        # assert that judge.py created the expected output files
+        # assert that judge created the expected output files
         expected_files = ["results.csv"]
         for expected_file in expected_files:
             file_path = eval_dir / expected_file
@@ -201,9 +279,49 @@ class TestVERAMHPipeline:
         with open(results_csv, "r") as f:
             content = f.read()
             assert len(content.strip()) > 0, "results.csv should contain data"
-            # Basic CSV validation - should have at least a header line
+
             lines = content.strip().split("\n")
-            assert len(lines) >= 1, "results.csv should have at least a header line"
+            assert len(lines) >= 2, (
+                f"results.csv should have header + at least one data row, "
+                f"found {len(lines)} lines"
+            )
+
+            # Validate CSV header structure
+            header = lines[0].strip()
+            required_columns = [
+                "filename",
+                "run_id",
+                "judge_model",
+                "judge_instance",
+                "judge_id",
+            ]
+            header_columns = [col.strip() for col in header.split(",")]
+
+            for req_col in required_columns:
+                assert req_col in header_columns, (
+                    f"results.csv header missing required column '{req_col}'. "
+                    f"Found columns: {header_columns}"
+                )
+
+            # Validate that data rows have the same number of columns as header
+            for i, line in enumerate(lines[1:], 1):
+                if line.strip():  # Skip empty lines
+                    data_columns = line.split(",")
+                    assert len(data_columns) == len(header_columns), (
+                        f"Row {i} has {len(data_columns)} columns, "
+                        f"expected {len(header_columns)} (same as header)"
+                    )
+
+                    # Basic validation that filename and run_id are not empty
+                    filename_idx = header_columns.index("filename")
+                    run_id_idx = header_columns.index("run_id")
+
+                    assert data_columns[
+                        filename_idx
+                    ].strip(), f"Row {i}: filename column should not be empty"
+                    assert data_columns[
+                        run_id_idx
+                    ].strip(), f"Row {i}: run_id column should not be empty"
 
         print(f"Judge created evaluation files in {eval_dir}")
         return eval_dir
@@ -222,6 +340,7 @@ class TestVERAMHPipeline:
         self.run_cmd(
             [sys.executable, "-m", "judge.score", "-r", str(results_csv)],
             cwd=repo_root,
+            verbose=False,  # Only verbose on failure (logged automatically)
         )
 
         # Read the JSON output from the scores.json file instead of stdout
@@ -232,26 +351,18 @@ class TestVERAMHPipeline:
         with open(scores_json_file, "r") as f:
             scores_data = json.load(f)
 
-        # Extract the aggregates section for compatibility with existing tests
-        if "aggregates" in scores_data:
-            return scores_data
-        else:
-            # If the structure is different, adapt it
-            # Looking at the output, we need to build the expected structure
-            return {
-                "aggregates": {
-                    "overall_best_practice_pct": scores_data.get(
-                        "overall_best_practice_pct", 0.0
-                    ),
-                    "overall_damaging_pct": scores_data.get(
-                        "overall_damaging_pct", 0.0
-                    ),
-                    "worst_band": scores_data.get("worst_band", "Best Practice"),
-                },
-                "raw_scores": scores_data,
-            }
+        # judge/score.py always returns a dict with "aggregates" key (lines 322-332)
+        # No fallback needed - if "aggregates" is missing, it indicates a bug
+        if "aggregates" not in scores_data:
+            raise ValueError(
+                f"Invalid scores.json structure: missing 'aggregates' key. "
+                f"This indicates a bug in judge/score.py. "
+                f"Found keys: {list(scores_data.keys())}"
+            )
 
-    def run_complete_pipeline(
+        return scores_data
+
+    async def run_complete_pipeline(
         self,
         persona: str,
         test_workspace: Path,
@@ -266,7 +377,7 @@ class TestVERAMHPipeline:
         conversations_root = test_workspace / "conversations"
 
         # Generate conversations
-        conv_dir = self.generate_one_persona(
+        conv_dir = self.generate_one_conversation(
             persona_name=persona,
             member_model=config["MEMBER_MODEL"],
             provider_model=config["PROVIDER_MODEL"],
@@ -286,10 +397,11 @@ class TestVERAMHPipeline:
             judge_model_name, instances_str = judge_model_name.split(":", 1)
             instances = int(instances_str)
 
-        eval_dir = self.judge_conversations(
+        eval_dir = await self.judge_conversations(
             conversations_dir=conv_dir,
             judge_model=judge_model_name,
             repo_root=repo_root,
+            test_workspace=test_workspace,
             instances=instances,
         )
 
@@ -301,13 +413,14 @@ class TestVERAMHPipeline:
 
         return score_json
 
+    @pytest.mark.asyncio
     @pytest.mark.timeout(TEST_CONFIG["TIMEOUT_SECONDS"])
-    def test_complete_pipeline_single_persona(self, test_workspace, repo_root):
+    async def test_complete_pipeline_single_persona(self, test_workspace, repo_root):
         """Test the complete pipeline with a single persona."""
         persona = "Sky"
 
         start_time = time.time()
-        result = self.run_complete_pipeline(persona, test_workspace, repo_root)
+        result = await self.run_complete_pipeline(persona, test_workspace, repo_root)
         duration = time.time() - start_time
 
         # Assert structure exists
@@ -357,11 +470,12 @@ class TestVERAMHPipeline:
         print(f"   Damaging: {damaging_pct:.1f}%")
         print(f"   Worst band: {worst_band}")
 
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("persona", ["Sky", "Alix"])
     @pytest.mark.timeout(TEST_CONFIG["TIMEOUT_SECONDS"])
-    def test_individual_personas(self, persona, test_workspace, repo_root):
+    async def test_individual_personas(self, persona, test_workspace, repo_root):
         """Test that each persona works individually."""
-        result = self.run_complete_pipeline(persona, test_workspace, repo_root)
+        result = await self.run_complete_pipeline(persona, test_workspace, repo_root)
 
         # Basic validation
         assert "aggregates" in result
@@ -381,9 +495,11 @@ class TestVERAMHPipeline:
             f"(BP: {best_practice_pct:.1f}%, D: {damaging_pct:.1f}%, WB: {worst_band})"
         )
 
-    def test_scoring_thresholds(self, test_workspace, repo_root):
+    @pytest.mark.asyncio
+    @pytest.mark.timeout(TEST_CONFIG["TIMEOUT_SECONDS"])
+    async def test_scoring_thresholds(self, test_workspace, repo_root):
         """Test that scoring results fall within expected ranges."""
-        result = self.run_complete_pipeline("Ray", test_workspace, repo_root)
+        result = await self.run_complete_pipeline("Ray", test_workspace, repo_root)
         aggregates = result["aggregates"]
 
         # Expected ranges based on 20-run baseline analysis for Ray persona
@@ -450,7 +566,7 @@ class TestVERAMHPipeline:
 
         print("All scoring metrics within expected ranges")
 
-    def collect_baseline_scores(
+    async def collect_baseline_scores(
         self, test_workspace, repo_root, persona="Ray", num_runs=10
     ):
         """Collect baseline scores by running the pipeline multiple times."""
@@ -464,7 +580,7 @@ class TestVERAMHPipeline:
         for run_num in range(1, num_runs + 1):
             print(f"\n--- Run {run_num}/{num_runs} ---")
             try:
-                result = self.run_complete_pipeline(
+                result = await self.run_complete_pipeline(
                     persona,
                     test_workspace,
                     repo_root,
@@ -530,19 +646,32 @@ class TestVERAMHPipeline:
 
         return all_scores
 
-    @pytest.mark.timeout(TEST_CONFIG["TIMEOUT_SECONDS"] * 15)  # Extra time for 10 runs
-    def test_collect_baseline_scores_for_thresholds(self, test_workspace, repo_root):
+    @pytest.mark.asyncio
+    @pytest.mark.timeout(TEST_CONFIG["TIMEOUT_SECONDS"] * 10)  # Extra time for 10 runs
+    @pytest.mark.skip(
+        reason="Utility function to recalibrate thresholds - run manually when needed"
+    )
+    async def test_collect_baseline_scores_for_thresholds(
+        self, test_workspace, repo_root
+    ):
         """Collect baseline scores to establish test thresholds.
-        Run this manually to gather data."""
-        self.collect_baseline_scores(
+
+        This is a utility function used to gather empirical data for threshold
+        calibration. It's skipped by default to avoid long test runs. To use:
+        1. Remove the @pytest.mark.skip decorator
+        2. Run: pytest -k test_collect_baseline_scores_for_thresholds -v -s
+        3. Update EXPECTED_RANGES in test_scoring_thresholds() with the output
+        """
+        await self.collect_baseline_scores(
             test_workspace, repo_root, persona="Ray", num_runs=10
         )
 
+    @pytest.mark.timeout(TEST_CONFIG["TIMEOUT_SECONDS"])
     def test_conversation_generation_only(self, test_workspace, repo_root):
         """Test just the conversation generation step."""
         conversations_root = test_workspace / "conversations"
 
-        conv_dir = self.generate_one_persona(
+        conv_dir = self.generate_one_conversation(
             persona_name="Ray",
             member_model=TEST_CONFIG["MEMBER_MODEL"],
             provider_model=TEST_CONFIG["PROVIDER_MODEL"],
@@ -553,38 +682,24 @@ class TestVERAMHPipeline:
             temp_provider=TEST_CONFIG["TEMP_PROVIDER"],
         )
 
-        # Debug: Print what was actually created
-        print(f"Generated conversation directory: {conv_dir}")
-        print(f"Directory exists: {conv_dir.exists()}")
-        if conv_dir.exists():
-            print(f"Directory contents: {list(conv_dir.iterdir())}")
-
         # Assert conversation directory exists and contains files
         assert conv_dir.exists(), "Conversation directory should exist"
         assert conv_dir.is_dir(), "Conversation path should be a directory"
 
-        # Look for conversation files (might be JSON, CSV, or other formats)
-        conv_files = list(conv_dir.glob("*"))  # Get all files first
-        print(f"All files in conv_dir: {conv_files}")
-
-        # Try different file patterns
+        # Look for conversation files with multiple extensions
         json_files = list(conv_dir.glob("*.json"))
         csv_files = list(conv_dir.glob("*.csv"))
         txt_files = list(conv_dir.glob("*.txt"))
         all_conversation_files = json_files + csv_files + txt_files
 
-        print(f"JSON files: {json_files}")
-        print(f"CSV files: {csv_files}")
-        print(f"TXT files: {txt_files}")
-
-        # Also check subdirectories
+        # Check subdirectories for additional files
         subdirs = [p for p in conv_dir.iterdir() if p.is_dir()]
-        if subdirs:
-            print(f"Subdirectories found: {subdirs}")
-            for subdir in subdirs:
-                subdir_files = list(subdir.glob("*"))
-                print(f"Files in {subdir.name}: {subdir_files}")
-                all_conversation_files.extend(subdir_files)
+        for subdir in subdirs:
+            # Apply same file filtering as parent directory
+            subdir_json = list(subdir.glob("*.json"))
+            subdir_csv = list(subdir.glob("*.csv"))
+            subdir_txt = list(subdir.glob("*.txt"))
+            all_conversation_files.extend(subdir_json + subdir_csv + subdir_txt)
 
         assert len(all_conversation_files) > 0, (
             f"Should contain at least one conversation file. "
@@ -602,7 +717,7 @@ class TestVERAMHPipeline:
             readable_file is not None
         ), "Should have at least one readable conversation file"
 
-        # Try to read the file to verify it's valid
+        # Validate file content
         try:
             if readable_file.suffix == ".json":
                 with open(readable_file, "r") as f:
@@ -616,19 +731,21 @@ class TestVERAMHPipeline:
                     content = f.read()
                     assert len(content) > 0, "File should not be empty"
         except Exception as e:
-            print(f"Warning: Could not read file {readable_file}: {e}")
+            # Log warning but don't fail test - content validation is secondary
+            print(f"Warning: Could not validate file {readable_file}: {e}")
 
-        print(
-            f"Generated {len(all_conversation_files)} conversation files in {conv_dir}"
-        )
+        print(f"✓ Generated {len(all_conversation_files)} conversation files")
 
+    @pytest.mark.timeout(TEST_CONFIG["TIMEOUT_SECONDS"])
     def test_pipeline_error_handling(self, test_workspace, repo_root):
         """Test pipeline handles errors gracefully."""
         conversations_root = test_workspace / "conversations"
 
-        # Test with invalid model
-        with pytest.raises((subprocess.CalledProcessError, Exception)):
-            self.generate_one_persona(
+        # Test with invalid model - should fail during API call or model validation
+        # Possible exceptions: RuntimeError (from generate_one_conversation),
+        # API client exceptions, or other async/model-related errors
+        with pytest.raises((RuntimeError, ValueError, Exception)):
+            self.generate_one_conversation(
                 persona_name="Ray",
                 member_model="invalid-model-name",
                 provider_model=TEST_CONFIG["PROVIDER_MODEL"],
@@ -674,17 +791,18 @@ class TestVERAMHPipeline:
 
         # Mock sys.argv to provide arguments to run_pipeline (not mocking API calls)
         with patch("sys.argv", test_args):
-            # Skip run_pipeline.py import since file doesn't exist in current branch
-            pytest.skip("run_pipeline.py not available in current branch")
-            # from run_pipeline import main as pipeline_main
+            from run_pipeline import main as pipeline_main
 
             # Change to the repo directory for proper relative paths
             original_cwd = os.getcwd()
             os.chdir(repo_root)
 
             try:
-                # Skip: run_pipeline.py not available
-                pass
+                # Run the complete pipeline with real API calls
+                await pipeline_main()
+
+                # Pipeline should complete without raising exceptions
+                print("✓ run_pipeline.py execution completed successfully")
 
                 # Verify expected outputs exist
                 # run_pipeline should create conversations and evaluations folders
@@ -788,7 +906,7 @@ class TestVERAMHPipeline:
 
         # Test 1: Run individual calls (existing method)
         print("\n=== Running individual calls ===")
-        individual_result = self.run_complete_pipeline(
+        individual_result = await self.run_complete_pipeline(
             "Ray",
             test_workspace,
             repo_root,
@@ -822,16 +940,13 @@ class TestVERAMHPipeline:
         ]
 
         with patch("sys.argv", test_args):
-            # Skip run_pipeline.py import since file doesn't exist in current branch
-            pytest.skip("run_pipeline.py not available in current branch")
-            # from run_pipeline import main as pipeline_main
+            from run_pipeline import main as pipeline_main
 
             original_cwd = os.getcwd()
             os.chdir(repo_root)
 
             try:
-                # Skip: run_pipeline.py not available
-                pass
+                await pipeline_main()
 
                 # Find the evaluation folder created by run_pipeline
                 evaluations_dir = None
@@ -895,38 +1010,3 @@ class TestVERAMHPipeline:
         # 1. Different conversation generations will have different content
         # 2. LLM evaluation has inherent variability
         # 3. The goal is to validate both methods work, not that they're identical
-
-
-# Script execution mode for backwards compatibility
-if __name__ == "__main__":
-    """Run a quick integration test when executed as a script."""
-    print("Running integration test in script mode...")
-
-    # Create temporary workspace
-    with tempfile.TemporaryDirectory(prefix="vera_integration_") as tmpdir:
-        test_workspace = Path(tmpdir)
-        repo_root = Path(__file__).parent.parent.parent
-
-        # Initialize test instance
-        test_instance = TestVERAMHPipeline()
-
-        try:
-            # Run a single persona test
-            print("Testing Ray persona...")
-            result = test_instance.run_complete_pipeline(
-                "Ray", test_workspace, repo_root, TEST_CONFIG
-            )
-
-            aggregates = result["aggregates"]
-            print("\n" + "=" * 60)
-            print("INTEGRATION TEST PASSED")
-            print(
-                f"Ray → best_practice={aggregates['overall_best_practice_pct']:.1f}% | "
-                f"damaging={aggregates['overall_damaging_pct']:.1f}% | "
-                f"worst_band={aggregates['worst_band']}"
-            )
-            print("=" * 60)
-
-        except Exception as e:
-            print(f"\n INTEGRATION TEST FAILED: {e}")
-            raise
