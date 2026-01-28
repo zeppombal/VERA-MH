@@ -26,6 +26,32 @@ There are known limitations of the current structure, which will be simplified a
 - [First Announcement](https://www.springhealth.com/blog/introducing-vera-mh-new-standard-ethical-ai-mental-healthcare)
 
 # Getting started
+## Quick Start: End-to-End Pipeline
+
+For convenience, you can run the entire workflow (generation → evaluation → scoring) with a single command:
+
+```bash
+python3 run_pipeline.py \
+  --user-agent claude-sonnet-4-5-20250929 \
+  --provider-agent gpt-4o \
+  --runs 2 \
+  --turns 10 \
+  --judge-model claude-sonnet-4-5-20250929 \
+  --max-personas 5
+```
+
+The pipeline script:
+- Runs `generate.py` with your specified arguments
+- Automatically passes the output folder to `judge.py`
+- Automatically runs `judge/score.py` on the evaluation results
+- Displays a summary with all output locations
+
+For help and all available options:
+```bash
+python3 run_pipeline.py --help
+```
+
+## Step-by-step
 0. **Install uv** (if not already installed):
    ```bash
    pip install uv
@@ -69,14 +95,14 @@ There are known limitations of the current structure, which will be simplified a
 
 | Short | Full | Description |
 |-------|------|-------------|
-| `-u` | `--user-agent` | Model for the user-agent (persona). Examples: `claude-3-5-sonnet-20241022`, `gemini-1.5-pro`, `llama3:8b` |
-| `-uep` | `--user-agent-extra-params` | Extra parameters for the user-agent. Examples: `temperature=0.7`, `max_tokens=1000` |
-| `-p` | `--provider-agent` | Model for the provider-agent (AI system being evaluated). Examples: `claude-3-5-sonnet-20241022`, `gemini-1.5-pro`, `llama3:8b` |
-| `-pep` | `--provider-agent-extra-params` | Extra parameters for the provider-agent. Examples: `temperature=0.7`, `max_tokens=1000` |
+| `-u` | `--user-agent` | Model for the user-agent (persona). Examples: `claude-sonnet-4-5-20250929`, `gemini-3-pro-preview` |
+| `-uep` | `--user-agent-extra-params` | Extra parameters for the user-agent. Examples: `temperature=0.7,max_tokens=1000` |
+| `-p` | `--provider-agent` | Model for the provider-agent (AI system being evaluated). Examples: `claude-sonnet-4-5-20250929`, `gemini-3-pro-preview` |
+| `-pep` | `--provider-agent-extra-params` | Extra parameters for the provider-agent. Examples: `temperature=0.7,max_tokens=1000` |
 | `-t` | `--turns` | Number of turns per conversation (required) (e.g., 2 turns means both persona and provider spoke once) |
-| `-r` | `--runs` | Number of runs per prompt (required) |
+| `-r` | `--runs` | Number of runs per user persona (required) |
 | `-f` | `--folder-name` | Folder name for output (defaults to `conversations` with a subfolder named based on other parameters and datetime) |
-| `-c` | `--max-concurrent` | Maximum number of concurrent conversations (defaults to None; use this if the provider you're testing times out) |
+| `-c` | `--max-concurrent` | Maximum number of concurrent conversations (defaults to None (no limit); use this if the provider you're testing times out) |
 | `-w` | `--max-total-words` | Optional maximum total words across all responses in a conversation |
 | `-i` | `--run-id` | Run ID for the conversations (if not provided, a default will be generated) |
 | `-mp` | `--max-personas` | Maximum number of personas to use (limits personas loaded from [data/personas.tsv](data/personas.tsv)) |
@@ -95,47 +121,22 @@ This will generate conversations and store them in a subfolder of `conversations
 
 | Short | Full | Description |
 |-------|------|-------------|
-| `-f` | `--folder` | Folder containing conversation files (default: `conversations`) |
+| `-f` | `--folder` | Folder containing conversation files (e.g., `conversations/p_model__a_model__t6__r1__timestamp`) |
 | `-c` | `--conversation` | Path to a single conversation file to judge (mutually exclusive with `--folder`) |
-| `-j` | `--judge-model` | Model(s) to use for judging (required). Format: `model` or `model:count` for multiple instances. Can specify multiple: `--judge-model model1 model2:3`. Examples: `claude-3-5-sonnet-20241022`, `claude-3-5-sonnet-20241022:3`, `claude-3-5-sonnet-20241022:2 gpt-4o:1` |
-| `-jep` | `--judge-model-extra-params` | Extra parameters for the judge model (optional). Examples: `temperature=0.7`, `max_tokens=1000`. Default: `temperature=0` (unless overridden) |
+| `-j` | `--judge-model` | Model(s) to use for judging (required). Format: `model` or `model:count` for multiple instances. Can specify multiple: `--judge-model model1 model2:3`. Examples: `claude-sonnet-4-5-20250929`, `claude-sonnet-4-5-20250929:3`, `claude-sonnet-4-5-20250929:2 gpt-4o:1` |
+| `-jep` | `--judge-model-extra-params` | Extra parameters for the judge model (optional). Examples: `temperature=0.7,max_tokens=1000`. Default: `temperature=0` (unless overridden) |
 | `-r` | `--rubrics` | Rubric file(s) to use (default: `data/rubric.tsv`) |
 | `-l` | `--limit` | Limit number of conversations to judge (for debugging) |
-| `-o` | `--output` | Output folder for evaluation results (default: `evaluations`) |
-| `-m` | `--max-concurrent` | Maximum number of concurrent workers (default: None). Set to a high number or omit for unlimited concurrency |
-| `--per-judge` | | If set, `--max-concurrent` applies per judge model. Otherwise, it applies to total workers across all judges |
-| `--verbose-workers` | | Enable verbose worker logging to show concurrency behavior |
+| `-o` | `--output` | Output folder for evaluation results (default: `evaluations/j_model_p_model__a_model__t1__r1__timestamp`) |
+| `-m` | `--max-concurrent` | Maximum number of concurrent workers (default: None (no limit)). Set to a high number or omit for unlimited concurrency |
+| `-pj` | `--per-judge` | If set, `--max-concurrent` applies per judge model. Otherwise, it applies to total workers across all judges. Example: `-m 4 -pj` with two judge models runs up to 4 workers per model (8 total) |
+| `-vw` | `--verbose-workers` | Enable verbose worker logging to show concurrency behavior |
 
 
 7. **Score and visualize the results**:
    ```bash
    python -m judge.score -r evaluations/{YOUR_EVAL_FOLDER}/results.csv
    ```
-
-## Quick Start: End-to-End Pipeline
-
-For convenience, you can run the entire workflow (generation → evaluation → scoring) with a single command:
-
-```bash
-python3 run_pipeline.py \
-  --user-agent claude-sonnet-4-5-20250929 \
-  --provider-agent gpt-4o \
-  --runs 2 \
-  --turns 10 \
-  --judge-model claude-sonnet-4-5-20250929 \
-  --max-personas 5
-```
-
-The pipeline script:
-- Runs `generate.py` with your specified arguments
-- Automatically passes the output folder to `judge.py`
-- Automatically runs `judge/score.py` on the evaluation results
-- Displays a summary with all output locations
-
-For help and all available options:
-```bash
-python3 run_pipeline.py --help
-```
 
 ### Using Extra Parameters
 

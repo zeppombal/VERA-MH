@@ -12,19 +12,16 @@ To test your service, you need to instantiate a concrete class and implement two
 
 Follow these steps to add a new LLM provider:
 
-### 1. Create a new class that inherits from `JudgeLLM` (for structured output) or `LLMInterface` (basic)
+### 1. Create a new class that inherits from `LLMInterface` (conversation generation only) or `JudgeLLM` (conversation generation && LLM-as-a-Judge support)
 
-**For judge evaluation (structured output support):**
+**For conversation generation only:**
 ```python
 from datetime import datetime
-from llm_clients.llm_interface import JudgeLLM
-from typing import Any, Dict, List, Optional, Type, TypeVar
-from pydantic import BaseModel
+from llm_clients.llm_interface import LLMInterface
+from typing import Any, Dict, List, Optional
 
-T = TypeVar("T", bound=BaseModel)
-
-class YourLLM(JudgeLLM):
-    """Your LLM implementation with structured output support."""
+class YourLLM(LLMInterface):
+    """Your LLM implementation for conversation generation."""
 
     def __init__(
         self,
@@ -40,14 +37,17 @@ class YourLLM(JudgeLLM):
         self.last_response_metadata: Dict[str, Any] = {}
 ```
 
-**For basic conversation generation only (no structured output):**
+**For judge evaluation (structured output support):**
 ```python
 from datetime import datetime
-from llm_clients.llm_interface import LLMInterface
-from typing import Any, Dict, List, Optional
+from llm_clients.llm_interface import JudgeLLM
+from typing import Any, Dict, List, Optional, Type, TypeVar
+from pydantic import BaseModel
 
-class YourLLM(LLMInterface):
-    """Your LLM implementation (basic, no structured output)."""
+T = TypeVar("T", bound=BaseModel)
+
+class YourLLM(JudgeLLM):
+    """Your LLM implementation with LLM-as-a-Judge support."""
 
     def __init__(
         self,
@@ -119,7 +119,7 @@ async def generate_response(
         return f"Error generating response: {str(e)}"
 ```
 
-#### `generate_structured_response()` - For judge evaluation (JudgeLLM only)
+#### `generate_structured_response()` - For judge support (JudgeLLM only)
 ```python
 from langchain_core.messages import SystemMessage, HumanMessage
 
