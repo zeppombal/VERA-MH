@@ -186,7 +186,7 @@ def format_conversation_as_string(
     a string format with Human/Assistant labels.
 
     Args:
-        role: Optional role of the LLM (Role.PERSONA, Role.PROVIDER, or None)
+        role: Role of the LLM (Role.PERSONA or Role.PROVIDER)
         conversation_history: Optional list of previous conversation turns
         system_prompt: Optional system prompt to prepend
 
