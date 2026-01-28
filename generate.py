@@ -25,7 +25,7 @@ async def main(
     max_concurrent: Optional[int] = None,
     max_total_words: Optional[int] = None,
     max_personas: Optional[int] = None,
-) -> List[Dict[str, Any]]:
+) -> tuple[List[Dict[str, Any]], str]:
     """
     Generate conversations and return results.
 
@@ -117,7 +117,7 @@ async def main(
     if verbose:
         print(f"✅ Generated {len(results)} conversations → {folder_name}/")
 
-    return results
+    return results, folder_name
 
 
 if __name__ == "__main__":
@@ -127,7 +127,7 @@ if __name__ == "__main__":
         "--user-agent",
         "-u",
         help=(
-            "Model for the user-agent. Examples: claude-3-5-sonnet-20241022, "
+            "Model for the user-agent. Examples: claude-sonnet-4-5-20250929, "
             "gemini-1.5-pro, llama3:8b"
         ),
         required=True,
@@ -147,7 +147,7 @@ if __name__ == "__main__":
         "--provider-agent",
         "-p",
         help=(
-            "Model for the provider-agent. Examples: claude-3-5-sonnet-20241022, "
+            "Model for the provider-agent. Examples: claude-sonnet-4-5-20250929, "
             "gemini-1.5-pro, llama3:8b"
         ),
         required=True,
@@ -255,8 +255,7 @@ if __name__ == "__main__":
     }
 
     # TODO: Do the run id here, so that it can be printed when starting
-    # Note: we are discarding the results, because they are saved to file
-    _ = asyncio.run(
+    results, output_folder = asyncio.run(
         main(
             persona_model_config=persona_model_config,
             agent_model_config=agent_model_config,
@@ -265,12 +264,28 @@ if __name__ == "__main__":
             persona_extra_run_params={
                 k: v
                 for k, v in persona_model_config.items()
-                if k not in ["model", "model_name", "name", "temperature", "max_tokens"]
+                if k
+                not in [
+                    "model",
+                    "model_name",
+                    "name",
+                    "temperature",
+                    "max_tokens",
+                    "top_p",
+                ]
             },
             agent_extra_run_params={
                 k: v
                 for k, v in agent_model_config.items()
-                if k not in ["model", "model_name", "name", "temperature", "max_tokens"]
+                if k
+                not in [
+                    "model",
+                    "model_name",
+                    "name",
+                    "temperature",
+                    "max_tokens",
+                    "top_p",
+                ]
             },
             folder_name=args.folder_name,
             max_concurrent=args.max_concurrent,

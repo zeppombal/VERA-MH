@@ -40,7 +40,7 @@ There are known limitations of the current structure, which will be simplified a
 2. **Set up environment variables**:
    ```bash
    cp .env.example .env
-   # Edit .env and add your API keys (e.g., OpenAI/Anthropic)
+   # Edit .env and add your API keys (e.g., ANTHROPIC_API_KEY, OPENAI_API_KEY, AZURE_API_KEY, AZURE_ENDPOINT)
    ```
 
 3. **(Optional) Install pre-commit hooks** for automatic code formatting/linting:
@@ -107,6 +107,36 @@ This will generate conversations and store them in a subfolder of `conversations
 | `--verbose-workers` | | Enable verbose worker logging to show concurrency behavior |
 
 
+7. **Score and visualize the results**:
+   ```bash
+   python -m judge.score -r evaluations/{YOUR_EVAL_FOLDER}/results.csv
+   ```
+
+## Quick Start: End-to-End Pipeline
+
+For convenience, you can run the entire workflow (generation → evaluation → scoring) with a single command:
+
+```bash
+python3 run_pipeline.py \
+  --user-agent claude-sonnet-4-5-20250929 \
+  --provider-agent gpt-4o \
+  --runs 2 \
+  --turns 10 \
+  --judge-model claude-sonnet-4-5-20250929 \
+  --max-personas 5
+```
+
+The pipeline script:
+- Runs `generate.py` with your specified arguments
+- Automatically passes the output folder to `judge.py`
+- Automatically runs `judge/score.py` on the evaluation results
+- Displays a summary with all output locations
+
+For help and all available options:
+```bash
+python3 run_pipeline.py --help
+```
+
 ### Using Extra Parameters
 
 Both `generate.py` and `judge.py` support extra parameters for fine-tuning model behavior:
@@ -114,7 +144,7 @@ Both `generate.py` and `judge.py` support extra parameters for fine-tuning model
 **Generate with temperature control:**
 ```bash
 # Lower temperature (0.3) for more consistent responses
-python generate.py -u gpt-4o -uep temperature=0.3 -p claude-3-5-sonnet-20241022 -pep temperature=0.5 -t 6 -r 2
+python generate.py -u gpt-4o -uep temperature=0.3 -p claude-sonnet-4-5-20250929 -pep temperature=0.5 -t 6 -r 2
 
 # Higher temperature (1.0) with max tokens
 python generate.py -u gpt-4o -uep temperature=1,max_tokens=2000 -p gpt-4o -pep temperature=1 -t 6 -r 1
@@ -123,7 +153,7 @@ python generate.py -u gpt-4o -uep temperature=1,max_tokens=2000 -p gpt-4o -pep t
 **Judge with custom parameters:**
 ```bash
 # Use lower temperature for more consistent evaluation
-python judge.py -f conversations/my_experiment -j claude-3-5-sonnet-20241022 -jep temperature=0.3
+python judge.py -f conversations/my_experiment -j claude-sonnet-4-5-20250929 -jep temperature=0.3
 
 # Multiple parameters
 python judge.py -f conversations/my_experiment -j gpt-4o -jep temperature=0.5,max_tokens=1500
@@ -209,6 +239,7 @@ VERA-MH simulates realistic conversations between Large Language Models (LLMs) f
   - **`claude_llm.py`**: Claude implementation using LangChain with structured output
   - **`openai_llm.py`**: OpenAI implementation with structured output
   - **`gemini_llm.py`**: Google Gemini implementation with structured output
+  - **`azure_llm.py`**: Azure OpenAI and Azure AI Foundry implementation with structured output
   - **`llama_llm.py`**: Llama implementation via Ollama
   - **`config.py`**: Configuration management for API keys and model settings
 - **`utils/`**: Utility functions and helpers
@@ -261,7 +292,7 @@ The judge evaluation system uses **structured output** to ensure reliable and ty
    ```
 
 3. **Provider Implementation**: Each LLM client implements structured output using LangChain's `with_structured_output()`
-   - Claude, OpenAI, and Gemini: Native structured output support via API
+   - Claude, OpenAI, Gemini, and Azure: Native structured output support via API
    - Llama: Limited support (may require prompt-based parsing)
 
 #### Benefits

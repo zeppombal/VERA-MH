@@ -6,6 +6,7 @@ This script is separate from conversation generation.
 
 import argparse
 import asyncio
+from typing import Optional
 
 from judge import judge_conversations, judge_single_conversation
 from judge.llm_judge import LLMJudge
@@ -13,7 +14,7 @@ from judge.rubric_config import ConversationData, RubricConfig, load_conversatio
 from utils.utils import parse_key_value_list
 
 
-async def main(args):
+async def main(args) -> Optional[str]:
     """Main async entrypoint for judging conversations."""
     # Parse judge models from args (supports "model" or "model:count" format)
     judge_models = {}
@@ -47,6 +48,9 @@ async def main(args):
             judge_model_extra_params=args.judge_model_extra_params,
         )
         await judge_single_conversation(judge, conversation, args.output)
+        # Single conversation mode doesn't need output folder for pipeline
+        print("ℹ️  Single conversation mode: output folder not needed for pipeline")
+        return None
     else:
         # Load all conversations at startup
         print(f"📂 Loading conversations from {args.folder}...")
@@ -58,7 +62,7 @@ async def main(args):
 
         folder_name = Path(args.folder).name
 
-        await judge_conversations(
+        _, output_folder = await judge_conversations(
             judge_models=judge_models,
             conversations=conversations,
             rubric_config=rubric_config,
@@ -70,6 +74,8 @@ async def main(args):
             per_judge=args.per_judge,
             verbose_workers=args.verbose_workers,
         )
+
+        return output_folder
 
 
 if __name__ == "__main__":
@@ -108,9 +114,9 @@ if __name__ == "__main__":
             "Model(s) to use for judging. "
             "Format: 'model' or 'model:count' for multiple instances. "
             "Can specify multiple models: --judge-model model1 model2:3. "
-            "Examples: claude-3-5-sonnet-20241022, "
-            "claude-3-5-sonnet-20241022:3, "
-            "claude-3-5-sonnet-20241022:2 gpt-4o:1"
+            "Examples: claude-sonnet-4-5-20250929, "
+            "claude-sonnet-4-5-20250929:3, "
+            "claude-sonnet-4-5-20250929:2 gpt-4o:1"
         ),
     )
 

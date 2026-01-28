@@ -2,7 +2,7 @@
 
 VERA-MH is ready to be used to evaluate any chat-based interface.
 [This](../llm_clients/llm_interface.py) Abstract Base Class (ABC) represents the interface to be implemented.
-Four concrete implementations of that class are provided for the APIs of ChatGPT, Claude, Gemini, and Llama (via Ollama).
+Four concrete implementations of that class are provided for the APIs of ChatGPT, Claude, Gemini, Azure, and Llama (via Ollama).
 
 To test your service, you need to instantiate a concrete class and implement two key methods:
 - `generate_response()`: Returns a string (the chatbot response) given conversation history (list of conversation turns)
@@ -230,7 +230,7 @@ python3 judge.py -f conversations/{YOUR_FOLDER} -j your-model-name
 ## Structured Output Support
 
 ### Native Support (Recommended)
-Claude, OpenAI, and Gemini support structured output natively through their APIs via LangChain's `with_structured_output()`:
+Claude, OpenAI, Azure, and Gemini support structured output natively through their APIs via LangChain's `with_structured_output()`:
 
 ```python
 # Build messages list (include system prompt if needed)
@@ -251,4 +251,3 @@ If your LLM doesn't support native structured output (like Llama/Ollama), you ca
 2. Implement prompt-based parsing (less reliable)
 
 See [llama_llm.py](../llm_clients/llama_llm.py) for an example of limited structured output support.
- 

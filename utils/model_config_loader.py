@@ -19,10 +19,10 @@ def load_model_config(config_file: str = "model_config.json") -> Dict[str, Any]:
             return json.load(f)
     except FileNotFoundError:
         print(f"Warning: Model config file '{config_file}' not found. Using defaults.")
-        return {"prompt_models": {}, "default_model": "claude-3-5-sonnet-20241022"}
+        return {"prompt_models": {}, "default_model": "claude-sonnet-4-5-20250929"}
     except Exception as e:
         print(f"Error loading model config: {e}")
-        return {"prompt_models": {}, "default_model": "claude-3-5-sonnet-20241022"}
+        return {"prompt_models": {}, "default_model": "claude-sonnet-4-5-20250929"}
 
 
 def get_model_for_prompt(

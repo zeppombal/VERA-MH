@@ -121,9 +121,8 @@ class TestLLMInterface:
 
         llm = MinimalLLM(name="Minimal")
 
-        # Should raise AttributeError (or RecursionError due to hasattr in __getattr__)
-        # The current implementation has a recursion issue, but it still raises an error
-        with pytest.raises((AttributeError, RecursionError)):
+        # Should raise AttributeError
+        with pytest.raises(AttributeError):
             _ = llm.some_attribute
 
     def test_getattr_with_none_llm(self):
