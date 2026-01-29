@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
+from llm_clients import Role
 from llm_clients.azure_llm import AzureLLM
 from llm_clients.claude_llm import ClaudeLLM
 from llm_clients.gemini_llm import GeminiLLM
@@ -56,13 +57,17 @@ class TestLLMFactory:
         system_prompt = "You are a helpful assistant."
 
         llm = LLMFactory.create_llm(
-            model_name=model_name, name=name, system_prompt=system_prompt
+            model_name=model_name,
+            name=name,
+            role=Role.PROVIDER,
+            system_prompt=system_prompt,
         )
 
         assert isinstance(llm, ClaudeLLM)
         assert llm.name == name
         assert llm.system_prompt == system_prompt
         assert llm.model_name == model_name
+        assert llm.role == Role.PROVIDER
 
     @patch("llm_clients.openai_llm.Config.OPENAI_API_KEY", "test-key")
     def test_create_openai_llm(self):
@@ -72,7 +77,10 @@ class TestLLMFactory:
         system_prompt = "You are a test assistant."
 
         llm = LLMFactory.create_llm(
-            model_name=model_name, name=name, system_prompt=system_prompt
+            model_name=model_name,
+            name=name,
+            role=Role.PROVIDER,
+            system_prompt=system_prompt,
         )
 
         assert isinstance(llm, OpenAILLM)
@@ -88,7 +96,10 @@ class TestLLMFactory:
         system_prompt = "You are a Gemini assistant."
 
         llm = LLMFactory.create_llm(
-            model_name=model_name, name=name, system_prompt=system_prompt
+            model_name=model_name,
+            name=name,
+            role=Role.PROVIDER,
+            system_prompt=system_prompt,
         )
 
         assert isinstance(llm, GeminiLLM)
@@ -104,7 +115,10 @@ class TestLLMFactory:
         system_prompt = "You are an Ollama assistant."
 
         llm = LLMFactory.create_llm(
-            model_name=model_name, name=name, system_prompt=system_prompt
+            model_name=model_name,
+            name=name,
+            role=Role.PROVIDER,
+            system_prompt=system_prompt,
         )
 
         assert isinstance(llm, OllamaLLM)
@@ -119,7 +133,10 @@ class TestLLMFactory:
         system_prompt = "You are an Azure assistant."
 
         llm = LLMFactory.create_llm(
-            model_name=model_name, name=name, system_prompt=system_prompt
+            model_name=model_name,
+            name=name,
+            role=Role.PROVIDER,
+            system_prompt=system_prompt,
         )
 
         assert isinstance(llm, AzureLLM)
@@ -133,7 +150,9 @@ class TestLLMFactory:
         name = "TestUnsupported"
 
         with pytest.raises(ValueError) as exc_info:
-            LLMFactory.create_llm(model_name=unsupported_model, name=name)
+            LLMFactory.create_llm(
+                model_name=unsupported_model, name=name, role=Role.PROVIDER
+            )
 
         assert "Unsupported model" in str(exc_info.value)
         assert unsupported_model in str(exc_info.value)
@@ -153,6 +172,7 @@ class TestLLMFactory:
             name=name,
             temperature=temperature,
             max_tokens=max_tokens,
+            role=Role.PROVIDER,
         )
 
         assert isinstance(llm, ClaudeLLM)
@@ -178,6 +198,7 @@ class TestLLMFactory:
             model_name=model_name,
             name=name,
             temperature=temperature,
+            role=Role.PROVIDER,
             **extra_params,
         )
 
@@ -196,7 +217,9 @@ class TestLLMFactory:
         model_name = "openai-custom-model"
         name = "TestOpenAIPrefix"
 
-        llm = LLMFactory.create_llm(model_name=model_name, name=name)
+        llm = LLMFactory.create_llm(
+            model_name=model_name, name=name, role=Role.PROVIDER
+        )
 
         assert isinstance(llm, OpenAILLM)
         assert llm.model_name == model_name
@@ -207,7 +230,9 @@ class TestLLMFactory:
         model_name = "google-gemini-ultra"
         name = "TestGooglePrefix"
 
-        llm = LLMFactory.create_llm(model_name=model_name, name=name)
+        llm = LLMFactory.create_llm(
+            model_name=model_name, name=name, role=Role.PROVIDER
+        )
 
         assert isinstance(llm, GeminiLLM)
         assert llm.model_name == model_name
@@ -218,7 +243,9 @@ class TestLLMFactory:
         expected_model_name = "llama-3"
         name = "TestOllamaPrefix"
 
-        llm = LLMFactory.create_llm(model_name=model_name, name=name)
+        llm = LLMFactory.create_llm(
+            model_name=model_name, name=name, role=Role.PROVIDER
+        )
 
         assert isinstance(llm, OllamaLLM)
         assert llm.model_name == expected_model_name
@@ -229,11 +256,21 @@ class TestLLMFactory:
             "llm_clients.azure_llm.Config.get_azure_config",
             return_value={"model": "azure-gpt-4"},
         ):
-            claude_llm = LLMFactory.create_llm(model_name="CLAUDE-3-5", name="Claude")
-            gpt_llm = LLMFactory.create_llm(model_name="GPT-4-TURBO", name="GPT")
-            gemini_llm = LLMFactory.create_llm(model_name="GEMINI-PRO", name="Gemini")
-            ollama_llm = LLMFactory.create_llm(model_name="OLLAMA-LLAMA", name="Ollama")
-            azure_llm = LLMFactory.create_llm(model_name="AZURE-GROK-4", name="Azure")
+            claude_llm = LLMFactory.create_llm(
+                model_name="CLAUDE-3-5", name="Claude", role=Role.PROVIDER
+            )
+            gpt_llm = LLMFactory.create_llm(
+                model_name="GPT-4-TURBO", name="GPT", role=Role.PROVIDER
+            )
+            gemini_llm = LLMFactory.create_llm(
+                model_name="GEMINI-PRO", name="Gemini", role=Role.PROVIDER
+            )
+            ollama_llm = LLMFactory.create_llm(
+                model_name="OLLAMA-LLAMA-3", name="Ollama", role=Role.PROVIDER
+            )
+            azure_llm = LLMFactory.create_llm(
+                model_name="AZURE-GROK-4", name="Azure", role=Role.PROVIDER
+            )
 
             assert isinstance(claude_llm, ClaudeLLM)
             assert isinstance(gpt_llm, OpenAILLM)
