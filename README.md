@@ -26,31 +26,6 @@ There are known limitations of the current structure, which will be simplified a
 - [First Announcement](https://www.springhealth.com/blog/introducing-vera-mh-new-standard-ethical-ai-mental-healthcare)
 
 # Getting started
-## Quick Start: End-to-End Pipeline
-
-For convenience, you can run the entire workflow (generation → evaluation → scoring) with a single command:
-
-```bash
-python3 run_pipeline.py \
-  --user-agent claude-sonnet-4-5-20250929 \
-  --provider-agent gpt-4o \
-  --runs 2 \
-  --turns 10 \
-  --judge-model claude-sonnet-4-5-20250929 \
-  --max-personas 5
-```
-
-The pipeline script:
-- Runs `generate.py` with your specified arguments
-- Automatically passes the output folder to `judge.py`
-- Automatically runs `judge/score.py` on the evaluation results
-- Displays a summary with all output locations
-
-For help and all available options:
-```bash
-python3 run_pipeline.py --help
-```
-
 ## Step-by-step
 0. **Install uv** (if not already installed):
    ```bash
@@ -76,14 +51,37 @@ python3 run_pipeline.py --help
 
 4. **(Optional) Create an LLM class for your agent**: see guidance [here](docs/evaluating.md)
 
-5. **Run the simulation** (quick test with 6 turns for cost-effective trial):
+5. **End-to-End Pipeline**: For convenience, you can run the entire workflow (generation → evaluation → scoring) with a single command:
+
+```bash
+python3 run_pipeline.py \
+  --user-agent claude-sonnet-4-5-20250929 \
+  --provider-agent gpt-4o \
+  --runs 2 \
+  --turns 10 \
+  --judge-model claude-sonnet-4-5-20250929 \
+  --max-personas 5
+```
+
+The pipeline script:
+- Runs `generate.py` with your specified arguments
+- Automatically passes the output folder to `judge.py`
+- Automatically runs `judge/score.py` on the evaluation results
+- Displays a summary with all output locations
+
+For help and all available options:
+```bash
+python3 run_pipeline.py --help
+```
+
+6. **Run the simulation** (quick test with 6 turns for cost-effective trial):
    ```bash
    python generate.py -u gpt-4o -uep temperature=1 -p gpt-4o -pep temperature=1 -t 6 -r 1
    ```
    
-   **5a. Quick test**: The command above generates a small set of conversations for initial testing.
+   **6a. Quick test**: The command above generates a small set of conversations for initial testing.
    
-   **5b. For production-quality evaluations**: To generate conversations that reproduce published VERA scores, achieve valid scoring, or use scoring features, we recommend:
+   **6b. For production-quality evaluations**: To generate conversations that reproduce published VERA scores, achieve valid scoring, or use scoring features, we recommend:
    ```bash
    python generate.py -u gemini-3-pro-preview -p <your-AI-product> -pep <your-AI-product-extras> -t 20 -r 20 -c 10
    ```
@@ -110,7 +108,7 @@ python3 run_pipeline.py --help
 
 This will generate conversations and store them in a subfolder of `conversations` unless specified otherwise.
 
-6. **Judge the conversations**:
+7. **Judge the conversations**:
    ```bash
    python judge.py -f conversations/{YOUR_FOLDER} -j gpt-4o
    ```
@@ -133,7 +131,7 @@ This will generate conversations and store them in a subfolder of `conversations
 | `-vw` | `--verbose-workers` | Enable verbose worker logging to show concurrency behavior |
 
 
-7. **Score and visualize the results**:
+8. **Score and visualize the results**:
    ```bash
    python -m judge.score -r evaluations/{YOUR_EVAL_FOLDER}/results.csv
    ```
