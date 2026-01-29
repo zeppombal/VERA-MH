@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from llm_clients.llm_interface import Role
+
 
 @pytest.mark.unit
 class TestOllamaLLMInit:
@@ -14,7 +16,7 @@ class TestOllamaLLMInit:
         """Test initialization uses default config when no overrides provided."""
         from llm_clients.ollama_llm import OllamaLLM
 
-        OllamaLLM(name="test-ollama")
+        OllamaLLM(name="test-ollama", role=Role.PROVIDER)
 
         # Verify Ollama was initialized with default config
         mock_ollama.assert_called_once()
@@ -32,7 +34,7 @@ class TestOllamaLLMInit:
         """Test initialization with custom model name."""
         from llm_clients.ollama_llm import OllamaLLM
 
-        llm = OllamaLLM(name="test-ollama", model_name="llama3:70b")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER, model_name="llama3:70b")
 
         call_kwargs = mock_ollama.call_args[1]
         assert call_kwargs["model"] == "llama3:70b"
@@ -43,7 +45,7 @@ class TestOllamaLLMInit:
         """Test initialization with custom temperature via kwargs."""
         from llm_clients.ollama_llm import OllamaLLM
 
-        OllamaLLM(name="test-ollama", temperature=0.9)
+        OllamaLLM(name="test-ollama", role=Role.PROVIDER, temperature=0.9)
 
         call_kwargs = mock_ollama.call_args[1]
         assert call_kwargs["temperature"] == 0.9
@@ -54,7 +56,7 @@ class TestOllamaLLMInit:
         from llm_clients.ollama_llm import OllamaLLM
 
         custom_url = "http://remote-server:11434"
-        OllamaLLM(name="test-ollama", base_url=custom_url)
+        OllamaLLM(name="test-ollama", role=Role.PROVIDER, base_url=custom_url)
 
         call_kwargs = mock_ollama.call_args[1]
         assert call_kwargs["base_url"] == custom_url
@@ -64,7 +66,13 @@ class TestOllamaLLMInit:
         """Test that kwargs override default config values."""
         from llm_clients.ollama_llm import OllamaLLM
 
-        OllamaLLM(name="test-ollama", temperature=0.1, top_p=0.95, num_predict=500)
+        OllamaLLM(
+            name="test-ollama",
+            role=Role.PROVIDER,
+            temperature=0.1,
+            top_p=0.95,
+            num_predict=500,
+        )
 
         call_kwargs = mock_ollama.call_args[1]
         assert call_kwargs["temperature"] == 0.1
@@ -86,7 +94,7 @@ class TestOllamaLLMGenerateResponse:
         mock_instance.ainvoke = AsyncMock(return_value="This is a test response")
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
         response = await llm.generate_response(
             conversation_history=[
                 {"turn": 0, "speaker": "system", "response": "Hello, how are you?"}
@@ -109,7 +117,11 @@ class TestOllamaLLMGenerateResponse:
         mock_instance.ainvoke = AsyncMock(return_value="I'm doing well, thanks!")
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama", system_prompt="You are a helpful assistant")
+        llm = OllamaLLM(
+            name="test-ollama",
+            role=Role.PROVIDER,
+            system_prompt="You are a helpful assistant",
+        )
         response = await llm.generate_response(
             conversation_history=[
                 {"turn": 0, "speaker": "system", "response": "How are you?"}
@@ -133,7 +145,7 @@ class TestOllamaLLMGenerateResponse:
         mock_instance.ainvoke = AsyncMock(return_value="Sure, I can help with that")
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
         llm.set_system_prompt("You are a coding expert")
         response = await llm.generate_response(
             conversation_history=[
@@ -159,7 +171,7 @@ class TestOllamaLLMGenerateResponse:
         )
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
         response = await llm.generate_response(
             conversation_history=[
                 {"turn": 0, "speaker": "system", "response": "Test message"}
@@ -182,7 +194,9 @@ class TestOllamaLLMGenerateResponse:
         )
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama", model_name="nonexistent:latest")
+        llm = OllamaLLM(
+            name="test-ollama", role=Role.PROVIDER, model_name="nonexistent:latest"
+        )
         response = await llm.generate_response(
             conversation_history=[
                 {"turn": 0, "speaker": "system", "response": "Test message"}
@@ -204,7 +218,7 @@ class TestOllamaLLMGenerateResponse:
         )
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
         response = await llm.generate_response(
             conversation_history=[
                 {
@@ -230,7 +244,7 @@ class TestOllamaLLMGenerateResponse:
         )
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
         response = await llm.generate_response(
             conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
         )
@@ -248,7 +262,7 @@ class TestOllamaLLMGenerateResponse:
         mock_instance.ainvoke = AsyncMock(return_value="Default response")
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
         response = await llm.generate_response(None)
 
         # Should handle None gracefully - message won't include current message part
@@ -265,7 +279,7 @@ class TestOllamaLLMGenerateResponse:
         mock_instance.ainvoke = AsyncMock(return_value="Response to empty")
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
         response = await llm.generate_response(
             conversation_history=[{"turn": 0, "speaker": "system", "response": ""}]
         )
@@ -287,7 +301,7 @@ class TestOllamaLLMGenerateResponse:
         mock_ollama.return_value = mock_instance
 
         multiline_msg = "Line 1\nLine 2\nLine 3"
-        llm = OllamaLLM(name="test-ollama", system_prompt="Helper")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER, system_prompt="Helper")
         await llm.generate_response(
             conversation_history=[
                 {"turn": 0, "speaker": "system", "response": multiline_msg}
@@ -307,7 +321,7 @@ class TestOllamaLLMSystemPrompt:
         """Test that set_system_prompt updates the system_prompt attribute."""
         from llm_clients.ollama_llm import OllamaLLM
 
-        llm = OllamaLLM(name="test-ollama")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
 
         # Initially empty string (from LLMInterface base class)
         assert llm.system_prompt == ""
@@ -330,7 +344,7 @@ class TestOllamaLLMSystemPrompt:
         mock_instance.ainvoke = AsyncMock(return_value="Response")
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
 
         # First call without system prompt
         await llm.generate_response(
@@ -369,7 +383,9 @@ class TestOllamaLLMConversationHistory:
         mock_instance.ainvoke = AsyncMock(return_value="Response with history")
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama", system_prompt="You are helpful")
+        llm = OllamaLLM(
+            name="test-ollama", role=Role.PROVIDER, system_prompt="You are helpful"
+        )
 
         history = [
             {
@@ -380,7 +396,7 @@ class TestOllamaLLMConversationHistory:
             },
             {
                 "turn": 2,
-                "speaker": "agent",
+                "speaker": "provider",
                 "input": "Hello",
                 "response": "Hi there",
             },
@@ -414,7 +430,7 @@ class TestOllamaLLMConversationHistory:
         mock_instance.ainvoke = AsyncMock(return_value="Response")
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
 
         response = await llm.generate_response(
             conversation_history=[{"turn": 0, "speaker": "system", "response": "Hello"}]
@@ -436,7 +452,7 @@ class TestOllamaLLMConversationHistory:
         mock_instance.ainvoke = AsyncMock(return_value="Response")
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
 
         response = await llm.generate_response(
             conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
@@ -458,9 +474,12 @@ class TestOllamaLLMConversationHistory:
         mock_instance.ainvoke = AsyncMock(return_value="Persona response")
         mock_ollama.return_value = mock_instance
 
-        # Persona system prompt should trigger message type flipping
+        # Persona role triggers message type flipping:
+        # (persona -> Assistant, provider -> Human)
         persona_prompt = "You are roleplaying as a human user"
-        llm = OllamaLLM(name="test-ollama", system_prompt=persona_prompt)
+        llm = OllamaLLM(
+            name="test-ollama", role=Role.PERSONA, system_prompt=persona_prompt
+        )
 
         history = [
             {"turn": 1, "speaker": "persona", "response": "Hello"},
@@ -496,7 +515,7 @@ class TestOllamaLLMGetLastResponseMetadata:
             mock_instance = MagicMock()
             mock_ollama.return_value = mock_instance
 
-            llm = OllamaLLM(name="test-ollama")
+            llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
             llm.last_response_metadata = {"test": "value"}
 
             metadata1 = llm.get_last_response_metadata()
@@ -520,7 +539,7 @@ class TestOllamaLLMGetLastResponseMetadata:
         mock_instance.ainvoke = AsyncMock(return_value="This is a test response")
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama", model_name="llama3:8b")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER, model_name="llama3:8b")
         response = await llm.generate_response(
             conversation_history=[
                 {"turn": 0, "speaker": "system", "response": "Hello, Ollama!"}
@@ -534,6 +553,7 @@ class TestOllamaLLMGetLastResponseMetadata:
         assert metadata["response_id"] is None
         assert metadata["model"] == "llama3:8b"
         assert metadata["provider"] == "ollama"
+        assert metadata["role"] == "provider"
         assert "timestamp" in metadata
         assert "response_time_seconds" in metadata
         assert metadata["usage"] == {}
@@ -550,7 +570,7 @@ class TestOllamaLLMGetLastResponseMetadata:
         )
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama", model_name="llama3:8b")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER, model_name="llama3:8b")
         response = await llm.generate_response(
             conversation_history=[
                 {"turn": 0, "speaker": "system", "response": "Test message"}
@@ -566,6 +586,7 @@ class TestOllamaLLMGetLastResponseMetadata:
         assert metadata["response_id"] is None
         assert metadata["model"] == "llama3:8b"
         assert metadata["provider"] == "ollama"
+        assert metadata["role"] == "provider"
         assert "timestamp" in metadata
         assert "error" in metadata
         assert "Could not connect to Ollama server" in metadata["error"]
@@ -581,7 +602,7 @@ class TestOllamaLLMGetLastResponseMetadata:
         mock_instance.ainvoke = AsyncMock(return_value="Timed response")
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
         await llm.generate_response(
             conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
         )
@@ -603,7 +624,7 @@ class TestOllamaLLMGetLastResponseMetadata:
         mock_instance.ainvoke = AsyncMock(return_value="Test")
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
         await llm.generate_response(
             conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
         )
@@ -630,7 +651,7 @@ class TestOllamaLLMGetLastResponseMetadata:
         mock_instance.ainvoke = AsyncMock(return_value="Complete response")
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama", model_name="mistral:7b")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER, model_name="mistral:7b")
         await llm.generate_response(
             conversation_history=[{"turn": 0, "speaker": "system", "response": "Test"}]
         )
@@ -641,6 +662,7 @@ class TestOllamaLLMGetLastResponseMetadata:
         assert "response_id" in metadata
         assert "model" in metadata
         assert "provider" in metadata
+        assert "role" in metadata
         assert "timestamp" in metadata
         assert "response_time_seconds" in metadata
         assert "usage" in metadata
@@ -649,6 +671,7 @@ class TestOllamaLLMGetLastResponseMetadata:
         assert metadata["response_id"] is None
         assert isinstance(metadata["model"], str)
         assert metadata["provider"] == "ollama"
+        assert metadata["role"] == "provider"
         assert isinstance(metadata["timestamp"], str)
         assert isinstance(metadata["response_time_seconds"], (int, float))
         assert isinstance(metadata["usage"], dict)
@@ -662,7 +685,7 @@ class TestOllamaLLMGetLastResponseMetadata:
         mock_instance = MagicMock()
         mock_ollama.return_value = mock_instance
 
-        llm = OllamaLLM(name="test-ollama")
+        llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
 
         # Before any response, metadata should be empty
         metadata = llm.get_last_response_metadata()

@@ -50,11 +50,11 @@ class LLMFactory:
         if "azure" in model_lower:
             from .azure_llm import AzureLLM
 
-            return AzureLLM(name, system_prompt, model_name, **model_params)
+            return AzureLLM(name, role, system_prompt, model_name, **model_params)
         elif "ollama" in model_lower:
             from .ollama_llm import OllamaLLM
 
-            return OllamaLLM(name, system_prompt, model_name, **model_params)
+            return OllamaLLM(name, role, system_prompt, model_name, **model_params)
         elif "claude" in model_lower:
             from .claude_llm import ClaudeLLM
 
@@ -66,7 +66,7 @@ class LLMFactory:
         elif "gemini" in model_lower or "google" in model_lower:
             from .gemini_llm import GeminiLLM
 
-            return GeminiLLM(name, system_prompt, model_name, **model_params)
+            return GeminiLLM(name, role, system_prompt, model_name, **model_params)
         else:
             raise ValueError(f"Unsupported model: {model_name}")
 

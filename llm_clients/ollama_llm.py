@@ -5,9 +5,10 @@ from typing import Any, Dict, List, Optional
 from langchain_ollama import OllamaLLM as LangChainOllamaLLM
 
 from utils.conversation_utils import format_conversation_as_string
+from utils.debug import debug_print
 
 from .config import Config
-from .llm_interface import LLMInterface
+from .llm_interface import LLMInterface, Role
 
 
 class OllamaLLM(LLMInterface):
@@ -24,12 +25,13 @@ class OllamaLLM(LLMInterface):
     def __init__(
         self,
         name: str,
+        role: Role,
         system_prompt: Optional[str] = None,
         model_name: Optional[str] = None,
         base_url: Optional[str] = None,
         **kwargs,
     ):
-        super().__init__(name, system_prompt)
+        super().__init__(name, role, system_prompt)
 
         # Use provided model name or fall back to config default
         self.model_name = (model_name or Config.get_ollama_config()["model"]).replace(
@@ -88,9 +90,20 @@ class OllamaLLM(LLMInterface):
         try:
             # Build full message using utility function
             full_message = format_conversation_as_string(
+                self.role,
                 conversation_history=conversation_history,
                 system_prompt=self.system_prompt,
             )
+
+            # Debug: Print message being sent to LLM
+            debug_print(
+                f"\n[DEBUG {self.name} - {self.role.value}] Message sent to LLM:"
+            )
+            preview = full_message[:100]
+            content_preview = (
+                preview + "..." if len(full_message) > 100 else full_message
+            )
+            debug_print(f"  {content_preview}")
 
             start_time = time.time()
             # Use ainvoke for async call - BaseLLM.ainvoke returns a string directly
@@ -104,6 +117,7 @@ class OllamaLLM(LLMInterface):
                 "response_id": None,
                 "model": self.model_name,
                 "provider": "ollama",
+                "role": self.role.value,
                 "timestamp": datetime.now().isoformat(),
                 "response_time_seconds": round(end_time - start_time, 3),
                 "usage": {},
@@ -116,6 +130,7 @@ class OllamaLLM(LLMInterface):
                 "response_id": None,
                 "model": self.model_name,
                 "provider": "ollama",
+                "role": self.role.value,
                 "timestamp": datetime.now().isoformat(),
                 "error": str(e),
                 "usage": {},
