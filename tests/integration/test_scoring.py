@@ -1,3 +1,4 @@
+import csv
 import json
 import logging
 import os
@@ -17,6 +18,7 @@ sys.path.insert(0, str(REPO_ROOT))
 import generate
 from judge.rubric_config import RubricConfig, load_conversations
 from judge.runner import judge_conversations as judge_conversations_fn
+from judge.score import score_results
 
 # Test configuration constants
 TEST_CONFIG = {
@@ -149,12 +151,8 @@ class TestVERAMHPipeline:
             "temperature": temp_provider,
         }
 
-        # Store the conversations_root state before generation
-        existing_subdirs = set(
-            p.name for p in conversations_root.iterdir() if p.is_dir()
-        )
-
-        await generate.main(
+        # Capture the return value from generate.main for exact folder path
+        results, folder_name = await generate.main(
             persona_model_config=persona_model_config,
             agent_model_config=agent_model_config,
             persona_names=[persona_name],  # only one persona
@@ -165,42 +163,8 @@ class TestVERAMHPipeline:
             verbose=True,
         )
 
-        # Find the newly created directory (the one that wasn't there before)
-        new_subdirs = set(p.name for p in conversations_root.iterdir() if p.is_dir())
-        created_dirs = new_subdirs - existing_subdirs
-
-        if not created_dirs:
-            # More helpful error message with debugging info
-            all_dirs = (
-                list(conversations_root.iterdir())
-                if conversations_root.exists()
-                else []
-            )
-            raise RuntimeError(
-                f"No new directories created in {conversations_root}.\n"
-                f"Expected: One new directory for persona '{persona_name}'\n"
-                f"All items in directory: {[p.name for p in all_dirs]}\n"
-                f"Existing directories before: {sorted(existing_subdirs)}\n"
-                f"Check if generate.main() completed successfully."
-            )
-
-        if len(created_dirs) > 1:
-            # Provide more context about what happened
-            raise RuntimeError(
-                f"Multiple directories created: {sorted(created_dirs)}.\n"
-                f"Expected exactly one directory for persona '{persona_name}'.\n"
-                f"This could indicate:\n"
-                f"  - Multiple personas were processed "
-                f"(check persona_names parameter)\n"
-                f"  - Concurrent execution created race conditions "
-                f"(check max_concurrent=1)\n"
-                f"  - Multiple runs created separate directories "
-                f"(unexpected behavior)\n"
-                f"Consider using a more specific directory detection method."
-            )
-
-        new_dir_name = created_dirs.pop()
-        conv_dir = conversations_root / new_dir_name
+        # Use the returned folder path directly (no complex detection needed)
+        conv_dir = Path(folder_name)
 
         # Verify the directory contains conversation files
         if not conv_dir.exists() or not conv_dir.is_dir():
@@ -283,8 +247,11 @@ class TestVERAMHPipeline:
                 f"found {len(lines)} lines"
             )
 
+        # Use proper CSV parsing to handle quoted fields and embedded commas
+        with open(results_csv, "r", newline="") as csvfile:
+            reader = csv.DictReader(csvfile)
+
             # Validate CSV header structure
-            header = lines[0].strip()
             required_columns = [
                 "filename",
                 "run_id",
@@ -292,47 +259,29 @@ class TestVERAMHPipeline:
                 "judge_instance",
                 "judge_id",
             ]
-            header_columns = [col.strip() for col in header.split(",")]
 
+            fieldnames = reader.fieldnames or []
             for req_col in required_columns:
-                assert req_col in header_columns, (
+                assert req_col in fieldnames, (
                     f"results.csv header missing required column '{req_col}'. "
-                    f"Found columns: {header_columns}"
+                    f"Found columns: {fieldnames}"
                 )
 
-            # Validate that data rows have consistent structure
-            # Note: CSV might have varying columns due to complex
-            # comma-separated content
-            # Focus on validating core required fields rather than
-            # exact column count
-            filename_idx = header_columns.index("filename")
-            run_id_idx = header_columns.index("run_id")
+            # Validate that data rows have proper structure and required fields
+            row_count = 0
+            for row_num, row in enumerate(reader, 1):
+                row_count += 1
 
-            for i, line in enumerate(lines[1:], 1):
-                if line.strip():  # Skip empty lines
-                    # For CSV parsing with potential embedded commas,
-                    # we need more robust parsing
-                    # But for basic validation, ensure we have enough
-                    # columns for required fields
-                    data_columns = line.split(",")
-
-                    # Ensure we have at least the minimum required columns
-                    min_required_cols = max(filename_idx, run_id_idx) + 1
-                    assert len(data_columns) >= min_required_cols, (
-                        f"Row {i} has {len(data_columns)} columns, "
-                        f"need at least {min_required_cols} for required fields"
+                # Validate that required fields are not empty
+                for req_col in required_columns:
+                    field_value = row.get(req_col, "").strip()
+                    assert field_value, (
+                        f"Row {row_num}: required column '{req_col}' "
+                        f"should not be empty, got: '{field_value}'"
                     )
 
-                    # Basic validation that required fields are not empty
-                    if filename_idx < len(data_columns):
-                        assert data_columns[
-                            filename_idx
-                        ].strip(), f"Row {i}: filename column should not be empty"
-
-                    if run_id_idx < len(data_columns):
-                        assert data_columns[
-                            run_id_idx
-                        ].strip(), f"Row {i}: run_id column should not be empty"
+            # Ensure we actually processed some data rows
+            assert row_count > 0, "results.csv should contain at least one data row"
 
         print(f"Judge created evaluation files in {eval_dir}")
         return eval_dir
@@ -347,27 +296,15 @@ class TestVERAMHPipeline:
         if not results_csv.exists():
             raise FileNotFoundError(f"Missing results.csv in {eval_dir}")
 
-        # Run the scoring command
-        self.run_cmd(
-            [sys.executable, "-m", "judge.score", "-r", str(results_csv)],
-            cwd=repo_root,
-            verbose=False,  # Only verbose on failure (logged automatically)
-        )
+        # Use direct function call instead of subprocess for consistency
+        scores_data = score_results(str(results_csv))
 
-        # Read the JSON output from the scores.json file instead of stdout
-        scores_json_file = eval_dir / "scores.json"
-        if not scores_json_file.exists():
-            raise FileNotFoundError(f"Scores JSON file not found at {scores_json_file}")
-
-        with open(scores_json_file, "r") as f:
-            scores_data = json.load(f)
-
-        # judge/score.py always returns a dict with "aggregates" key (lines 322-332)
+        # judge.score.score_results always returns a dict with "aggregates" key
         # No fallback needed - if "aggregates" is missing, it indicates a bug
         if "aggregates" not in scores_data:
             raise ValueError(
-                f"Invalid scores.json structure: missing 'aggregates' key. "
-                f"This indicates a bug in judge/score.py. "
+                f"Invalid scores data structure: missing 'aggregates' key. "
+                f"This indicates a bug in judge.score.score_results. "
                 f"Found keys: {list(scores_data.keys())}"
             )
 
@@ -469,12 +406,6 @@ class TestVERAMHPipeline:
                 "⚠️  Note: All evaluations marked 'Not Relevant' - "
                 "conversation may not have triggered mental health criteria"
             )
-
-        # Assert reasonable performance
-        assert duration < TEST_CONFIG["TIMEOUT_SECONDS"], (
-            f"Pipeline took {duration:.2f}s, "
-            f"expected < {TEST_CONFIG['TIMEOUT_SECONDS']}s"
-        )
 
         print(f"   {persona} pipeline completed in {duration:.2f}s")
         print(f"   Best practice: {best_practice_pct:.1f}%")
@@ -758,7 +689,7 @@ class TestVERAMHPipeline:
         # Test with invalid model - should fail during API call or model validation
         # Possible exceptions: RuntimeError (from generate_one_conversation),
         # API client exceptions, or other async/model-related errors
-        with pytest.raises((RuntimeError, ValueError, Exception)):
+        with pytest.raises((RuntimeError, ValueError)):
             await self.generate_one_conversation(
                 persona_name="Ray",
                 member_model="invalid-model-name",
@@ -776,7 +707,7 @@ class TestVERAMHPipeline:
     @pytest.mark.timeout(TEST_CONFIG["TIMEOUT_SECONDS"])
     async def test_run_pipeline_integration(self, test_workspace, repo_root):
         """Test using run_pipeline.py instead of separate generate/judge/score calls."""
-        import os
+        import shutil
         from unittest.mock import patch
 
         # Create test arguments for Ray persona with minimal configuration
@@ -802,6 +733,9 @@ class TestVERAMHPipeline:
             "--provider-agent-extra-params",
             f"temperature={TEST_CONFIG['TEMP_PROVIDER']}",
         ]
+
+        # Track directories that may be created for cleanup
+        created_dirs = []
 
         # Mock sys.argv to provide arguments to run_pipeline (not mocking API calls)
         with patch("sys.argv", test_args):
@@ -835,7 +769,7 @@ class TestVERAMHPipeline:
                     for item in os.listdir(base_folder_name):
                         item_path = os.path.join(base_folder_name, item)
                         if os.path.isdir(item_path) and (
-                            "p_" in item and "__a_" in item
+                            item.startswith("p_") and "__a_" in item
                         ):
                             conversations_dir = item_path
                             break
@@ -847,7 +781,7 @@ class TestVERAMHPipeline:
                             for subitem in os.listdir(item):
                                 subitem_path = os.path.join(item, subitem)
                                 if os.path.isdir(subitem_path) and (
-                                    "p_" in subitem and "__a_" in subitem
+                                    subitem.startswith("p_") and "__a_" in subitem
                                 ):
                                     conversations_dir = subitem_path
                                     break
@@ -945,6 +879,13 @@ class TestVERAMHPipeline:
                 print(f"   Conversations: {len(conv_files)} files")
                 print(f"   Evaluations: {len(eval_files)} files")
 
+                # Track created directories for cleanup
+                base_folder_name = f"pipeline_test_{timestamp}"
+                if os.path.exists(base_folder_name):
+                    created_dirs.append(base_folder_name)
+                if os.path.exists("evaluations"):
+                    created_dirs.append("evaluations")
+
                 return {
                     "conversations_dir": conversations_dir,
                     "evaluations_dir": evaluations_dir,
@@ -957,13 +898,23 @@ class TestVERAMHPipeline:
                 # Restore original working directory
                 os.chdir(original_cwd)
 
+                # Clean up any test artifacts created in the repository
+                for dir_path in created_dirs:
+                    full_path = os.path.join(repo_root, dir_path)
+                    if os.path.exists(full_path) and os.path.isdir(full_path):
+                        try:
+                            shutil.rmtree(full_path)
+                            print(f"✓ Cleaned up test artifact: {dir_path}")
+                        except Exception as e:
+                            print(f"⚠ Failed to clean up {dir_path}: {e}")
+
     @pytest.mark.asyncio
     @pytest.mark.timeout(
         TEST_CONFIG["TIMEOUT_SECONDS"] * 2
     )  # Double timeout for comparison
     async def test_run_pipeline_vs_individual_calls(self, test_workspace, repo_root):
         """Compare run_pipeline.py with individual generate/judge/score calls."""
-        import os
+        import shutil
         from unittest.mock import patch
 
         print("Testing run_pipeline.py vs individual calls for consistency...")
@@ -1002,6 +953,9 @@ class TestVERAMHPipeline:
             "--provider-agent-extra-params",
             f"temperature={TEST_CONFIG['TEMP_PROVIDER']}",
         ]
+
+        # Track directories that may be created for cleanup
+        created_dirs = []
 
         with patch("sys.argv", test_args):
             from run_pipeline import main as pipeline_main
@@ -1061,8 +1015,25 @@ class TestVERAMHPipeline:
                 # Extract aggregates for comparison
                 pipeline_scores = pipeline_scores_data["aggregates"]
 
+                # Track created directories for cleanup
+                comparison_folder_name = f"pipeline_comparison_{timestamp}"
+                if os.path.exists(comparison_folder_name):
+                    created_dirs.append(comparison_folder_name)
+                if os.path.exists("evaluations"):
+                    created_dirs.append("evaluations")
+
             finally:
                 os.chdir(original_cwd)
+
+                # Clean up any test artifacts created in the repository
+                for dir_path in created_dirs:
+                    full_path = os.path.join(repo_root, dir_path)
+                    if os.path.exists(full_path) and os.path.isdir(full_path):
+                        try:
+                            shutil.rmtree(full_path)
+                            print(f"✓ Cleaned up test artifact: {dir_path}")
+                        except Exception as e:
+                            print(f"⚠ Failed to clean up {dir_path}: {e}")
 
         # Compare results
         print("\n=== Comparing Results ===")
