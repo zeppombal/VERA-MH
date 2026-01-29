@@ -82,7 +82,7 @@ class OpenAILLM(JudgeLLM):
         messages.extend(build_langchain_messages(self.role, conversation_history))
 
         # Debug: Print messages being sent to LLM
-        debug_print(f"[DEBUG {self.name} - {self.role.value}] Messages to LLM:")
+        debug_print(f"\n[DEBUG {self.name} - {self.role.value}] Messages sent to LLM:")
         for i, msg in enumerate(messages):
             msg_type = type(msg).__name__
             preview = msg.content[:100]
