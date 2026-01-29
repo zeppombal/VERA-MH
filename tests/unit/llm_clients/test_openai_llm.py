@@ -153,7 +153,7 @@ class TestOpenAILLM:
         # (turn 0 message, no SystemMessage)
         call_args = mock_llm.ainvoke.call_args[0][0]
         assert len(call_args) == 1
-        assert call_args[0].content == "Test message"
+        assert call_args[0].text == "Test message"
 
     @pytest.mark.asyncio
     @patch("llm_clients.openai_llm.Config.OPENAI_API_KEY", "test-key")
@@ -593,10 +593,10 @@ class TestOpenAILLM:
         assert isinstance(messages[0], SystemMessage)
         # Turn 1 (persona, odd) should be AIMessage when persona role
         assert isinstance(messages[1], AIMessage)
-        assert messages[1].content == "Hello"
+        assert messages[1].text == "Hello"
         # Turn 2 (provider, even) should be HumanMessage when persona role
         assert isinstance(messages[2], HumanMessage)
-        assert messages[2].content == "Hi there"
+        assert messages[2].text == "Hi there"
         # Turn 3 (persona, odd) should be AIMessage when persona role
         assert isinstance(messages[3], AIMessage)
-        assert messages[3].content == "How are you?"
+        assert messages[3].text == "How are you?"

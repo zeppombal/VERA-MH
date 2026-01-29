@@ -275,7 +275,7 @@ class TestAzureLLM:
         # Verify ainvoke was called with only HumanMessage (no SystemMessage)
         call_args = mock_llm.ainvoke.call_args[0][0]
         assert len(call_args) == 1
-        assert call_args[0].content == "Test message"
+        assert call_args[0].text == "Test message"
 
     @pytest.mark.asyncio
     async def test_generate_response_without_usage_metadata(

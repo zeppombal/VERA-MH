@@ -47,7 +47,7 @@ class TestBuildLangchainMessages:
 
         assert len(messages) == 1
         assert isinstance(messages[0], HumanMessage)
-        assert messages[0].content == "Hello"
+        assert messages[0].text == "Hello"
 
     def test_build_messages_with_empty_history(self):
         """Test with empty history list."""
@@ -58,7 +58,7 @@ class TestBuildLangchainMessages:
 
         assert len(messages) == 1
         assert isinstance(messages[0], HumanMessage)
-        assert messages[0].content == "Hello"
+        assert messages[0].text == "Hello"
 
     def test_build_messages_with_role_enum_values(self):
         """Test that speaker field uses Role enum values correctly."""
@@ -102,19 +102,19 @@ class TestBuildLangchainMessages:
 
         # Turn 1 (odd) should be HumanMessage
         assert isinstance(messages[0], HumanMessage)
-        assert messages[0].content == "Hi, I'm Alice"
+        assert messages[0].text == "Hi, I'm Alice"
 
         # Turn 2 (even) should be AIMessage
         assert isinstance(messages[1], AIMessage)
-        assert messages[1].content == "Hello Alice, how are you?"
+        assert messages[1].text == "Hello Alice, how are you?"
 
         # Turn 3 (odd) should be HumanMessage
         assert isinstance(messages[2], HumanMessage)
-        assert messages[2].content == "I'm doing well"
+        assert messages[2].text == "I'm doing well"
 
         # Turn 4 (even) should be AIMessage
         assert isinstance(messages[3], AIMessage)
-        assert messages[3].content == "How can I help?"
+        assert messages[3].text == "How can I help?"
 
     def test_build_messages_with_standard_speaker_names(self):
         """Test that standard speaker names still work correctly."""
@@ -172,7 +172,7 @@ class TestBuildLangchainMessages:
                 assert isinstance(msg, HumanMessage)
             else:  # Even turns
                 assert isinstance(msg, AIMessage)
-            assert msg.content == f"Message {turn_number}"
+            assert msg.text == f"Message {turn_number}"
 
     def test_build_messages_no_current_message(self):
         """Test with history but no current message."""
@@ -220,8 +220,8 @@ class TestBuildLangchainMessages:
             conversation_history=history,
         )
 
-        assert messages[0].content == multiline_text
-        assert messages[1].content == unicode_text
+        assert messages[0].text == multiline_text
+        assert messages[1].text == unicode_text
 
     def test_build_messages_skips_none_response(self):
         """Test that turns with None response are skipped."""
@@ -246,9 +246,9 @@ class TestBuildLangchainMessages:
         # Should only have 2 messages (turn 2 skipped)
         assert len(messages) == 2
         assert isinstance(messages[0], HumanMessage)
-        assert messages[0].content == "Hello"
+        assert messages[0].text == "Hello"
         assert isinstance(messages[1], HumanMessage)
-        assert messages[1].content == "Are you there?"
+        assert messages[1].text == "Are you there?"
 
     def test_build_messages_with_persona_role_flips_types(self):
         """Test that persona role uses role-based message types correctly."""
@@ -285,14 +285,14 @@ class TestBuildLangchainMessages:
         assert len(messages) == 4  # 4 history messages
         # Persona's own messages should be AIMessage (what "I" said)
         assert isinstance(messages[0], AIMessage)
-        assert messages[0].content == "Hello, I need help"
+        assert messages[0].text == "Hello, I need help"
         # Provider's messages should be HumanMessage (what "they" said)
         assert isinstance(messages[1], HumanMessage)
-        assert messages[1].content == "How can I help you?"
+        assert messages[1].text == "How can I help you?"
         assert isinstance(messages[2], AIMessage)
-        assert messages[2].content == "I'm feeling anxious"
+        assert messages[2].text == "I'm feeling anxious"
         assert isinstance(messages[3], HumanMessage)
-        assert messages[3].content == "Tell me more"
+        assert messages[3].text == "Tell me more"
 
     def test_build_messages_without_persona_role_keeps_default(self):
         """Test that provider role uses role-based message types correctly."""
@@ -320,12 +320,12 @@ class TestBuildLangchainMessages:
         assert len(messages) == 3
         # Persona's messages should be HumanMessage (what "they" said)
         assert isinstance(messages[0], HumanMessage)
-        assert messages[0].content == "Hello"
+        assert messages[0].text == "Hello"
         # Provider's own messages should be AIMessage (what "I" said)
         assert isinstance(messages[1], AIMessage)
-        assert messages[1].content == "Hi there"
+        assert messages[1].text == "Hi there"
         assert isinstance(messages[2], HumanMessage)
-        assert messages[2].content == "How are you?"
+        assert messages[2].text == "How are you?"
 
     def test_build_messages_persona_with_turn_0(self):
         """Test persona role with turn 0 (initial message)."""
@@ -343,13 +343,13 @@ class TestBuildLangchainMessages:
         assert len(messages) == 3  # turn 0 + 2 history messages
         # Turn 0 should always be HumanMessage regardless of role
         assert isinstance(messages[0], HumanMessage)
-        assert messages[0].content == "Initial message"
+        assert messages[0].text == "Initial message"
         # Turn 1 (persona) should be AIMessage when persona role
         assert isinstance(messages[1], AIMessage)
-        assert messages[1].content == "Hello"
+        assert messages[1].text == "Hello"
         # Turn 2 (provider) should be HumanMessage when persona role
         assert isinstance(messages[2], HumanMessage)
-        assert messages[2].content == "Hi"
+        assert messages[2].text == "Hi"
 
     def test_build_messages_provider_starts_conversation_for_provider_role(self):
         """Test for when PROVIDER starts, messages build correctly for provider role."""
@@ -385,14 +385,14 @@ class TestBuildLangchainMessages:
         assert len(messages) == 4
         # Provider's own messages should be AIMessage (what "I" said)
         assert isinstance(messages[0], AIMessage)
-        assert messages[0].content == "Hello, how can I help you today?"
+        assert messages[0].text == "Hello, how can I help you today?"
         # Persona's messages should be HumanMessage (what "they" said)
         assert isinstance(messages[1], HumanMessage)
-        assert messages[1].content == "I'm feeling really anxious"
+        assert messages[1].text == "I'm feeling really anxious"
         assert isinstance(messages[2], AIMessage)
-        assert messages[2].content == "I understand. Can you tell me more?"
+        assert messages[2].text == "I understand. Can you tell me more?"
         assert isinstance(messages[3], HumanMessage)
-        assert messages[3].content == "It's been happening for weeks"
+        assert messages[3].text == "It's been happening for weeks"
 
     def test_build_messages_provider_starts_conversation_for_persona_role(self):
         """Test for when PROVIDER starts, messages build correctly for persona role."""
@@ -428,14 +428,14 @@ class TestBuildLangchainMessages:
         assert len(messages) == 4
         # Provider's messages should be HumanMessage (what "they" said)
         assert isinstance(messages[0], HumanMessage)
-        assert messages[0].content == "Hello, how can I help you today?"
+        assert messages[0].text == "Hello, how can I help you today?"
         # Persona's own messages should be AIMessage (what "I" said)
         assert isinstance(messages[1], AIMessage)
-        assert messages[1].content == "I'm feeling really anxious"
+        assert messages[1].text == "I'm feeling really anxious"
         assert isinstance(messages[2], HumanMessage)
-        assert messages[2].content == "I understand. Can you tell me more?"
+        assert messages[2].text == "I understand. Can you tell me more?"
         assert isinstance(messages[3], AIMessage)
-        assert messages[3].content == "It's been happening for weeks"
+        assert messages[3].text == "It's been happening for weeks"
 
     def test_build_messages_provider_starts_with_turn_0(self):
         """Test provider role with turn 0 when provider starts the conversation."""
@@ -461,13 +461,13 @@ class TestBuildLangchainMessages:
         assert len(messages) == 3  # turn 0 + 2 history messages
         # Turn 0 should always be HumanMessage regardless of role
         assert isinstance(messages[0], HumanMessage)
-        assert messages[0].content == "Initial message"
+        assert messages[0].text == "Initial message"
         # Turn 1 (provider) should be AIMessage when provider role
         assert isinstance(messages[1], AIMessage)
-        assert messages[1].content == "Hello, how can I help?"
+        assert messages[1].text == "Hello, how can I help?"
         # Turn 2 (persona) should be HumanMessage when provider role
         assert isinstance(messages[2], HumanMessage)
-        assert messages[2].content == "I need support"
+        assert messages[2].text == "I need support"
 
     def test_build_messages_provider_starts_with_turn_0_for_persona_role(self):
         """Test persona role with turn 0 when provider starts the conversation."""
@@ -493,13 +493,13 @@ class TestBuildLangchainMessages:
         assert len(messages) == 3  # turn 0 + 2 history messages
         # Turn 0 should always be HumanMessage regardless of role
         assert isinstance(messages[0], HumanMessage)
-        assert messages[0].content == "Initial message"
+        assert messages[0].text == "Initial message"
         # Turn 1 (provider) should be HumanMessage when persona role
         assert isinstance(messages[1], HumanMessage)
-        assert messages[1].content == "Hello, how can I help?"
+        assert messages[1].text == "Hello, how can I help?"
         # Turn 2 (persona) should be AIMessage when persona role
         assert isinstance(messages[2], AIMessage)
-        assert messages[2].content == "I need support"
+        assert messages[2].text == "I need support"
 
 
 class TestFormatConversationAsString:

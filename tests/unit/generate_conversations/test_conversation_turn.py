@@ -69,7 +69,7 @@ class TestConversationTurnCreation:
         )
 
         assert turn.response == "Response text"
-        assert turn.response == turn.response_message.content
+        assert turn.response == turn.response_message.text
 
 
 class TestConversationTurnToDict:
@@ -176,7 +176,7 @@ class TestConversationTurnFromDict:
         assert turn.early_termination is False
         assert turn.logging_metadata == {"tokens": 100}
         assert isinstance(turn.response_message, HumanMessage)
-        assert turn.response_message.content == "Hello world"
+        assert turn.response_message.text == "Hello world"
 
     def test_from_dict_agent(self):
         """Test from_dict creates AIMessage for agent speaker."""
@@ -194,7 +194,7 @@ class TestConversationTurnFromDict:
 
         assert turn.speaker == Role.PROVIDER
         assert isinstance(turn.response_message, AIMessage)
-        assert turn.response_message.content == "Hi there!"
+        assert turn.response_message.text == "Hi there!"
 
     def test_from_dict_chatbot(self):
         """Test from_dict creates AIMessage for chatbot speaker."""
@@ -245,7 +245,7 @@ class TestConversationTurnFromDict:
 
         assert turn.speaker == Role.PROVIDER
         assert isinstance(turn.response_message, HumanMessage)
-        assert turn.response_message.content == "Answer from provider"
+        assert turn.response_message.text == "Answer from provider"
 
     def test_from_dict_roundtrip(self):
         """Test that from_dict(to_dict()) preserves data."""

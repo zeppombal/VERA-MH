@@ -205,9 +205,9 @@ def format_conversation_as_string(
     # Convert messages to string format
     for message in messages:
         if isinstance(message, HumanMessage):
-            full_message += f"Human: {message.content}\n\n"
+            full_message += f"Human: {message.text}\n\n"
         elif isinstance(message, AIMessage):
-            full_message += f"Assistant: {message.content}\n\n"
+            full_message += f"Assistant: {message.text}\n\n"
 
     # Add "Assistant:" prompt at the end to signal the LLM should respond
     if messages and full_message.endswith("\n\n"):

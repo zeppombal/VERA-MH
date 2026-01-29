@@ -85,8 +85,8 @@ class OpenAILLM(JudgeLLM):
         debug_print(f"\n[DEBUG {self.name} - {self.role.value}] Messages sent to LLM:")
         for i, msg in enumerate(messages):
             msg_type = type(msg).__name__
-            preview = msg.content[:100]
-            content_preview = preview + "..." if len(msg.content) > 100 else msg.content
+            preview = msg.text[:100]
+            content_preview = preview + "..." if len(msg.text) > 100 else msg.text
             debug_print(f"  {i + 1}. {msg_type}: {content_preview}")
 
         try:
