@@ -15,63 +15,8 @@ from judge.utils import parse_judge_models
 from utils.utils import parse_key_value_list
 
 
-async def main(args) -> Optional[str]:
-    """Main async entrypoint for judging conversations."""
-    # Parse judge models from args (supports "model" or "model:count" format)
-    judge_models = parse_judge_models(args.judge_model)
-
-    models_str = ", ".join(f"{model}x{count}" for model, count in judge_models.items())
-    print(f"🎯 LLM Judge | Models: {models_str}")
-
-    # Load rubric configuration once at startup
-    print("📚 Loading rubric configuration...")
-    rubric_config = await RubricConfig.load(rubric_folder="data")
-
-    if args.conversation:
-        # Single conversation with first judge model (single instance)
-        first_model = next(iter(judge_models.keys()))
-
-        # Load single conversation
-        conversation = await ConversationData.load(args.conversation)
-
-        # Create judge with rubric config
-        judge = LLMJudge(
-            judge_model=first_model,
-            rubric_config=rubric_config,
-            judge_model_extra_params=args.judge_model_extra_params,
-        )
-        await judge_single_conversation(judge, conversation, args.output)
-        # Single conversation mode doesn't need output folder for pipeline
-        print("ℹ️  Single conversation mode: output folder not needed for pipeline")
-        return None
-    else:
-        # Load all conversations at startup
-        print(f"📂 Loading conversations from {args.folder}...")
-        conversations = await load_conversations(args.folder, limit=args.limit)
-        print(f"✅ Loaded {len(conversations)} conversations")
-
-        # Batch evaluation with multiple judges
-        from pathlib import Path
-
-        folder_name = Path(args.folder).name
-
-        _, output_folder = await judge_conversations(
-            judge_models=judge_models,
-            conversations=conversations,
-            rubric_config=rubric_config,
-            max_concurrent=args.max_concurrent,
-            output_root=args.output,
-            conversation_folder_name=folder_name,
-            verbose=True,
-            judge_model_extra_params=args.judge_model_extra_params,
-            per_judge=args.per_judge,
-            verbose_workers=args.verbose_workers,
-        )
-
-        return output_folder
-
-
-if __name__ == "__main__":
+def get_parser() -> argparse.ArgumentParser:
+    """Build and return the argument parser (for CLI and testing)."""
     parser = argparse.ArgumentParser(
         description="Judge existing LLM conversations using rubrics"
     )
@@ -171,7 +116,66 @@ if __name__ == "__main__":
         help="Enable verbose worker logging to show concurrency behavior",
     )
 
-    args = parser.parse_args()
+    return parser
 
+
+async def main(args) -> Optional[str]:
+    """Main async entrypoint for judging conversations."""
+    # Parse judge models from args (supports "model" or "model:count" format)
+    judge_models = parse_judge_models(args.judge_model)
+
+    models_str = ", ".join(f"{model}x{count}" for model, count in judge_models.items())
+    print(f"🎯 LLM Judge | Models: {models_str}")
+
+    # Load rubric configuration once at startup
+    print("📚 Loading rubric configuration...")
+    rubric_config = await RubricConfig.load(rubric_folder="data")
+
+    if args.conversation:
+        # Single conversation with first judge model (single instance)
+        first_model = next(iter(judge_models.keys()))
+
+        # Load single conversation
+        conversation = await ConversationData.load(args.conversation)
+
+        # Create judge with rubric config
+        judge = LLMJudge(
+            judge_model=first_model,
+            rubric_config=rubric_config,
+            judge_model_extra_params=args.judge_model_extra_params,
+        )
+        await judge_single_conversation(judge, conversation, args.output)
+        # Single conversation mode doesn't need output folder for pipeline
+        print("ℹ️  Single conversation mode: output folder not needed for pipeline")
+        return None
+    else:
+        # Load all conversations at startup
+        print(f"📂 Loading conversations from {args.folder}...")
+        conversations = await load_conversations(args.folder, limit=args.limit)
+        print(f"✅ Loaded {len(conversations)} conversations")
+
+        # Batch evaluation with multiple judges
+        from pathlib import Path
+
+        folder_name = Path(args.folder).name
+
+        _, output_folder = await judge_conversations(
+            judge_models=judge_models,
+            conversations=conversations,
+            rubric_config=rubric_config,
+            max_concurrent=args.max_concurrent,
+            output_root=args.output,
+            conversation_folder_name=folder_name,
+            verbose=True,
+            judge_model_extra_params=args.judge_model_extra_params,
+            per_judge=args.per_judge,
+            verbose_workers=args.verbose_workers,
+        )
+
+        return output_folder
+
+
+if __name__ == "__main__":
+    args = get_parser().parse_args()
     print(f"Running judge on: {args.folder or args.conversation}")
     asyncio.run(main(args))
