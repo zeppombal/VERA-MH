@@ -1,3 +1,4 @@
+from typing import Optional
 from unittest.mock import MagicMock
 
 import pytest
@@ -9,7 +10,7 @@ from llm_clients.llm_interface import LLMInterface
 class ConcreteLLM(LLMInterface):
     """Concrete implementation for testing abstract base class."""
 
-    def __init__(self, name: str, role: Role, system_prompt: str = None):
+    def __init__(self, name: str, role: Role, system_prompt: Optional[str] = None):
         super().__init__(name, role, system_prompt)
         # Add a mock llm object for __getattr__ testing
         self.llm = MagicMock(spec=["temperature", "max_tokens", "custom_method"])
@@ -71,14 +72,14 @@ class TestLLMInterface:
     def test_cannot_instantiate_abstract_class(self):
         """Test that LLMInterface cannot be instantiated directly."""
         with pytest.raises(TypeError) as exc_info:
-            LLMInterface(name="Test", role=Role.PROVIDER)
+            LLMInterface(name="Test", role=Role.PROVIDER)  # pyright: ignore[reportAbstractUsage]
 
         assert "Can't instantiate abstract class" in str(exc_info.value)
 
     def test_incomplete_implementation_raises_error(self):
         """Test that incomplete implementations raise TypeError."""
         with pytest.raises(TypeError) as exc_info:
-            IncompleteLLM(name="Incomplete", role=Role.PROVIDER)
+            IncompleteLLM(name="Incomplete", role=Role.PROVIDER)  # pyright: ignore[reportAbstractUsage]
 
         assert "Can't instantiate abstract class" in str(exc_info.value)
 
@@ -125,7 +126,9 @@ class TestLLMInterface:
         class NullLLM(LLMInterface):
             """Implementation with None llm."""
 
-            def __init__(self, name: str, role: Role, system_prompt: str = None):
+            def __init__(
+                self, name: str, role: Role, system_prompt: Optional[str] = None
+            ):
                 super().__init__(name, role, system_prompt)
                 self.llm = None
 
@@ -177,7 +180,9 @@ class TestLLMInterface:
 
         # Create a fresh mock without spec for this test
         class FlexibleLLM(LLMInterface):
-            def __init__(self, name: str, role: Role, system_prompt: str = None):
+            def __init__(
+                self, name: str, role: Role, system_prompt: Optional[str] = None
+            ):
                 super().__init__(name, role, system_prompt)
                 self.llm = MagicMock()
                 self.llm.string_attr = "test string"
