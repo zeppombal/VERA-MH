@@ -22,6 +22,7 @@ from .test_helpers import (
 
 
 @pytest.mark.unit
+@pytest.mark.usefixtures("mock_openai_config", "mock_openai_model")
 class TestOpenAILLM(TestJudgeLLMBase):
     """Unit tests for OpenAILLM class."""
 
@@ -47,14 +48,12 @@ class TestOpenAILLM(TestJudgeLLMBase):
 
     @contextmanager
     def get_mock_patches(self):
-        """Set up mocks for OpenAI."""
-        with (
-            patch("llm_clients.openai_llm.Config.OPENAI_API_KEY", "test-key"),
-            patch("llm_clients.openai_llm.ChatOpenAI") as mock_chat,
-        ):
-            mock_llm = MagicMock()
-            mock_chat.return_value = mock_llm
-            yield mock_chat
+        """Set up mocks for OpenAI.
+
+        Note: Actual mocking is handled by class-level fixtures.
+        This method provides a no-op context manager for base class compatibility.
+        """
+        yield
 
     # ============================================================================
     # OpenAI-Specific Tests
@@ -68,7 +67,6 @@ class TestOpenAILLM(TestJudgeLLMBase):
 
         assert "OPENAI_API_KEY not found" in str(exc_info.value)
 
-    @pytest.mark.usefixtures("mock_openai_config", "mock_openai_model")
     def test_init_with_default_model(self):
         """Test initialization with default model from config."""
         llm = OpenAILLM(
@@ -80,14 +78,12 @@ class TestOpenAILLM(TestJudgeLLMBase):
         assert llm.model_name == "gpt-4"
         assert llm.last_response_metadata == {}
 
-    @pytest.mark.usefixtures("mock_openai_config", "mock_openai_model")
     def test_init_with_custom_model(self):
         """Test initialization with custom model name."""
         llm = OpenAILLM(name="TestOpenAI", role=Role.PERSONA, model_name="gpt-4-turbo")
 
         assert llm.model_name == "gpt-4-turbo"
 
-    @pytest.mark.usefixtures("mock_openai_config", "mock_openai_model")
     def test_init_with_kwargs(self, default_llm_kwargs):
         """Test initialization with additional kwargs."""
         with patch("llm_clients.openai_llm.ChatOpenAI") as mock_chat:
@@ -318,13 +314,11 @@ class TestOpenAILLM(TestJudgeLLMBase):
         metadata = llm.get_last_response_metadata()
         assert_response_timing(metadata)
 
-    @pytest.mark.usefixtures("mock_openai_config", "mock_openai_model")
     def test_get_last_response_metadata_returns_copy(self):
         """Test that get_last_response_metadata returns a copy."""
         llm = OpenAILLM(name="TestOpenAI", role=Role.PERSONA)
         assert_metadata_copy_behavior(llm)
 
-    @pytest.mark.usefixtures("mock_openai_config", "mock_openai_model")
     def test_set_system_prompt(self):
         """Test set_system_prompt method."""
         llm = OpenAILLM(
@@ -628,7 +622,6 @@ class TestOpenAILLM(TestJudgeLLMBase):
         assert metadata["raw_response_metadata"]["nested"]["key"] == "value"
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("mock_openai_config", "mock_openai_model")
     async def test_generate_structured_response_success(self):
         """Test successful structured response generation."""
         from pydantic import BaseModel, Field
@@ -671,7 +664,6 @@ class TestOpenAILLM(TestJudgeLLMBase):
             assert_response_timing(metadata)
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("mock_openai_config", "mock_openai_model")
     async def test_generate_structured_response_with_complex_model(self):
         """Test structured response with nested Pydantic model."""
         from pydantic import BaseModel, Field
@@ -721,7 +713,6 @@ class TestOpenAILLM(TestJudgeLLMBase):
             assert response.summary == "Overall good performance"
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("mock_openai_config", "mock_openai_model")
     async def test_generate_structured_response_error(self):
         """Test error handling in structured response generation."""
         from pydantic import BaseModel
@@ -757,7 +748,6 @@ class TestOpenAILLM(TestJudgeLLMBase):
             assert "Structured output failed" in metadata["error"]
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("mock_openai_config", "mock_openai_model")
     async def test_structured_response_metadata_fields(self):
         """Test that structured response metadata includes correct fields."""
         from pydantic import BaseModel

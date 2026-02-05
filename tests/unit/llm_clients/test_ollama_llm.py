@@ -19,6 +19,7 @@ from .test_helpers import (
 
 
 @pytest.mark.unit
+@pytest.mark.usefixtures("mock_ollama_model")
 class TestOllamaLLM(TestLLMBase):
     """Unit tests for OllamaLLM class.
 
@@ -49,13 +50,12 @@ class TestOllamaLLM(TestLLMBase):
 
     @contextmanager
     def get_mock_patches(self):
-        """Set up mocks for Ollama."""
-        with patch("llm_clients.ollama_llm.LangChainOllamaLLM") as mock_ollama:
-            mock_instance = MagicMock()
-            # Set up ainvoke to return a string by default
-            mock_instance.ainvoke = AsyncMock(return_value="Test response")
-            mock_ollama.return_value = mock_instance
-            yield mock_ollama
+        """Set up mocks for Ollama.
+
+        Note: Actual mocking is handled by class-level fixtures.
+        This method provides a no-op context manager for base class compatibility.
+        """
+        yield
 
     # ============================================================================
     # Ollama-Specific Tests
@@ -585,7 +585,6 @@ class TestOllamaLLM(TestLLMBase):
         assert "Assistant: How are you?" in call_args
         assert "Assistant:" in call_args
 
-    @pytest.mark.usefixtures("mock_ollama_model")
     def test_get_last_response_metadata_returns_copy(self):
         """Test that get_last_response_metadata returns a copy."""
         from llm_clients.ollama_llm import OllamaLLM

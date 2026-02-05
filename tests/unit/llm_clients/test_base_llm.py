@@ -9,6 +9,7 @@ Architecture:
 - TestJudgeLLMBase: Tests for all JudgeLLM implementations (extends TestLLMBase)
 
 Usage:
+    @pytest.mark.usefixtures("mock_my_config", "mock_my_model")
     class TestMyLLM(TestJudgeLLMBase):
         def create_llm(self, role, **kwargs):
             return MyLLM(name="test", role=role, **kwargs)
@@ -16,8 +17,13 @@ Usage:
         def get_provider_name(self):
             return "my_provider"
 
+        @contextmanager
         def get_mock_patches(self):
-            return patch("my_module.Config.API_KEY", "test-key"), ...
+            # No-op context manager when using class-level fixtures
+            yield
+
+Note: Modern implementations should use @pytest.mark.usefixtures at the class level
+and make get_mock_patches() return a simple no-op context manager.
 """
 
 from abc import ABC, abstractmethod
@@ -81,10 +87,22 @@ class TestLLMBase(ABC):
     def get_mock_patches(self):
         """Get context manager with all necessary mocks for testing.
 
-        Should patch API keys, clients, and any other external dependencies.
+        Modern implementations should use @pytest.mark.usefixtures at the class level
+        and make this method return a simple no-op context manager:
+
+            @contextmanager
+            def get_mock_patches(self):
+                yield
+
+        For legacy implementations, this can still provide actual patches:
+
+            @contextmanager
+            def get_mock_patches(self):
+                with patch("module.Config.API_KEY", "test-key"):
+                    yield
 
         Returns:
-            Context manager that sets up all necessary patches
+            Context manager (use @contextmanager decorator)
         """
         pass
 

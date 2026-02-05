@@ -49,6 +49,7 @@ def create_mock_response(
 
 
 @pytest.mark.unit
+@pytest.mark.usefixtures("mock_azure_config", "mock_azure_model")
 class TestAzureLLM(TestJudgeLLMBase):
     """Unit tests for AzureLLM class."""
 
@@ -85,23 +86,12 @@ class TestAzureLLM(TestJudgeLLMBase):
 
     @contextmanager
     def get_mock_patches(self):
-        """Set up mocks for Azure."""
-        with (
-            patch("llm_clients.azure_llm.Config.AZURE_API_KEY", "test-key"),
-            patch(
-                "llm_clients.azure_llm.Config.AZURE_ENDPOINT",
-                "https://test.openai.azure.com",
-            ),
-            patch(
-                "llm_clients.azure_llm.Config.get_azure_config",
-                return_value={"model": "gpt-4"},
-            ),
-            patch("llm_clients.azure_llm.AzureAIChatCompletionsModel") as mock_model,
-        ):
-            mock_llm = MagicMock()
-            mock_llm.model_name = "gpt-4"
-            mock_model.return_value = mock_llm
-            yield mock_model
+        """Set up mocks for Azure.
+
+        Note: Actual mocking is handled by class-level fixtures.
+        This method provides a no-op context manager for base class compatibility.
+        """
+        yield
 
     # ============================================================================
     # Azure-Specific Tests
@@ -128,7 +118,6 @@ class TestAzureLLM(TestJudgeLLMBase):
 
             assert "AZURE_ENDPOINT not found" in str(exc_info.value)
 
-    @pytest.mark.usefixtures("mock_azure_config", "mock_azure_model")
     def test_init_with_default_model(self):
         """Test initialization with default model from config."""
         llm = AzureLLM(name="TestAzure", role=Role.PERSONA, system_prompt="Test prompt")
@@ -138,7 +127,6 @@ class TestAzureLLM(TestJudgeLLMBase):
         assert llm.model_name == "gpt-4"
         assert llm.last_response_metadata == {}
 
-    @pytest.mark.usefixtures("mock_azure_config", "mock_azure_model")
     def test_init_with_custom_model(self):
         """Test initialization with custom model name instead of config default."""
         llm = AzureLLM(
@@ -147,7 +135,6 @@ class TestAzureLLM(TestJudgeLLMBase):
 
         assert llm.model_name == "some-made-up-model"  # azure- prefix should be removed
 
-    @pytest.mark.usefixtures("mock_azure_config", "mock_azure_model")
     def test_init_with_kwargs(self):
         """Test initialization with additional kwargs."""
         with patch("llm_clients.azure_llm.AzureAIChatCompletionsModel") as mock_model:
@@ -165,7 +152,6 @@ class TestAzureLLM(TestJudgeLLMBase):
             assert call_kwargs["max_tokens"] == 500
             assert call_kwargs["top_p"] == 0.9
 
-    @pytest.mark.usefixtures("mock_azure_config", "mock_azure_model")
     def test_init_with_api_version(self):
         """Test initialization with API version from config."""
         with (
@@ -181,7 +167,6 @@ class TestAzureLLM(TestJudgeLLMBase):
             call_kwargs = mock_model.call_args[1]
             assert call_kwargs["api_version"] == "2024-05-01-preview"
 
-    @pytest.mark.usefixtures("mock_azure_config", "mock_azure_model")
     def test_init_with_default_api_version(self):
         """Test initialization with default API version when not configured."""
         with (
@@ -194,7 +179,6 @@ class TestAzureLLM(TestJudgeLLMBase):
             call_kwargs = mock_model.call_args[1]
             assert call_kwargs["api_version"] == AzureLLM.DEFAULT_API_VERSION
 
-    @pytest.mark.usefixtures("mock_azure_config", "mock_azure_model")
     def test_init_strips_endpoint_trailing_slash(self):
         """Test that endpoint trailing slash is removed."""
         with (
@@ -210,7 +194,6 @@ class TestAzureLLM(TestJudgeLLMBase):
             call_kwargs = mock_model.call_args[1]
             assert call_kwargs["endpoint"] == "https://test.openai.azure.com"
 
-    @pytest.mark.usefixtures("mock_azure_config", "mock_azure_model")
     def test_init_adds_models_suffix_for_ai_foundry(self):
         """Test that /models suffix is added for Azure AI Foundry endpoints."""
         with (
@@ -228,7 +211,6 @@ class TestAzureLLM(TestJudgeLLMBase):
                 call_kwargs["endpoint"] == "https://test.services.ai.azure.com/models"
             )
 
-    @pytest.mark.usefixtures("mock_azure_config", "mock_azure_model")
     def test_init_does_not_duplicate_models_suffix(self):
         """Test that /models suffix is not duplicated if already present."""
         with (
@@ -246,7 +228,6 @@ class TestAzureLLM(TestJudgeLLMBase):
                 call_kwargs["endpoint"] == "https://test.services.ai.azure.com/models"
             )
 
-    @pytest.mark.usefixtures("mock_azure_config")
     def test_init_invalid_endpoint_raises_error(self):
         """Test that non-HTTPS endpoint raises ValueError."""
         with (
@@ -261,7 +242,6 @@ class TestAzureLLM(TestJudgeLLMBase):
 
             assert "must start with 'https://'" in str(exc_info.value)
 
-    @pytest.mark.usefixtures("mock_azure_config")
     def test_init_invalid_endpoint_pattern_raises_error(self):
         """Test that endpoint with unexpected pattern raises ValueError."""
         with (
@@ -468,13 +448,11 @@ class TestAzureLLM(TestJudgeLLMBase):
         metadata = llm.get_last_response_metadata()
         assert_response_timing(metadata)
 
-    @pytest.mark.usefixtures("mock_azure_config", "mock_azure_model")
     def test_get_last_response_metadata_returns_copy(self):
         """Test that get_last_response_metadata returns a copy."""
         llm = AzureLLM(name="TestAzure", role=Role.PERSONA)
         assert_metadata_copy_behavior(llm)
 
-    @pytest.mark.usefixtures("mock_azure_config", "mock_azure_model")
     def test_set_system_prompt(self):
         """Test set_system_prompt method."""
         llm = AzureLLM(
@@ -489,7 +467,6 @@ class TestAzureLLM(TestJudgeLLMBase):
         assert llm.system_prompt == "Updated prompt"
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("mock_azure_config", "mock_azure_model")
     async def test_generate_structured_response_success(self):
         """Test successful structured response generation."""
         with patch("llm_clients.azure_llm.AzureAIChatCompletionsModel") as mock_model:
@@ -530,7 +507,6 @@ class TestAzureLLM(TestJudgeLLMBase):
             assert_response_timing(metadata)
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("mock_azure_config", "mock_azure_model")
     async def test_generate_structured_response_error(self):
         """Test error handling in structured response generation."""
         with patch("llm_clients.azure_llm.AzureAIChatCompletionsModel") as mock_model:
@@ -564,7 +540,6 @@ class TestAzureLLM(TestJudgeLLMBase):
             assert "Structured output failed" in metadata["error"]
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("mock_azure_config", "mock_azure_model")
     async def test_generate_response_with_conversation_history(self):
         """Test generate_response with conversation_history parameter."""
         with patch("llm_clients.azure_llm.AzureAIChatCompletionsModel") as mock_model:

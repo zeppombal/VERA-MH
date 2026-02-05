@@ -22,6 +22,7 @@ from .test_helpers import (
 
 
 @pytest.mark.unit
+@pytest.mark.usefixtures("mock_gemini_config", "mock_gemini_model")
 class TestGeminiLLM(TestJudgeLLMBase):
     """Unit tests for GeminiLLM class."""
 
@@ -47,14 +48,12 @@ class TestGeminiLLM(TestJudgeLLMBase):
 
     @contextmanager
     def get_mock_patches(self):
-        """Set up mocks for Gemini."""
-        with (
-            patch("llm_clients.gemini_llm.Config.GOOGLE_API_KEY", "test-key"),
-            patch("llm_clients.gemini_llm.ChatGoogleGenerativeAI") as mock_chat,
-        ):
-            mock_llm = MagicMock()
-            mock_chat.return_value = mock_llm
-            yield mock_chat
+        """Set up mocks for Gemini.
+
+        Note: Actual mocking is handled by class-level fixtures.
+        This method provides a no-op context manager for base class compatibility.
+        """
+        yield
 
     # ============================================================================
     # Gemini-Specific Tests
@@ -68,7 +67,6 @@ class TestGeminiLLM(TestJudgeLLMBase):
 
         assert "GOOGLE_API_KEY not found" in str(exc_info.value)
 
-    @pytest.mark.usefixtures("mock_gemini_config", "mock_gemini_model")
     def test_init_with_default_model(self):
         """Test initialization with default model from config."""
         llm = GeminiLLM(
@@ -80,7 +78,6 @@ class TestGeminiLLM(TestJudgeLLMBase):
         assert llm.model_name == "gemini-1.5-pro"
         assert llm.last_response_metadata == {}
 
-    @pytest.mark.usefixtures("mock_gemini_config", "mock_gemini_model")
     def test_init_with_custom_model(self):
         """Test initialization with custom model name."""
         llm = GeminiLLM(
@@ -89,7 +86,6 @@ class TestGeminiLLM(TestJudgeLLMBase):
 
         assert llm.model_name == "gemini-1.5-flash"
 
-    @pytest.mark.usefixtures("mock_gemini_config", "mock_gemini_model")
     def test_init_with_kwargs(self, default_llm_kwargs):
         """Test initialization with additional kwargs."""
         with patch("llm_clients.gemini_llm.ChatGoogleGenerativeAI") as mock_chat:
@@ -307,13 +303,11 @@ class TestGeminiLLM(TestJudgeLLMBase):
         metadata = llm.get_last_response_metadata()
         assert_response_timing(metadata)
 
-    @pytest.mark.usefixtures("mock_gemini_config", "mock_gemini_model")
     def test_get_last_response_metadata_returns_copy(self):
         """Test that get_last_response_metadata returns a copy."""
         llm = GeminiLLM(name="TestGemini", role=Role.PERSONA)
         assert_metadata_copy_behavior(llm)
 
-    @pytest.mark.usefixtures("mock_gemini_config", "mock_gemini_model")
     def test_set_system_prompt(self):
         """Test set_system_prompt method."""
         llm = GeminiLLM(
@@ -592,7 +586,6 @@ class TestGeminiLLM(TestJudgeLLMBase):
         )  # Gets from metadata, doesn't calculate
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("mock_gemini_config", "mock_gemini_model")
     async def test_generate_structured_response_success(self):
         """Test successful structured response generation."""
         from pydantic import BaseModel, Field
@@ -635,7 +628,6 @@ class TestGeminiLLM(TestJudgeLLMBase):
             assert_response_timing(metadata)
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("mock_gemini_config", "mock_gemini_model")
     async def test_generate_structured_response_with_complex_model(self):
         """Test structured response with nested Pydantic model."""
         from pydantic import BaseModel, Field
@@ -685,7 +677,6 @@ class TestGeminiLLM(TestJudgeLLMBase):
             assert response.summary == "Overall good performance"
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("mock_gemini_config", "mock_gemini_model")
     async def test_generate_structured_response_error(self):
         """Test error handling in structured response generation."""
         from pydantic import BaseModel
@@ -721,7 +712,6 @@ class TestGeminiLLM(TestJudgeLLMBase):
             assert "Structured output failed" in metadata["error"]
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("mock_gemini_config", "mock_gemini_model")
     async def test_structured_response_metadata_fields(self):
         """Test that structured response metadata includes correct fields."""
         from pydantic import BaseModel

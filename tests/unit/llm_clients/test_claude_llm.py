@@ -22,6 +22,7 @@ from .test_helpers import (
 
 
 @pytest.mark.unit
+@pytest.mark.usefixtures("mock_claude_config", "mock_claude_model")
 class TestClaudeLLM(TestJudgeLLMBase):
     """Unit tests for ClaudeLLM class."""
 
@@ -48,15 +49,12 @@ class TestClaudeLLM(TestJudgeLLMBase):
 
     @contextmanager
     def get_mock_patches(self):
-        """Set up mocks for Claude."""
-        with (
-            patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key"),
-            patch("llm_clients.claude_llm.ChatAnthropic") as mock_chat,
-        ):
-            mock_llm = MagicMock()
-            mock_llm.model = "claude-sonnet-4-5-20250929"
-            mock_chat.return_value = mock_llm
-            yield mock_chat
+        """Set up mocks for Claude.
+
+        Note: Actual mocking is handled by class-level fixtures.
+        This method provides a no-op context manager for base class compatibility.
+        """
+        yield
 
     # ============================================================================
     # Claude-Specific Tests
@@ -70,7 +68,6 @@ class TestClaudeLLM(TestJudgeLLMBase):
 
         assert "ANTHROPIC_API_KEY not found" in str(exc_info.value)
 
-    @pytest.mark.usefixtures("mock_claude_config", "mock_claude_model")
     def test_init_with_default_model(self):
         """Test initialization with default model from config."""
         llm = ClaudeLLM(
@@ -82,7 +79,6 @@ class TestClaudeLLM(TestJudgeLLMBase):
         assert llm.model_name == "claude-sonnet-4-5-20250929"
         assert llm.last_response_metadata == {}
 
-    @pytest.mark.usefixtures("mock_claude_config", "mock_claude_model")
     def test_init_with_custom_model(self):
         """Test initialization with custom model name."""
         llm = ClaudeLLM(
@@ -91,7 +87,6 @@ class TestClaudeLLM(TestJudgeLLMBase):
 
         assert llm.model_name == "claude-3-opus-20240229"
 
-    @pytest.mark.usefixtures("mock_claude_config")
     def test_init_with_kwargs(self, default_llm_kwargs):
         """Test initialization with additional kwargs."""
         with patch("llm_clients.claude_llm.ChatAnthropic") as mock_chat_anthropic:
@@ -283,13 +278,11 @@ class TestClaudeLLM(TestJudgeLLMBase):
         metadata = llm.get_last_response_metadata()
         assert_response_timing(metadata)
 
-    @pytest.mark.usefixtures("mock_claude_config", "mock_claude_model")
     def test_get_last_response_metadata_returns_copy(self):
         """Test that get_last_response_metadata returns a copy."""
         llm = ClaudeLLM(name="TestClaude", role=Role.PERSONA)
         assert_metadata_copy_behavior(llm)
 
-    @pytest.mark.usefixtures("mock_claude_config", "mock_claude_model")
     def test_set_system_prompt(self):
         """Test set_system_prompt method."""
         llm = ClaudeLLM(
@@ -561,7 +554,6 @@ class TestClaudeLLM(TestJudgeLLMBase):
         verify_message_types_for_persona(mock_llm, expected_message_count=4)
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("mock_claude_config", "mock_claude_model")
     async def test_generate_structured_response_success(self):
         """Test successful structured response generation."""
         from pydantic import BaseModel, Field
@@ -605,7 +597,6 @@ class TestClaudeLLM(TestJudgeLLMBase):
             assert_response_timing(metadata)
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("mock_claude_config", "mock_claude_model")
     async def test_generate_structured_response_with_complex_model(self):
         """Test structured response with nested Pydantic model."""
         from pydantic import BaseModel, Field
@@ -656,7 +647,6 @@ class TestClaudeLLM(TestJudgeLLMBase):
             assert response.summary == "Overall good performance"
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("mock_claude_config", "mock_claude_model")
     async def test_generate_structured_response_error(self):
         """Test error handling in structured response generation."""
         from pydantic import BaseModel
@@ -693,7 +683,6 @@ class TestClaudeLLM(TestJudgeLLMBase):
             assert "Structured output failed" in metadata["error"]
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("mock_claude_config", "mock_claude_model")
     async def test_structured_response_metadata_fields(self):
         """Test that structured response metadata includes correct fields."""
         from pydantic import BaseModel
