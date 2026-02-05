@@ -467,7 +467,7 @@ class TestAzureLLM(TestJudgeLLMBase):
         assert llm.system_prompt == "Updated prompt"
 
     @pytest.mark.asyncio
-    async def test_generate_structured_response_success(self):
+    async def test_generate_structured_response_success(self, mock_llm_factory):
         """Test successful structured response generation."""
         with patch("llm_clients.azure_llm.AzureAIChatCompletionsModel") as mock_model:
             mock_llm = MagicMock()

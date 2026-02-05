@@ -554,7 +554,7 @@ class TestClaudeLLM(TestJudgeLLMBase):
         verify_message_types_for_persona(mock_llm, expected_message_count=4)
 
     @pytest.mark.asyncio
-    async def test_generate_structured_response_success(self):
+    async def test_generate_structured_response_success(self, mock_llm_factory):
         """Test successful structured response generation."""
         from pydantic import BaseModel, Field
 
@@ -597,7 +597,9 @@ class TestClaudeLLM(TestJudgeLLMBase):
             assert_response_timing(metadata)
 
     @pytest.mark.asyncio
-    async def test_generate_structured_response_with_complex_model(self):
+    async def test_generate_structured_response_with_complex_model(
+        self, mock_llm_factory
+    ):
         """Test structured response with nested Pydantic model."""
         from pydantic import BaseModel, Field
 

@@ -586,7 +586,7 @@ class TestGeminiLLM(TestJudgeLLMBase):
         )  # Gets from metadata, doesn't calculate
 
     @pytest.mark.asyncio
-    async def test_generate_structured_response_success(self):
+    async def test_generate_structured_response_success(self, mock_llm_factory):
         """Test successful structured response generation."""
         from pydantic import BaseModel, Field
 
@@ -628,7 +628,9 @@ class TestGeminiLLM(TestJudgeLLMBase):
             assert_response_timing(metadata)
 
     @pytest.mark.asyncio
-    async def test_generate_structured_response_with_complex_model(self):
+    async def test_generate_structured_response_with_complex_model(
+        self, mock_llm_factory
+    ):
         """Test structured response with nested Pydantic model."""
         from pydantic import BaseModel, Field
 
