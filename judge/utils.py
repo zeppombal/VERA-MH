@@ -14,7 +14,15 @@ def parse_judge_models(model_arg):
         if ":" in model_spec:
             # Format: "model:count"
             model, count = model_spec.rsplit(":", 1)
-            judge_models[model] = int(count)
+            try:
+                n = int(count)
+            except ValueError:
+                raise ValueError(
+                    f"Judge model count must be an integer, got {count!r}"
+                ) from None
+            if n < 1:
+                raise ValueError(f"Judge model count must be positive, got {n}")
+            judge_models[model] = n
         else:
             # Format: "model" (defaults to 1 instance)
             judge_models[model_spec] = 1

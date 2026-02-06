@@ -328,3 +328,39 @@ class TestJudgeModelParsing:
         judge_model = _setup_judge_model_arg(["-j", "gpt-4o:2", "gpt-4o:5"])
         result = parse_judge_models(judge_model)
         assert result == {"gpt-4o": 5}
+
+    def test_count_zero_raises(self):
+        """Count after ':' must be positive; 0 should raise ValueError."""
+        judge_model = _setup_judge_model_arg(["-j", "gpt-4o:0"])
+        with pytest.raises(ValueError, match="must be positive"):
+            parse_judge_models(judge_model)
+
+    def test_count_negative_raises(self):
+        """Count after ':' must be positive; negative should raise ValueError."""
+        judge_model = _setup_judge_model_arg(["-j", "gpt-4o:-1"])
+        with pytest.raises(ValueError, match="must be positive"):
+            parse_judge_models(judge_model)
+
+    def test_count_float_raises(self):
+        """Count after ':' must be an integer; float string should raise ValueError."""
+        judge_model = _setup_judge_model_arg(["-j", "gpt-4o:2.5"])
+        with pytest.raises(ValueError, match="must be an integer"):
+            parse_judge_models(judge_model)
+
+    def test_count_empty_raises(self):
+        """Count after ':' cannot be empty; `model:` should raise ValueError."""
+        judge_model = _setup_judge_model_arg(["-j", "gpt-4o:"])
+        with pytest.raises(ValueError, match="must be an integer"):
+            parse_judge_models(judge_model)
+
+    def test_count_non_numeric_raises(self):
+        """Count after ':' must be numeric; otherwise should raise ValueError."""
+        judge_model = _setup_judge_model_arg(["-j", "gpt-4o:abc"])
+        with pytest.raises(ValueError, match="must be an integer"):
+            parse_judge_models(judge_model)
+
+    def test_count_alphanumeric_raises(self):
+        """Count after ':' must be integer only; otherwise should raise ValueError."""
+        judge_model = _setup_judge_model_arg(["-j", "gpt-4o:2x"])
+        with pytest.raises(ValueError, match="must be an integer"):
+            parse_judge_models(judge_model)
