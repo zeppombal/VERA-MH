@@ -75,14 +75,14 @@ class TestOpenAILLM(TestJudgeLLMBase):
 
         assert llm.name == "TestOpenAI"
         assert llm.system_prompt == "Test prompt"
-        assert llm.model_name == "gpt-4"
+        assert llm.model_name == "gpt-5.2"
         assert llm.last_response_metadata == {}
 
     def test_init_with_custom_model(self):
         """Test initialization with custom model name."""
-        llm = OpenAILLM(name="TestOpenAI", role=Role.PERSONA, model_name="gpt-4-turbo")
+        llm = OpenAILLM(name="TestOpenAI", role=Role.PERSONA, model_name="gpt-4o-turbo")
 
-        assert llm.model_name == "gpt-4-turbo"
+        assert llm.model_name == "gpt-4o-turbo"
 
     def test_init_with_kwargs(self, default_llm_kwargs):
         """Test initialization with additional kwargs."""
@@ -112,7 +112,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
             response_id="chatcmpl-12345",
             provider="openai",
             metadata={
-                "model_name": "gpt-4-0613",
+                "model_name": "gpt-4o-0613",
                 "token_usage": {
                     "prompt_tokens": 15,
                     "completion_tokens": 25,
@@ -148,7 +148,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
             llm, expected_provider="openai", expected_role=Role.PERSONA
         )
         assert metadata["response_id"] == "chatcmpl-12345"
-        assert metadata["model"] == "gpt-4-0613"
+        assert metadata["model"] == "gpt-4o-0613"
         assert_iso_timestamp(metadata["timestamp"])
         assert_response_timing(metadata)
         assert metadata["usage"]["input_tokens"] == 15
@@ -172,7 +172,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
             text="Response without system prompt",
             response_id="chatcmpl-67890",
             provider="openai",
-            metadata={"model_name": "gpt-4"},
+            metadata={"model_name": "gpt-4o"},
         )
 
         mock_llm = MagicMock()
@@ -233,7 +233,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
 
         assert response == "Response"
         metadata = llm.get_last_response_metadata()
-        assert metadata["model"] == "gpt-4"
+        assert metadata["model"] == "gpt-5.2"
         assert metadata["usage"] == {}
         assert metadata["finish_reason"] is None
 
@@ -250,7 +250,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
         mock_response.text = "Response"
         mock_response.id = "chatcmpl-usage"
         mock_response.response_metadata = {
-            "model_name": "gpt-4",
+            "model_name": "gpt-4o",
             "token_usage": {
                 "prompt_tokens": 10,
                 "completion_tokens": 20,
@@ -383,18 +383,18 @@ class TestOpenAILLM(TestJudgeLLMBase):
             text="Test",
             response_id="chatcmpl-model",
             provider="openai",
-            metadata={"model_name": "gpt-4-0613-updated"},
+            metadata={"model_name": "gpt-4o-0613-updated"},
         )
 
         mock_llm = MagicMock()
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
         mock_chat_openai.return_value = mock_llm
 
-        llm = OpenAILLM(name="TestOpenAI", role=Role.PERSONA, model_name="gpt-4")
+        llm = OpenAILLM(name="TestOpenAI", role=Role.PERSONA, model_name="gpt-4o")
         await llm.generate_response(conversation_history=mock_system_message)
 
         metadata = llm.get_last_response_metadata()
-        assert metadata["model"] == "gpt-4-0613-updated"
+        assert metadata["model"] == "gpt-4o-0613-updated"
 
     @pytest.mark.asyncio
     @patch("llm_clients.openai_llm.Config.OPENAI_API_KEY", "test-key")
@@ -408,7 +408,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
             response_id="chatcmpl-history",
             provider="openai",
             metadata={
-                "model_name": "gpt-4-0613",
+                "model_name": "gpt-4o-0613",
                 "token_usage": {
                     "prompt_tokens": 50,
                     "completion_tokens": 20,
@@ -447,7 +447,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
             text="Response",
             response_id="chatcmpl-empty",
             provider="openai",
-            metadata={"model_name": "gpt-4"},
+            metadata={"model_name": "gpt-4o"},
         )
 
         mock_llm = MagicMock()
@@ -476,7 +476,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
             text="Response",
             response_id="chatcmpl-none",
             provider="openai",
-            metadata={"model_name": "gpt-4"},
+            metadata={"model_name": "gpt-4o"},
         )
 
         mock_llm = MagicMock()
@@ -542,7 +542,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
             response_id="chatcmpl-partial",
             provider="openai",
             metadata={
-                "model": "gpt-4",
+                "model": "gpt-4o",
                 "token_usage": {
                     "prompt_tokens": 15
                 },  # Missing completion_tokens, total_tokens
@@ -577,7 +577,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
             text="Stopped response",
             response_id="chatcmpl-stop",
             provider="openai",
-            metadata={"model": "gpt-4", "finish_reason": "length"},
+            metadata={"model": "gpt-4o", "finish_reason": "length"},
         )
 
         mock_llm = MagicMock()
@@ -602,7 +602,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
             response_id="chatcmpl-raw",
             provider="openai",
             metadata={
-                "model": "gpt-4",
+                "model": "gpt-4o",
                 "custom_field": "custom_value",
                 "nested": {"key": "value"},
             },
@@ -659,7 +659,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
             metadata = assert_metadata_structure(
                 llm, expected_provider="openai", expected_role=Role.JUDGE
             )
-            assert metadata["model"] == "gpt-4"
+            assert metadata["model"] == "gpt-5.2"
             assert metadata["structured_output"] is True
             assert_response_timing(metadata)
 

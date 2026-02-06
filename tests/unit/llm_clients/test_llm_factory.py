@@ -55,7 +55,7 @@ class TestLLMFactory:
     @pytest.mark.usefixtures("mock_openai_config", "mock_openai_model")
     def test_create_openai_llm(self):
         """Test that factory correctly creates OpenAI LLM instance."""
-        model_name = "gpt-4"
+        model_name = "gpt-4o"
         name = "TestGPT"
         system_prompt = "You are a test assistant."
 
@@ -170,7 +170,7 @@ class TestLLMFactory:
     @patch("llm_clients.openai_llm.ChatOpenAI")
     def test_factory_filters_non_model_params(self, mock_chat_openai):
         """Test that factory filters out non-model-specific parameters."""
-        model_name = "gpt-4"
+        model_name = "gpt-4o"
         name = "TestFiltering"
         temperature = 0.7
         # These should be filtered out (model, name, prompt_name, system_prompt)
@@ -239,13 +239,13 @@ class TestLLMFactory:
         """Test that factory detects models regardless of case."""
         with patch(
             "llm_clients.azure_llm.Config.get_azure_config",
-            return_value={"model": "azure-gpt-4"},
+            return_value={"model": "azure-gpt-4o"},
         ):
             claude_llm = LLMFactory.create_llm(
                 model_name="CLAUDE-3-5", name="Claude", role=Role.PROVIDER
             )
             gpt_llm = LLMFactory.create_llm(
-                model_name="GPT-4-TURBO", name="GPT", role=Role.PROVIDER
+                model_name="gpt-4o-TURBO", name="GPT", role=Role.PROVIDER
             )
             gemini_llm = LLMFactory.create_llm(
                 model_name="GEMINI-PRO", name="Gemini", role=Role.PROVIDER
@@ -287,7 +287,7 @@ class TestLLMFactory:
         """Test that create_judge_llm correctly creates OpenAI JudgeLLM instance."""
         from llm_clients.llm_interface import JudgeLLM
 
-        model_name = "gpt-4"
+        model_name = "gpt-4o"
         name = "TestGPTJudge"
         system_prompt = "You are a test judge."
 

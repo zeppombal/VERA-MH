@@ -68,7 +68,7 @@ def mock_response_factory():
             }
         elif provider == "openai":
             mock_response.response_metadata = {
-                "model_name": metadata.get("model_name", "gpt-4"),
+                "model_name": metadata.get("model_name", "gpt-5.2"),
                 **metadata,
             }
             mock_response.additional_kwargs = metadata.get("additional_kwargs", {})
@@ -96,7 +96,7 @@ def mock_response_factory():
             mock_response.response_metadata = mock_metadata_obj
         elif provider == "azure":
             mock_response.response_metadata = {
-                "model_name": metadata.get("model_name", "gpt-4"),
+                "model_name": metadata.get("model_name", "gpt-5.2"),
                 **metadata,
             }
             mock_response.additional_kwargs = metadata.get("additional_kwargs", {})
@@ -361,7 +361,7 @@ def mock_azure_config():
         ),
         patch(
             "llm_clients.azure_llm.Config.get_azure_config",
-            return_value={"model": "gpt-4"},
+            return_value={"model": "gpt-5.2"},
         ),
     ):
         yield

@@ -44,7 +44,7 @@ def create_mock_response(
     mock_response = MagicMock()
     mock_response.text = text
     mock_response.id = response_id
-    mock_response.response_metadata = DictWithAttr({"model": "gpt-4", **metadata})
+    mock_response.response_metadata = DictWithAttr({"model": "gpt-5.2", **metadata})
     return mock_response
 
 
@@ -71,12 +71,12 @@ class TestAzureLLM(TestJudgeLLMBase):
             ),
             patch(
                 "llm_clients.azure_llm.Config.get_azure_config",
-                return_value={"model": "gpt-4"},
+                return_value={"model": "gpt-5.2"},
             ),
             patch("llm_clients.azure_llm.AzureAIChatCompletionsModel") as mock_model,
         ):
             mock_llm = MagicMock()
-            mock_llm.model_name = "gpt-4"
+            mock_llm.model_name = "gpt-5.2"
             mock_model.return_value = mock_llm
             return AzureLLM(role=role, **kwargs)
 
@@ -124,7 +124,7 @@ class TestAzureLLM(TestJudgeLLMBase):
 
         assert llm.name == "TestAzure"
         assert llm.system_prompt == "Test prompt"
-        assert llm.model_name == "gpt-4"
+        assert llm.model_name == "gpt-5.2"
         assert llm.last_response_metadata == {}
 
     def test_init_with_custom_model(self):
@@ -264,7 +264,7 @@ class TestAzureLLM(TestJudgeLLMBase):
     ):
         """Test successful response generation with system prompt."""
         mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
+        mock_llm.model_name = "gpt-5.2"
 
         mock_response = create_mock_response(
             text="This is an Azure response",
@@ -294,7 +294,7 @@ class TestAzureLLM(TestJudgeLLMBase):
             llm, expected_provider="azure", expected_role=Role.PERSONA
         )
         assert metadata["response_id"] == "chatcmpl-12345"
-        assert metadata["model"] == "gpt-4"
+        assert metadata["model"] == "gpt-5.2"
         assert_iso_timestamp(metadata["timestamp"])
         assert_response_timing(metadata)
         assert metadata["usage"]["input_tokens"] == 10
@@ -309,7 +309,7 @@ class TestAzureLLM(TestJudgeLLMBase):
     ):
         """Test response generation without system prompt."""
         mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
+        mock_llm.model_name = "gpt-5.2"
 
         mock_response = create_mock_response(
             text="Response without system prompt", response_id="chatcmpl-67890"
@@ -334,7 +334,7 @@ class TestAzureLLM(TestJudgeLLMBase):
     ):
         """Test response when usage metadata is not available."""
         mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
+        mock_llm.model_name = "gpt-5.2"
 
         # Response without usage in metadata
         mock_response = create_mock_response(
@@ -357,7 +357,7 @@ class TestAzureLLM(TestJudgeLLMBase):
     ):
         """Test response when response_metadata attribute is missing."""
         mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
+        mock_llm.model_name = "gpt-5.2"
 
         # Response without response_metadata attribute
         mock_response = MagicMock()
@@ -373,7 +373,7 @@ class TestAzureLLM(TestJudgeLLMBase):
 
         assert response == "Response"
         metadata = llm.get_last_response_metadata()
-        assert metadata["model"] == "gpt-4"
+        assert metadata["model"] == "gpt-5.2"
         assert metadata["usage"] == {}
         assert metadata["finish_reason"] is None
 
@@ -383,7 +383,7 @@ class TestAzureLLM(TestJudgeLLMBase):
     ):
         """Test error handling when API call fails."""
         mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
+        mock_llm.model_name = "gpt-5.2"
 
         # Simulate API error
         mock_llm.ainvoke = AsyncMock(side_effect=Exception("API rate limit exceeded"))
@@ -404,7 +404,7 @@ class TestAzureLLM(TestJudgeLLMBase):
     ):
         """Test that 404 errors provide helpful error messages."""
         mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
+        mock_llm.model_name = "gpt-5.2"
 
         # Simulate 404 error with proper exception class
         class AzureError(Exception):
@@ -413,7 +413,7 @@ class TestAzureLLM(TestJudgeLLMBase):
                 self.status_code = status_code
                 self.response = MagicMock()
                 if status_code:
-                    self.response.url = "https://test.openai.azure.com/models/gpt-4"
+                    self.response.url = "https://test.openai.azure.com/models/gpt-5.2"
 
         error = AzureError("404 Resource not found", status_code=404)
         mock_llm.ainvoke = AsyncMock(side_effect=error)
@@ -433,7 +433,7 @@ class TestAzureLLM(TestJudgeLLMBase):
     ):
         """Test that response timing is tracked correctly."""
         mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
+        mock_llm.model_name = "gpt-5.2"
 
         mock_response = create_mock_response(
             text="Timed response", response_id="chatcmpl-time"
@@ -457,7 +457,7 @@ class TestAzureLLM(TestJudgeLLMBase):
         """Test set_system_prompt method."""
         llm = AzureLLM(
             role=Role.PERSONA,
-            model_name="azure-gpt-4",
+            model_name="azure-gpt-5.2",
             name="TestAzure",
             system_prompt="Initial prompt",
         )
@@ -502,7 +502,7 @@ class TestAzureLLM(TestJudgeLLMBase):
             metadata = assert_metadata_structure(
                 llm, expected_provider="azure", expected_role=Role.PERSONA
             )
-            assert metadata["model"] == "gpt-4"
+            assert metadata["model"] == "gpt-5.2"
             assert metadata["structured_output"] is True
             assert_response_timing(metadata)
 
@@ -614,7 +614,7 @@ class TestAzureLLM(TestJudgeLLMBase):
     ):
         """Test that persona role flips message types in conversation history."""
         mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
+        mock_llm.model_name = "gpt-5.2"
 
         mock_response = create_mock_response(
             text="Persona response", response_id="chatcmpl-persona"
@@ -647,7 +647,7 @@ class TestAzureLLM(TestJudgeLLMBase):
         Azure LLM gets total_tokens from metadata directly (doesn't calculate it).
         """
         mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
+        mock_llm.model_name = "gpt-5.2"
 
         # Response with only input_tokens in usage
         # (missing output_tokens and total_tokens)
@@ -675,7 +675,7 @@ class TestAzureLLM(TestJudgeLLMBase):
     ):
         """Test that metadata includes the full response object."""
         mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
+        mock_llm.model_name = "gpt-5.2"
 
         mock_response = create_mock_response(text="Test", response_id="chatcmpl-obj")
 
@@ -695,7 +695,7 @@ class TestAzureLLM(TestJudgeLLMBase):
     ):
         """Test metadata extraction of finish_reason."""
         mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
+        mock_llm.model_name = "gpt-5.2"
 
         mock_response = create_mock_response(
             text="Stopped response",
@@ -718,7 +718,7 @@ class TestAzureLLM(TestJudgeLLMBase):
     ):
         """Test that raw metadata is stored."""
         mock_llm = MagicMock()
-        mock_llm.model_name = "gpt-4"
+        mock_llm.model_name = "gpt-5.2"
 
         # Create response with custom metadata fields
         mock_response = MagicMock()
@@ -726,7 +726,7 @@ class TestAzureLLM(TestJudgeLLMBase):
         mock_response.id = "chatcmpl-raw"
         mock_response.response_metadata = DictWithAttr(
             {
-                "model": "gpt-4",
+                "model": "gpt-5.2",
                 "custom_field": "custom_value",
                 "nested": {"key": "value"},
             }
