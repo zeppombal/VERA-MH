@@ -135,32 +135,33 @@ class TestLLMBase(ABC):
             assert llm.system_prompt == "Updated prompt"
 
     @pytest.mark.asyncio
-    async def test_generate_response_returns_string(
+    async def test_generate_response_returns_llm_text(
         self, mock_response_factory, mock_llm_factory, mock_system_message
     ):
-        """Test that generate_response returns a string."""
+        """Test that generate_response returns the LLM response body (response.text).
+
+        This verifies real behavior: the wrapper calls the client, then returns
+        the response's .text attribute. Asserting the exact string ensures we
+        are testing pass-through of the real implementation, not just that
+        a mock returned something.
+        """
+        expected_text = "Test response text"
         with self.get_mock_patches():  # pyright: ignore[reportGeneralTypeIssues]
-            # Create mock response
             mock_response = mock_response_factory(
-                text="Test response text",
+                text=expected_text,
                 response_id="test_id",
                 provider=self.get_provider_name(),
             )
-
-            # Mock the LLM client
             mock_llm_client = mock_llm_factory(response=mock_response)
 
             llm = self.create_llm(role=Role.PROVIDER, name="TestLLM")
-
-            # Replace the internal llm with our mock
             llm.llm = mock_llm_client  # pyright: ignore[reportAttributeAccessIssue]
 
             response = await llm.generate_response(
                 conversation_history=mock_system_message
             )
 
-            assert isinstance(response, str)
-            assert len(response) > 0
+            assert response == expected_text
 
     @pytest.mark.asyncio
     async def test_generate_response_updates_metadata(
@@ -179,7 +180,12 @@ class TestLLMBase(ABC):
             llm = self.create_llm(role=Role.PROVIDER, name="TestLLM")
             llm.llm = mock_llm_client  # pyright: ignore[reportAttributeAccessIssue]
 
-            await llm.generate_response(conversation_history=mock_system_message)
+            response = await llm.generate_response(
+                conversation_history=mock_system_message
+            )
+            assert (
+                response == "Response"
+            )  # success path: our code returned response.text
 
             # Verify metadata structure
             metadata = assert_metadata_structure(

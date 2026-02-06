@@ -67,15 +67,16 @@ class TestOllamaLLM(TestLLMBase):
 
     # Override base class tests that don't work with Ollama's string format
     @pytest.mark.asyncio
-    async def test_generate_response_returns_string(
+    async def test_generate_response_returns_llm_text(
         self, mock_response_factory, mock_llm_factory, mock_system_message
     ):
-        """Test that generate_response returns a string - Ollama override."""
+        """Return LLM output; Ollama's ainvoke returns a string directly."""
         from llm_clients.ollama_llm import OllamaLLM
 
+        expected_text = "Ollama response string"
         with patch("llm_clients.ollama_llm.LangChainOllamaLLM") as mock_ollama:
             mock_instance = MagicMock()
-            mock_instance.ainvoke = AsyncMock(return_value="Ollama response string")
+            mock_instance.ainvoke = AsyncMock(return_value=expected_text)
             mock_ollama.return_value = mock_instance
 
             llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
@@ -83,8 +84,7 @@ class TestOllamaLLM(TestLLMBase):
                 conversation_history=mock_system_message
             )
 
-            assert isinstance(response, str)
-            assert response == "Ollama response string"
+            assert response == expected_text
 
     @pytest.mark.asyncio
     async def test_generate_response_updates_metadata(
