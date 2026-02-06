@@ -108,7 +108,11 @@ class TestMyProviderLLM(TestJudgeLLMBase):
             pass
 ```
 
-### 3. Implement Required Factory Methods
+### 3. Add Your Provider to conftest.py
+
+In `conftest.py`, add an `elif provider == "yourprovider":` branch in `mock_response_factory`’s `_create_mock_response`. See [Adding a New Provider to the Mocks](#adding-a-new-provider-to-the-mocks) below.
+
+### 4. Implement Required Factory Methods
 
 All test classes must implement these three abstract methods:
 
@@ -141,7 +145,7 @@ def get_mock_patches(self):
         yield mock
 ```
 
-### 4. Inherited Tests
+### 5. Inherited Tests
 
 By extending the base classes, you automatically get these tests:
 
@@ -159,7 +163,7 @@ By extending the base classes, you automatically get these tests:
 - ✅ Structured output error handling
 - ✅ Structured response metadata validation
 
-### 5. Add Provider-Specific Tests
+### 6. Add Provider-Specific Tests
 
 Beyond the inherited tests, add tests for provider-specific behavior:
 
@@ -187,7 +191,7 @@ class TestMyProviderLLM(TestJudgeLLMBase):
             pass
 ```
 
-### 6. Run Coverage Validation
+### 7. Run Coverage Validation
 
 After creating your tests, run the coverage validation:
 
@@ -221,6 +225,22 @@ Located in [`test_helpers.py`](test_helpers.py):
 ## Shared Fixtures
 
 Located in [`conftest.py`](conftest.py):
+
+### Adding a New Provider to the Mocks
+
+**Yes.** If you add a new LLM client, you must add support for your provider in `conftest.py`.
+
+- **`mock_response_factory`** – Base tests call it with `provider=self.get_provider_name()`. The factory has an explicit `if/elif` per provider and raises `ValueError("Unsupported provider: ...")` for anything else. Add an `elif provider == "yourprovider":` branch and set at least `mock_response.response_metadata` (e.g. to `metadata` or `{**metadata}`). Add `additional_kwargs` or `usage_metadata` only if your implementation reads them from the response.
+- **`mock_llm_factory`** – Provider-agnostic (it just wraps whatever response you pass in). No conftest change needed.
+
+Minimal addition in `conftest.py` inside `_create_mock_response`:
+
+```python
+elif provider == "yourprovider":
+    mock_response.response_metadata = {**metadata}
+```
+
+If your implementation reads a specific shape (e.g. `response_metadata["model_name"]`), set those attributes on the mock so inherited metadata tests pass.
 
 ## Test Organization
 
