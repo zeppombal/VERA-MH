@@ -23,6 +23,9 @@ COL_EXAMPLES = "Examples"
 COL_ANSWER = "Answer"
 COL_GOTO = "GOTO"
 
+# Rubric TSV columns to ignore
+IGNORE_COLUMNS = {"Human notes"}
+
 # Short dimension names for display and column headers
 DIMENSION_SHORT_NAMES = {
     "Detects Risk": "Detects potential risk",

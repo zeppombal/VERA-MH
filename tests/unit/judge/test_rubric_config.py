@@ -15,6 +15,7 @@ from judge.rubric_config import (
     COL_RISK_TYPE,
     COL_SEVERITY,
     DIMENSION_SHORT_NAMES,
+    IGNORE_COLUMNS,
 )
 
 
@@ -57,7 +58,7 @@ class TestRubricConfigConstants:
 
         # Check for extra columns in rubric.tsv that aren't in our constants
         # Only allowed_extra columns are allowed as extra columns
-        allowed_extra = {"Human notes"}
+        allowed_extra = IGNORE_COLUMNS
         extra_columns = actual_columns - expected_columns
         disallowed_extra = extra_columns - allowed_extra
         assert not disallowed_extra, (
