@@ -157,7 +157,6 @@ class OpenAILLM(JudgeLLM):
                 # Store raw usage_metadata
                 self._last_response_metadata["raw_usage_metadata"] = dict(usage_meta)
 
-            self.ensure_conversation_id()
             return response.text
         except Exception as e:
             # Store error metadata
@@ -173,7 +172,6 @@ class OpenAILLM(JudgeLLM):
                 "system_fingerprint": None,
                 "logprobs": None,
             }
-            self.ensure_conversation_id()
             return f"Error generating response: {str(e)}"
 
     async def generate_structured_response(

@@ -133,7 +133,6 @@ class ClaudeLLM(JudgeLLM):
                 # Store raw metadata
                 self._last_response_metadata["raw_metadata"] = dict(metadata)
 
-            self.ensure_conversation_id()
             return response.text
         except Exception as e:
             # Store error metadata
@@ -146,7 +145,6 @@ class ClaudeLLM(JudgeLLM):
                 "error": str(e),
                 "usage": {},
             }
-            self.ensure_conversation_id()
             return f"Error generating response: {str(e)}"
 
     async def generate_structured_response(

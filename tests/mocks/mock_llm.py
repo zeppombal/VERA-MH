@@ -72,7 +72,6 @@ class MockLLM(JudgeLLM):
             "total_tokens": 30,
         }
 
-        self.ensure_conversation_id()
         return response
 
     def set_system_prompt(self, system_prompt: str) -> None:

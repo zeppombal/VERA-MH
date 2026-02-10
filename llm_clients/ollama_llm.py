@@ -120,7 +120,6 @@ class OllamaLLM(LLMInterface):
                 "usage": {},
             }
 
-            self.ensure_conversation_id()
             return response_text
         except Exception as e:
             # Store error metadata
@@ -133,7 +132,6 @@ class OllamaLLM(LLMInterface):
                 "error": str(e),
                 "usage": {},
             }
-            self.ensure_conversation_id()
             return f"Error generating response: {str(e)}"
 
     def set_system_prompt(self, system_prompt: str) -> None:

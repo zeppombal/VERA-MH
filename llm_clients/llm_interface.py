@@ -34,7 +34,7 @@ class LLMInterface(ABC):
         self.role = role
         self.system_prompt = system_prompt or ""
         self._last_response_metadata: Dict[str, Any] = {}
-        self.conversation_id: Optional[str] = None
+        self.conversation_id = self.create_conversation_id()
 
     @property
     def last_response_metadata(self) -> Dict[str, Any]:
@@ -51,26 +51,21 @@ class LLMInterface(ABC):
     def create_conversation_id(self) -> str:
         """Create a new unique conversation id.
 
-        Used when the client does not provide one in response metadata.
+        Used at init and when the API does not return one in response metadata.
         Subclasses may override to use a different id format.
         """
         return str(uuid.uuid4())
 
-    def ensure_conversation_id(self) -> None:
-        """Set conversation_id from last response metadata or create one if not set.
+    def _update_conversation_id_from_metadata(self) -> None:
+        """If the API returned a conversation_id in response metadata, use it.
 
-        Call after generate_response (e.g. at the end of generate_response).
-        If conversation_id is already set, does nothing. Otherwise sets it from
-        self.last_response_metadata["conversation_id"] if present, or from
-        create_conversation_id(). Implementations must update
-        self.last_response_metadata in generate_response().
+        Call after generate_response once _last_response_metadata is set.
+        APIs that ignore our request conversation_id but return their own
+        will overwrite self.conversation_id here.
         """
-        if self.conversation_id is not None:
-            return
-        metadata = self.last_response_metadata or {}
-        self.conversation_id = (
-            metadata.get("conversation_id") or self.create_conversation_id()
-        )
+        cid = (self._last_response_metadata or {}).get("conversation_id")
+        if cid is not None:
+            self.conversation_id = cid
 
     @abstractmethod
     async def generate_response(
@@ -92,9 +87,11 @@ class LLMInterface(ABC):
                 (getter returns a copy so callers need not copy).
 
         Note:
-            For API thread/session identification, use self.conversation_id.
-            Implementations should call self.ensure_conversation_id() before
-            returning, so self.conversation_id is set for the next call.
+            For API thread/session identification, use self.conversation_id
+            (set at init; send as request metadata). If your API returns a
+            conversation_id in response metadata, call
+            self._update_conversation_id_from_metadata() after setting
+            _last_response_metadata to overwrite.
         """
         pass
 
