@@ -31,6 +31,10 @@ class Config:
     AZURE_ENDPOINT = os.getenv("AZURE_ENDPOINT")
     AZURE_API_VERSION = os.getenv("AZURE_API_VERSION")  # Optional
 
+    # Custom endpoint (chat-only provider)
+    ENDPOINT_URL = os.getenv("ENDPOINT_URL", "http://0.0.0.0:8000")
+    ENDPOINT_API_KEY = os.getenv("ENDPOINT_API_KEY", "howdy")
+
     @classmethod
     def get_claude_config(cls) -> Dict[str, Any]:
         """Get default Claude model name.
@@ -79,4 +83,17 @@ class Config:
         return {
             "model": "llama3:8b",
             "base_url": "http://localhost:11434",  # Default Ollama URL
+        }
+
+    @classmethod
+    def get_endpoint_config(cls) -> Dict[str, Any]:
+        """Get custom endpoint configuration.
+
+        Returns base_url (no /api/chat path), api_key, and default model.
+        Runtime parameters can override via kwargs.
+        """
+        return {
+            "base_url": cls.ENDPOINT_URL.rstrip("/"),
+            "api_key": cls.ENDPOINT_API_KEY,
+            "model": "phi4",
         }
