@@ -55,7 +55,7 @@ class ConversationRunner:
         max_turns: int,
         conversation_index: int,
         run_number: int,
-        **kargs: dict,
+        **kwargs: dict,
     ) -> Dict[str, Any]:
         """Run a single conversation asynchronously.
 
