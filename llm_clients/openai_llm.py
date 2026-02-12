@@ -110,7 +110,7 @@ class OpenAILLM(JudgeLLM):
 
             # Extract additional_kwargs if available
             if hasattr(response, "additional_kwargs") and response.additional_kwargs:
-                self.last_response_metadata["additional_kwargs"] = dict(
+                self._last_response_metadata["additional_kwargs"] = dict(
                     response.additional_kwargs
                 )
 
@@ -120,34 +120,34 @@ class OpenAILLM(JudgeLLM):
 
                 # Update model name from response metadata
                 if "model_name" in metadata:
-                    self.last_response_metadata["model"] = metadata["model_name"]
+                    self._last_response_metadata["model"] = metadata["model_name"]
 
                 # Extract token usage from response_metadata
                 if "token_usage" in metadata:
                     token_usage = metadata["token_usage"]
-                    self.last_response_metadata["usage"] = {
+                    self._last_response_metadata["usage"] = {
                         "prompt_tokens": token_usage.get("prompt_tokens", 0),
                         "completion_tokens": token_usage.get("completion_tokens", 0),
                         "total_tokens": token_usage.get("total_tokens", 0),
                     }
 
                 # Extract other metadata fields
-                self.last_response_metadata["finish_reason"] = metadata.get(
+                self._last_response_metadata["finish_reason"] = metadata.get(
                     "finish_reason"
                 )
-                self.last_response_metadata["system_fingerprint"] = metadata.get(
+                self._last_response_metadata["system_fingerprint"] = metadata.get(
                     "system_fingerprint"
                 )
-                self.last_response_metadata["logprobs"] = metadata.get("logprobs")
+                self._last_response_metadata["logprobs"] = metadata.get("logprobs")
 
                 # Store raw response_metadata
-                self.last_response_metadata["raw_response_metadata"] = dict(metadata)
+                self._last_response_metadata["raw_response_metadata"] = dict(metadata)
 
             # Extract usage_metadata if available (separate from response_metadata)
             if hasattr(response, "usage_metadata") and response.usage_metadata:
                 usage_meta = response.usage_metadata
                 # Merge with existing usage info, preferring usage_metadata values
-                self.last_response_metadata["usage"].update(
+                self._last_response_metadata["usage"].update(
                     {
                         "input_tokens": usage_meta.get("input_tokens", 0),
                         "output_tokens": usage_meta.get("output_tokens", 0),
@@ -155,7 +155,7 @@ class OpenAILLM(JudgeLLM):
                     }
                 )
                 # Store raw usage_metadata
-                self.last_response_metadata["raw_usage_metadata"] = dict(usage_meta)
+                self._last_response_metadata["raw_usage_metadata"] = dict(usage_meta)
 
             return response.text
         except Exception as e:
@@ -232,10 +232,6 @@ class OpenAILLM(JudgeLLM):
                 "usage": {},
             }
             raise RuntimeError(f"Error generating structured response: {str(e)}") from e
-
-    def get_last_response_metadata(self) -> Dict[str, Any]:
-        """Get metadata from the last response."""
-        return self.last_response_metadata.copy()
 
     def set_system_prompt(self, system_prompt: str) -> None:
         """Set or update the system prompt."""

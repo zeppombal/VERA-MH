@@ -1,3 +1,4 @@
+import uuid
 from typing import Optional
 from unittest.mock import MagicMock
 
@@ -153,6 +154,7 @@ class TestLLMInterface:
         assert llm2.name == "LLM2"
         assert llm1.system_prompt == "Prompt 1"
         assert llm2.system_prompt == "Prompt 2"
+        assert llm1.conversation_id != llm2.conversation_id
 
         # Modify one shouldn't affect the other
         llm1.set_system_prompt("Modified Prompt 1")
@@ -204,3 +206,53 @@ class TestLLMInterface:
         assert isinstance(llm.float_attr, float)
         assert isinstance(llm.bool_attr, bool)
         assert isinstance(llm.list_attr, list)
+
+    def test_init_sets_conversation_id(self):
+        """Test that conversation_id is set at init (e.g. UUID)."""
+        llm = ConcreteLLM(name="TestLLM", role=Role.PROVIDER)
+        assert llm.conversation_id is not None
+        assert isinstance(llm.conversation_id, str)
+        assert len(llm.conversation_id) > 0
+
+    def test_create_conversation_id_returns_string(self):
+        """Test that create_conversation_id returns a non-empty string (e.g. UUID)."""
+        llm = ConcreteLLM(name="TestLLM", role=Role.PROVIDER)
+        cid = llm.create_conversation_id()
+        assert isinstance(cid, str)
+        assert len(cid) > 0
+
+    def test_create_conversation_id_returns_distinct_valid_uuid(self):
+        """Test that repeated calls return distinct values and each is a valid UUID."""
+        llm = ConcreteLLM(name="TestLLM", role=Role.PROVIDER)
+        ids = [llm.create_conversation_id() for _ in range(50)]
+        assert len(ids) == len(set(ids)), "ids must be distinct"
+        for cid in ids:
+            uuid.UUID(cid)  # valid UUID string
+
+    def test_update_conversation_id_from_metadata_leaves_unchanged_when_absent(self):
+        """
+        Test _update_conversation_id_from_metadata preserves conversation_id
+        when key is absent from response metadata.
+        """
+        llm = ConcreteLLM(name="TestLLM", role=Role.PROVIDER)
+        original = llm.conversation_id
+        llm._last_response_metadata = {}
+        llm._update_conversation_id_from_metadata()
+        assert llm.conversation_id == original
+
+    def test_update_conversation_id_from_metadata_overwrites_when_present(self):
+        """
+        Test _update_conversation_id_from_metadata overwrites self.conversation_id
+        with API-returned conversation_id.
+        """
+        llm = ConcreteLLM(name="TestLLM", role=Role.PROVIDER)
+        llm._last_response_metadata = {"conversation_id": "api-provided-id"}
+        llm._update_conversation_id_from_metadata()
+        assert llm.conversation_id == "api-provided-id"
+
+    @pytest.mark.asyncio
+    async def test_conversation_id_available_after_generate_response(self):
+        """Test that conversation_id remains set after generate_response."""
+        llm = ConcreteLLM(name="TestLLM", role=Role.PROVIDER)
+        await llm.generate_response(conversation_history=[])
+        assert llm.conversation_id is not None

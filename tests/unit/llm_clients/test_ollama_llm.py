@@ -585,8 +585,8 @@ class TestOllamaLLM(TestLLMBase):
         assert "Assistant: How are you?" in call_args
         assert "Assistant:" in call_args
 
-    def test_get_last_response_metadata_returns_copy(self):
-        """Test that get_last_response_metadata returns a copy."""
+    def test_last_response_metadata_copy_returns_copy(self):
+        """Test that last_response_metadata.copy() returns a copy, not the original."""
         from llm_clients.ollama_llm import OllamaLLM
 
         llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
@@ -653,7 +653,7 @@ class TestOllamaLLM(TestLLMBase):
         llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert_response_timing(metadata)
 
     @pytest.mark.asyncio
@@ -669,7 +669,7 @@ class TestOllamaLLM(TestLLMBase):
         llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert_iso_timestamp(metadata["timestamp"])
 
     @pytest.mark.asyncio
@@ -685,7 +685,7 @@ class TestOllamaLLM(TestLLMBase):
         llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER, model_name="mistral:7b")
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
 
         # Verify all expected fields are present using helper
         assert_metadata_structure(
@@ -710,7 +710,7 @@ class TestOllamaLLM(TestLLMBase):
         llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
 
         # Before any response, metadata should be empty
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert metadata == {}
 
     @pytest.mark.asyncio
@@ -730,7 +730,7 @@ class TestOllamaLLM(TestLLMBase):
         llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert metadata["usage"] == {}
         # Ollama doesn't have these fields
         assert "prompt_tokens" not in metadata["usage"]
@@ -755,7 +755,7 @@ class TestOllamaLLM(TestLLMBase):
         llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         # Ollama doesn't store the response object
         assert "response" not in metadata
 
@@ -775,7 +775,7 @@ class TestOllamaLLM(TestLLMBase):
         llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         # Ollama doesn't have finish_reason
         assert "finish_reason" not in metadata
         assert "stop_reason" not in metadata
@@ -796,7 +796,7 @@ class TestOllamaLLM(TestLLMBase):
         llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         # Ollama doesn't store raw_metadata or raw_response_metadata
         assert "raw_metadata" not in metadata
         assert "raw_response_metadata" not in metadata

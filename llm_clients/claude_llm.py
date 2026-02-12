@@ -118,7 +118,7 @@ class ClaudeLLM(JudgeLLM):
                 # Extract token usage
                 if "usage" in metadata:
                     usage = metadata["usage"]
-                    self.last_response_metadata["usage"] = {
+                    self._last_response_metadata["usage"] = {
                         "input_tokens": usage.get("input_tokens", 0),
                         "output_tokens": usage.get("output_tokens", 0),
                         "total_tokens": usage.get("input_tokens", 0)
@@ -126,10 +126,12 @@ class ClaudeLLM(JudgeLLM):
                     }
 
                 # Extract stop reason
-                self.last_response_metadata["stop_reason"] = metadata.get("stop_reason")
+                self._last_response_metadata["stop_reason"] = metadata.get(
+                    "stop_reason"
+                )
 
                 # Store raw metadata
-                self.last_response_metadata["raw_metadata"] = dict(metadata)
+                self._last_response_metadata["raw_metadata"] = dict(metadata)
 
             return response.text
         except Exception as e:
@@ -203,10 +205,6 @@ class ClaudeLLM(JudgeLLM):
                 "usage": {},
             }
             raise RuntimeError(f"Error generating structured response: {str(e)}") from e
-
-    def get_last_response_metadata(self) -> Dict[str, Any]:
-        """Get metadata from the last response."""
-        return self.last_response_metadata.copy()
 
     def set_system_prompt(self, system_prompt: str) -> None:
         """Set or update the system prompt."""

@@ -49,20 +49,30 @@ class ConversationRunner:
         self.max_total_words = max_total_words
         self.max_personas = max_personas
 
-        self.AGENT_SYSTEM_PROMPT = self.agent_model_config.get(
-            "system_prompt", "You are a helpful AI assistant."
-        )
-
     async def run_single_conversation(
         self,
         persona_config: dict,
-        agent,
         max_turns: int,
-        conversation_id: int,
+        conversation_index: int,
         run_number: int,
-        **kargs: dict,
+        **kwargs: dict,
     ) -> Dict[str, Any]:
-        """Run a single conversation asynchronously."""
+        """Run a single simulated conversation (persona vs provider LLM).
+
+        Uses fresh LLM instances per call; safe for concurrent use. Logs turns,
+        writes transcript to self.folder_name, then cleans up logger and LLMs.
+
+        Args:
+            persona_config (dict): Must have "model", "prompt", "name".
+            max_turns (int): Max conversation turns for a conversation.
+            conversation_index (int): Index in the batch of conversations.
+            run_number (int): Run index for this prompt (e.g. 1 of runs_per_prompt).
+            **kwargs: Unused; reserved for future use.
+
+        Returns:
+            Dict[str, Any]: index, llm1_model, llm1_prompt, run_number, turns,
+            filename, log_file, duration, early_termination, conversation.
+        """
         model_name = persona_config["model"]
         system_prompt = persona_config["prompt"]  # This is now the full persona prompt
         persona_name = persona_config["name"]
@@ -83,13 +93,30 @@ class ConversationRunner:
         logger = setup_conversation_logger(filename_base, run_id=self.run_id)
         start_time = time.time()
 
-        # Create LLM1 instance with the persona prompt and configuration
+        # Create persona instance
         persona = LLMFactory.create_llm(
             model_name=model_name,
             name=f"{model_short} {persona_name}",
             system_prompt=system_prompt,
             role=Role.PERSONA,
             **self.persona_model_config,
+        )
+
+        # Create new agent instance to reset conversation_id and metadata.
+        # Exclude selected kwargs to avoid duplicate args expected in create_llm.
+        agent_kwargs = {
+            k: v
+            for k, v in self.agent_model_config.items()
+            if k not in ("model", "name", "system_prompt")
+        }
+        agent = LLMFactory.create_llm(
+            model_name=self.agent_model_config["model"],
+            name=self.agent_model_config.get("name", "Provider"),
+            system_prompt=self.agent_model_config.get(
+                "system_prompt", "You are a helpful AI assistant."
+            ),
+            role=Role.PROVIDER,
+            **agent_kwargs,
         )
 
         # Log conversation start
@@ -148,7 +175,7 @@ class ConversationRunner:
             simulator.save_conversation(f"{filename_base}.txt", self.folder_name)
 
             result = {
-                "id": conversation_id,
+                "index": conversation_index,
                 "llm1_model": model_name,
                 "llm1_prompt": persona_name,
                 "run_number": run_number,
@@ -164,11 +191,12 @@ class ConversationRunner:
 
             # Cleanup LLM resources (e.g., close HTTP sessions for Azure)
             # Always cleanup, even if conversation failed
-            try:
-                await persona.cleanup()
-            except Exception as e:
-                # Log but don't fail if cleanup fails
-                print(f"Warning: Failed to cleanup persona LLM: {e}")
+            for llm in (persona, agent):
+                try:
+                    await llm.cleanup()
+                except Exception as e:
+                    # Log but don't fail if cleanup fails
+                    print(f"Warning: Failed to cleanup LLM: {e}")
 
         return result
 
@@ -179,23 +207,13 @@ class ConversationRunner:
         # Load prompts from CSV based on persona names
         personas = load_prompts_from_csv(persona_names, max_personas=self.max_personas)
 
-        # Load agent configuration (fixed, shared across all conversations)
-        agent = LLMFactory.create_llm(
-            model_name=self.agent_model_config["model"],
-            name=self.agent_model_config.pop("name"),
-            system_prompt=self.AGENT_SYSTEM_PROMPT,
-            role=Role.PROVIDER,
-            **self.agent_model_config,
-        )
-
         # Create tasks for all conversations (each prompt run multiple times)
         tasks = []
-        conversation_id = 1
+        conversation_index = 1
 
         for persona in personas:
             for run in range(1, self.runs_per_prompt + 1):
                 tasks.append(
-                    # TODO: should we pass the persona object here?
                     self.run_single_conversation(
                         {
                             "model": self.persona_model_config["model"],
@@ -203,13 +221,12 @@ class ConversationRunner:
                             "name": persona["Name"],
                             "run": run,
                         },
-                        agent,
                         self.max_turns,
-                        conversation_id,
+                        conversation_index,
                         run,
                     )
                 )
-                conversation_id += 1
+                conversation_index += 1
 
         # Run all conversations with concurrency limit
         start_time = datetime.now()
@@ -236,12 +253,5 @@ class ConversationRunner:
         total_time = (end_time - start_time).total_seconds()
 
         print(f"\nCompleted {len(results)} conversations in {total_time:.2f} seconds")
-
-        # Cleanup agent LLM resources (e.g., close HTTP sessions for Azure)
-        try:
-            await agent.cleanup()
-        except Exception as e:
-            # Log but don't fail if cleanup fails
-            print(f"Warning: Failed to cleanup agent LLM: {e}")
 
         return results

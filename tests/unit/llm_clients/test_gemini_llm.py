@@ -206,7 +206,7 @@ class TestGeminiLLM(TestJudgeLLMBase):
         response = await llm.generate_response(conversation_history=mock_system_message)
 
         assert response == "Response with fallback"
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         # Should use fallback structure
         assert metadata["usage"]["prompt_tokens"] == 10
         assert metadata["usage"]["completion_tokens"] == 20
@@ -234,7 +234,7 @@ class TestGeminiLLM(TestJudgeLLMBase):
         response = await llm.generate_response(conversation_history=mock_system_message)
 
         assert response == "Response"
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert metadata["usage"] == {}
 
     @pytest.mark.asyncio
@@ -258,7 +258,7 @@ class TestGeminiLLM(TestJudgeLLMBase):
         response = await llm.generate_response(conversation_history=mock_system_message)
 
         assert response == "Response"
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert metadata["model"] == "gemini-1.5-pro"
         assert metadata["usage"] == {}
         assert metadata["finish_reason"] is None
@@ -300,11 +300,11 @@ class TestGeminiLLM(TestJudgeLLMBase):
         llm = GeminiLLM(name="TestGemini", role=Role.PERSONA)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert_response_timing(metadata)
 
-    def test_get_last_response_metadata_returns_copy(self):
-        """Test that get_last_response_metadata returns a copy."""
+    def test_last_response_metadata_copy_returns_copy(self):
+        """Test that last_response_metadata.copy() returns a copy, not the original."""
         llm = GeminiLLM(name="TestGemini", role=Role.PERSONA)
         assert_metadata_copy_behavior(llm)
 
@@ -336,7 +336,7 @@ class TestGeminiLLM(TestJudgeLLMBase):
         llm = GeminiLLM(name="TestGemini", role=Role.PERSONA)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert "response" in metadata
         assert metadata["response"] == mock_response
 
@@ -358,7 +358,7 @@ class TestGeminiLLM(TestJudgeLLMBase):
         llm = GeminiLLM(name="TestGemini", role=Role.PERSONA)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert_iso_timestamp(metadata["timestamp"])
 
     @pytest.mark.asyncio
@@ -385,7 +385,7 @@ class TestGeminiLLM(TestJudgeLLMBase):
         llm = GeminiLLM(name="TestGemini", role=Role.PERSONA)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert metadata["finish_reason"] == "MAX_TOKENS"
 
     @pytest.mark.asyncio
@@ -410,7 +410,7 @@ class TestGeminiLLM(TestJudgeLLMBase):
         llm = GeminiLLM(name="TestGemini", role=Role.PERSONA)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert "raw_metadata" in metadata
         assert metadata["raw_metadata"]["custom_field"] == "custom_value"
         assert metadata["raw_metadata"]["nested"]["key"] == "value"
@@ -578,7 +578,7 @@ class TestGeminiLLM(TestJudgeLLMBase):
         response = await llm.generate_response(conversation_history=mock_system_message)
 
         assert response == "Partial usage response"
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert metadata["usage"]["prompt_token_count"] == 15
         assert metadata["usage"]["candidates_token_count"] == 0  # Default value
         assert (
@@ -709,7 +709,7 @@ class TestGeminiLLM(TestJudgeLLMBase):
             assert "Structured output failed" in str(exc_info.value)
 
             # Verify error metadata was stored
-            metadata = llm.get_last_response_metadata()
+            metadata = llm.last_response_metadata
             assert "error" in metadata
             assert "Structured output failed" in metadata["error"]
 
@@ -737,7 +737,7 @@ class TestGeminiLLM(TestJudgeLLMBase):
             llm = GeminiLLM(name="TestGemini", role=Role.JUDGE)
             await llm.generate_structured_response("Test", SimpleResponse)
 
-            metadata = llm.get_last_response_metadata()
+            metadata = llm.last_response_metadata
 
             # Verify required fields
             assert metadata["provider"] == "gemini"

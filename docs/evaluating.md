@@ -186,12 +186,9 @@ def set_system_prompt(self, system_prompt: str) -> None:
     self.system_prompt = system_prompt
 ```
 
-#### `get_last_response_metadata()` - Get response metadata (optional but recommended)
-```python
-def get_last_response_metadata(self) -> Dict[str, Any]:
-    """Get metadata from the last response."""
-    return self.last_response_metadata.copy()
-```
+#### `last_response_metadata` - Response metadata (required)
+
+Set in `__init__` (base sets it to `{}`). Update it in `generate_response()`: assign with `self.last_response_metadata = {...}`. If you need in-place updates (e.g. `self.last_response_metadata["usage"] = ...`), use `self._last_response_metadata` so the stored dict is updated. The property getter returns a copy so callers can use `last_response_metadata` without mutating the client's dict.
 
 ### 3. Add the new LLM client to the factory
 
@@ -226,6 +223,18 @@ python3 judge.py -f conversations/{YOUR_FOLDER} -j your-model-name
 - **Structured Output**: For the judge system to work properly, your LLM should support structured output via `generate_structured_response()`
 - **LangChain Integration**: The provided implementations use LangChain for robust LLM interactions
 - **Error Handling**: Make sure to handle errors gracefully and return appropriate error messages
+
+### Conversation flow and history
+
+ConversationSimulator holds the full conversation and passes `conversation_history` into your client on every call. Your client is not required to store history. You can:
+
+- **Stateless**: Build each request from `conversation_history` (as the built-in clients do), or
+- **Server-side state**: Send a `conversation_id` to your API and let the server maintain the conversation; in that case you may use `conversation_history` only when needed (e.g. fallback or logging).
+
+**When your endpoint requires a conversation id** (the built-in clients do not; this is for custom clients):
+
+- `conversation_id` is set in the base class `__init__`, so you always have one to send as request metadata. Use `self.conversation_id` when your API needs a conversation ID.
+- For LLM clients that require `conversation_id` handling, in `generate_response()`, you must set `conversation_id` in `_last_response_metadata` (interface requirement). If your API returns its own `conversation_id` in the response metadata (e.g. it ignores the one we send), call `self._update_conversation_id_from_metadata()` at the end of `generate_response()` after setting `_last_response_metadata`; that overwrites `self.conversation_id` with the API’s value.
 
 ## Structured Output Support
 

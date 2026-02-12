@@ -116,7 +116,7 @@ class GeminiLLM(JudgeLLM):
                 # Extract token usage - Gemini may have different structure
                 if "usage_metadata" in metadata:
                     usage = metadata["usage_metadata"]
-                    self.last_response_metadata["usage"] = {
+                    self._last_response_metadata["usage"] = {
                         "prompt_token_count": usage.get("prompt_token_count", 0),
                         "candidates_token_count": usage.get(
                             "candidates_token_count", 0
@@ -126,19 +126,19 @@ class GeminiLLM(JudgeLLM):
                 elif "token_usage" in metadata:
                     # Fallback structure
                     usage = metadata["token_usage"]
-                    self.last_response_metadata["usage"] = {
+                    self._last_response_metadata["usage"] = {
                         "prompt_tokens": usage.get("prompt_tokens", 0),
                         "completion_tokens": usage.get("completion_tokens", 0),
                         "total_tokens": usage.get("total_tokens", 0),
                     }
 
                 # Extract finish reason
-                self.last_response_metadata["finish_reason"] = metadata.get(
+                self._last_response_metadata["finish_reason"] = metadata.get(
                     "finish_reason"
                 )
 
                 # Store raw metadata
-                self.last_response_metadata["raw_metadata"] = dict(metadata)
+                self._last_response_metadata["raw_metadata"] = dict(metadata)
 
             return response.text
         except Exception as e:
@@ -153,10 +153,6 @@ class GeminiLLM(JudgeLLM):
                 "usage": {},
             }
             return f"Error generating response: {str(e)}"
-
-    def get_last_response_metadata(self) -> Dict[str, Any]:
-        """Get metadata from the last response."""
-        return self.last_response_metadata.copy()
 
     async def generate_structured_response(
         self, message: Optional[str], response_model: Type[T]

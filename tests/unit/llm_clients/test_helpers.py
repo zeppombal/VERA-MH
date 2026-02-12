@@ -53,7 +53,7 @@ def assert_metadata_structure(
     Raises:
         AssertionError: If metadata structure is invalid
     """
-    metadata = llm.get_last_response_metadata()
+    metadata = llm.last_response_metadata
 
     # Check required fields exist
     assert "model" in metadata, "Metadata missing 'model' field"
@@ -102,11 +102,12 @@ def assert_iso_timestamp(timestamp: str) -> None:
 
 
 def assert_metadata_copy_behavior(llm: LLMInterface) -> None:
-    """Assert that get_last_response_metadata returns a copy.
+    """Assert that last_response_metadata (property) returns a deep copy.
 
     Verifies that:
     1. Multiple calls return equal but different objects
-    2. Modifying returned dict doesn't affect internal state
+    2. Modifying returned dict (top-level) doesn't affect internal state
+    3. Modifying nested dicts (e.g. usage) doesn't affect internal state
 
     Args:
         llm: LLM instance to test
@@ -117,8 +118,8 @@ def assert_metadata_copy_behavior(llm: LLMInterface) -> None:
     # Set some test metadata
     llm.last_response_metadata = {"test": "value"}
 
-    metadata1 = llm.get_last_response_metadata()
-    metadata2 = llm.get_last_response_metadata()
+    metadata1 = llm.last_response_metadata
+    metadata2 = llm.last_response_metadata
 
     # Should be equal but not the same object
     assert metadata1 == metadata2, "Multiple calls should return equal dicts"
@@ -129,6 +130,15 @@ def assert_metadata_copy_behavior(llm: LLMInterface) -> None:
     assert (
         "modified" not in llm.last_response_metadata
     ), "Modification leaked to internal state"
+
+    # Nested mutation must not affect internal state (deep copy)
+    llm.last_response_metadata = {"usage": {"input_tokens": 10, "output_tokens": 5}}
+    meta = llm.last_response_metadata
+    meta["usage"]["input_tokens"] = 999
+    fresh = llm.last_response_metadata
+    assert (
+        fresh["usage"]["input_tokens"] == 10
+    ), "Nested mutation leaked to internal state (expected deep copy)"
 
 
 def assert_response_timing(metadata: Dict[str, Any]) -> None:
@@ -165,7 +175,7 @@ def assert_error_metadata(
     Raises:
         AssertionError: If error metadata is invalid
     """
-    metadata = llm.get_last_response_metadata()
+    metadata = llm.last_response_metadata
 
     # Check error field exists and contains expected substring
     assert "error" in metadata, "Metadata missing 'error' field"

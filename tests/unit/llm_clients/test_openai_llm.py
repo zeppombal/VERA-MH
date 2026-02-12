@@ -209,7 +209,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
         response = await llm.generate_response(conversation_history=mock_system_message)
 
         assert response == "Response"
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert metadata["additional_kwargs"] == {}
 
     @pytest.mark.asyncio
@@ -232,7 +232,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
         response = await llm.generate_response(conversation_history=mock_system_message)
 
         assert response == "Response"
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert metadata["model"] == "gpt-5.2"
         assert metadata["usage"] == {}
         assert metadata["finish_reason"] is None
@@ -266,7 +266,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
         response = await llm.generate_response(conversation_history=mock_system_message)
 
         assert response == "Response"
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         # Should still have usage from token_usage
         assert metadata["usage"]["prompt_tokens"] == 10
         assert metadata["usage"]["completion_tokens"] == 20
@@ -311,11 +311,11 @@ class TestOpenAILLM(TestJudgeLLMBase):
         llm = OpenAILLM(name="TestOpenAI", role=Role.PERSONA)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert_response_timing(metadata)
 
-    def test_get_last_response_metadata_returns_copy(self):
-        """Test that get_last_response_metadata returns a copy."""
+    def test_last_response_metadata_copy_returns_copy(self):
+        """Test that last_response_metadata.copy() returns a copy, not the original."""
         llm = OpenAILLM(name="TestOpenAI", role=Role.PERSONA)
         assert_metadata_copy_behavior(llm)
 
@@ -347,7 +347,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
         llm = OpenAILLM(name="TestOpenAI", role=Role.PERSONA)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert "response" in metadata
         assert metadata["response"] == mock_response
 
@@ -369,7 +369,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
         llm = OpenAILLM(name="TestOpenAI", role=Role.PERSONA)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert_iso_timestamp(metadata["timestamp"])
 
     @pytest.mark.asyncio
@@ -393,7 +393,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
         llm = OpenAILLM(name="TestOpenAI", role=Role.PERSONA, model_name="gpt-4o")
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert metadata["model"] == "gpt-4o-0613-updated"
 
     @pytest.mark.asyncio
@@ -559,7 +559,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
         response = await llm.generate_response(conversation_history=mock_system_message)
 
         assert response == "Partial usage response"
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert metadata["usage"]["prompt_tokens"] == 15
         assert metadata["usage"]["completion_tokens"] == 0  # Default value
         assert (
@@ -587,7 +587,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
         llm = OpenAILLM(name="TestOpenAI", role=Role.PERSONA)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert metadata["finish_reason"] == "length"
 
     @pytest.mark.asyncio
@@ -615,7 +615,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
         llm = OpenAILLM(name="TestOpenAI", role=Role.PERSONA)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         # OpenAI uses 'raw_response_metadata' instead of 'raw_metadata'
         assert "raw_response_metadata" in metadata
         assert metadata["raw_response_metadata"]["custom_field"] == "custom_value"
@@ -745,7 +745,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
             assert "Structured output failed" in str(exc_info.value)
 
             # Verify error metadata was stored
-            metadata = llm.get_last_response_metadata()
+            metadata = llm.last_response_metadata
             assert "error" in metadata
             assert "Structured output failed" in metadata["error"]
 
@@ -773,7 +773,7 @@ class TestOpenAILLM(TestJudgeLLMBase):
             llm = OpenAILLM(name="TestOpenAI", role=Role.JUDGE)
             await llm.generate_structured_response("Test", SimpleResponse)
 
-            metadata = llm.get_last_response_metadata()
+            metadata = llm.last_response_metadata
 
             # Verify required fields
             assert metadata["provider"] == "openai"

@@ -198,8 +198,8 @@ class TestLLMBase(ABC):
             assert_iso_timestamp(metadata["timestamp"])
             assert_response_timing(metadata)
 
-    def test_get_last_response_metadata_returns_copy(self):
-        """Test that get_last_response_metadata returns a copy, not original."""
+    def test_last_response_metadata_copy_returns_copy(self):
+        """Test that last_response_metadata.copy() returns a copy, not the original."""
         with self.get_mock_patches():  # pyright: ignore[reportGeneralTypeIssues]
             llm = self.create_llm(role=Role.PROVIDER, name="TestLLM")
 
@@ -382,7 +382,7 @@ class TestJudgeLLMBase(TestLLMBase):
             assert "Structured output failed" in str(exc_info.value)
 
             # Verify error metadata was stored
-            metadata = llm.get_last_response_metadata()
+            metadata = llm.last_response_metadata
             assert "error" in metadata
             assert "Structured output failed" in metadata["error"]
             assert metadata["provider"] == self.get_provider_name()

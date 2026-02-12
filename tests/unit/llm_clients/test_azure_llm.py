@@ -348,7 +348,7 @@ class TestAzureLLM(TestJudgeLLMBase):
         response = await llm.generate_response(conversation_history=mock_system_message)
 
         assert response == "Response"
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert metadata["usage"] == {}
 
     @pytest.mark.asyncio
@@ -372,7 +372,7 @@ class TestAzureLLM(TestJudgeLLMBase):
         response = await llm.generate_response(conversation_history=mock_system_message)
 
         assert response == "Response"
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert metadata["model"] == "gpt-5.2"
         assert metadata["usage"] == {}
         assert metadata["finish_reason"] is None
@@ -445,11 +445,11 @@ class TestAzureLLM(TestJudgeLLMBase):
         llm = AzureLLM(name="TestAzure", role=Role.PERSONA)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert_response_timing(metadata)
 
-    def test_get_last_response_metadata_returns_copy(self):
-        """Test that get_last_response_metadata returns a copy."""
+    def test_last_response_metadata_copy_returns_copy(self):
+        """Test that last_response_metadata.copy() returns a copy, not the original."""
         llm = AzureLLM(name="TestAzure", role=Role.PERSONA)
         assert_metadata_copy_behavior(llm)
 
@@ -535,7 +535,7 @@ class TestAzureLLM(TestJudgeLLMBase):
             assert "Structured output failed" in str(exc_info.value)
 
             # Verify error metadata was stored
-            metadata = llm.get_last_response_metadata()
+            metadata = llm.last_response_metadata
             assert "error" in metadata
             assert "Structured output failed" in metadata["error"]
 
@@ -605,7 +605,7 @@ class TestAzureLLM(TestJudgeLLMBase):
         llm = AzureLLM(name="TestAzure", role=Role.PERSONA)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert_iso_timestamp(metadata["timestamp"])
 
     @pytest.mark.asyncio
@@ -664,7 +664,7 @@ class TestAzureLLM(TestJudgeLLMBase):
         response = await llm.generate_response(conversation_history=mock_system_message)
 
         assert response == "Partial usage response"
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert metadata["usage"]["input_tokens"] == 15
         assert metadata["usage"]["output_tokens"] == 0
         assert metadata["usage"]["total_tokens"] == 0
@@ -685,7 +685,7 @@ class TestAzureLLM(TestJudgeLLMBase):
         llm = AzureLLM(name="TestAzure", role=Role.PERSONA)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert "response" in metadata
         assert metadata["response"] == mock_response
 
@@ -709,7 +709,7 @@ class TestAzureLLM(TestJudgeLLMBase):
         llm = AzureLLM(name="TestAzure", role=Role.PERSONA)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert metadata["finish_reason"] == "length"
 
     @pytest.mark.asyncio
@@ -738,7 +738,7 @@ class TestAzureLLM(TestJudgeLLMBase):
         llm = AzureLLM(name="TestAzure", role=Role.PERSONA)
         await llm.generate_response(conversation_history=mock_system_message)
 
-        metadata = llm.get_last_response_metadata()
+        metadata = llm.last_response_metadata
         assert "raw_metadata" in metadata
         assert metadata["raw_metadata"]["custom_field"] == "custom_value"
         assert metadata["raw_metadata"]["nested"]["key"] == "value"

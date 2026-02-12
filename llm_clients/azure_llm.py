@@ -187,19 +187,19 @@ class AzureLLM(JudgeLLM):
                 # Extract token usage
                 if "token_usage" in metadata:
                     usage = metadata["token_usage"]
-                    self.last_response_metadata["usage"] = {
+                    self._last_response_metadata["usage"] = {
                         "input_tokens": usage.get("input_tokens", 0),
                         "output_tokens": usage.get("output_tokens", 0),
                         "total_tokens": usage.get("total_tokens", 0),
                     }
 
                 # Extract finish reason
-                self.last_response_metadata["finish_reason"] = metadata.get(
+                self._last_response_metadata["finish_reason"] = metadata.get(
                     "finish_reason"
                 )
 
                 # Store raw metadata
-                self.last_response_metadata["raw_metadata"] = dict(metadata)
+                self._last_response_metadata["raw_metadata"] = dict(metadata)
 
             return response.text
         except Exception as e:
@@ -306,10 +306,6 @@ class AzureLLM(JudgeLLM):
                 "usage": {},
             }
             raise RuntimeError(f"Error generating structured response: {str(e)}") from e
-
-    def get_last_response_metadata(self) -> Dict[str, Any]:
-        """Get metadata from the last response."""
-        return self.last_response_metadata.copy()
 
     def set_system_prompt(self, system_prompt: str) -> None:
         """Set or update the system prompt."""

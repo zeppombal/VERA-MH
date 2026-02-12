@@ -110,7 +110,7 @@ class ConversationSimulator:
                 input_message=input_msg,
                 response_message=lc_message,
                 early_termination=False,
-                logging_metadata=current_speaker.get_last_response_metadata(),
+                logging_metadata=current_speaker.last_response_metadata,
             )
             self.conversation_history.append(turn_obj)
 
