@@ -226,7 +226,7 @@ python3 judge.py -f conversations/{YOUR_FOLDER} -j your-model-name
 
 ### Conversation flow and history
 
-VERA's ConversationSimulator holds the full conversation and passes `conversation_history` into your client on every call. Your client is not required to store history. You can:
+ConversationSimulator holds the full conversation and passes `conversation_history` into your client on every call. Your client is not required to store history. You can:
 
 - **Stateless**: Build each request from `conversation_history` (as the built-in clients do), or
 - **Server-side state**: Send a `conversation_id` to your API and let the server maintain the conversation; in that case you may use `conversation_history` only when needed (e.g. fallback or logging).
