@@ -1,3 +1,4 @@
+import uuid
 from typing import Optional
 from unittest.mock import MagicMock
 
@@ -153,6 +154,7 @@ class TestLLMInterface:
         assert llm2.name == "LLM2"
         assert llm1.system_prompt == "Prompt 1"
         assert llm2.system_prompt == "Prompt 2"
+        assert llm1.conversation_id != llm2.conversation_id
 
         # Modify one shouldn't affect the other
         llm1.set_system_prompt("Modified Prompt 1")
@@ -218,6 +220,14 @@ class TestLLMInterface:
         cid = llm.create_conversation_id()
         assert isinstance(cid, str)
         assert len(cid) > 0
+
+    def test_create_conversation_id_returns_distinct_valid_uuid(self):
+        """Test that repeated calls return distinct values and each is a valid UUID."""
+        llm = ConcreteLLM(name="TestLLM", role=Role.PROVIDER)
+        ids = [llm.create_conversation_id() for _ in range(50)]
+        assert len(ids) == len(set(ids)), "ids must be distinct"
+        for cid in ids:
+            uuid.UUID(cid)  # valid UUID string
 
     def test_update_conversation_id_from_metadata_leaves_unchanged_when_absent(self):
         """
