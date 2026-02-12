@@ -1,5 +1,4 @@
 import time
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from langchain_ollama import OllamaLLM as LangChainOllamaLLM
@@ -8,7 +7,7 @@ from utils.conversation_utils import format_conversation_as_string
 from utils.debug import debug_print
 
 from .config import Config
-from .llm_interface import LLMInterface, Role
+from .llm_interface import DEFAULT_TRIGGER_MESSAGE, LLMInterface, Role
 
 
 class OllamaLLM(LLMInterface):
@@ -31,7 +30,15 @@ class OllamaLLM(LLMInterface):
         base_url: Optional[str] = None,
         **kwargs,
     ):
-        super().__init__(name, role, system_prompt)
+        initial_message = kwargs.pop("initial_message", None)
+        trigger_message = kwargs.pop("trigger_message", None)
+        super().__init__(
+            name,
+            role,
+            system_prompt,
+            initial_message=initial_message,
+            trigger_message=trigger_message,
+        )
 
         # Use provided model name or fall back to config default
         self.model_name = (model_name or Config.get_ollama_config()["model"]).replace(
@@ -75,6 +82,11 @@ class OllamaLLM(LLMInterface):
         if self.temperature is None:
             self.temperature = getattr(self.llm, "temperature", None)
 
+    def start_conversation(self) -> List[Dict[str, Any]]:
+        """Build the initial turn used to trigger the LLM when history is empty."""
+        trigger = self.trigger_message or DEFAULT_TRIGGER_MESSAGE
+        return [{"turn": 0, "response": trigger}]
+
     async def generate_response(
         self,
         conversation_history: Optional[List[Dict[str, Any]]] = None,
@@ -85,6 +97,13 @@ class OllamaLLM(LLMInterface):
             conversation_history: Optional list of previous conversation turns
         """
         try:
+            # When history is empty: static first message or trigger the LLM
+            if not conversation_history or len(conversation_history) == 0:
+                if self.initial_message is not None:
+                    self._set_response_metadata("ollama", static_first_message=True)
+                    return self.initial_message
+                conversation_history = self.start_conversation()
+
             # Build full message using utility function
             full_message = format_conversation_as_string(
                 self.role,
@@ -107,31 +126,14 @@ class OllamaLLM(LLMInterface):
             response_text = await self.llm.ainvoke(full_message)
             end_time = time.time()
 
-            # Extract metadata from response
-            # Note: Ollama's BaseLLM.ainvoke returns a string, not an object
-            # with metadata. For simplicity, we'll just track basic response info
-            self.last_response_metadata = {
-                "response_id": None,
-                "model": self.model_name,
-                "provider": "ollama",
-                "role": self.role.value,
-                "timestamp": datetime.now().isoformat(),
-                "response_time_seconds": round(end_time - start_time, 3),
-                "usage": {},
-            }
+            self._set_response_metadata(
+                "ollama",
+                response_time_seconds=round(end_time - start_time, 3),
+            )
 
             return response_text
         except Exception as e:
-            # Store error metadata
-            self.last_response_metadata = {
-                "response_id": None,
-                "model": self.model_name,
-                "provider": "ollama",
-                "role": self.role.value,
-                "timestamp": datetime.now().isoformat(),
-                "error": str(e),
-                "usage": {},
-            }
+            self._set_response_metadata("ollama", error=str(e))
             return f"Error generating response: {str(e)}"
 
     def set_system_prompt(self, system_prompt: str) -> None:

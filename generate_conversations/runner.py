@@ -127,8 +127,7 @@ class ConversationRunner:
 
         result = None
         try:
-            conversation = await simulator.start_conversation(
-                initial_message=None,
+            conversation = await simulator.generate_conversation(
                 max_turns=max_turns,
                 max_total_words=self.max_total_words,
             )

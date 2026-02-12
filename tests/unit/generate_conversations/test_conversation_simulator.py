@@ -28,7 +28,7 @@ class TestConversationSimulator:
         )
         simulator = ConversationSimulator(persona=persona, agent=agent)
 
-        history = await simulator.start_conversation(max_turns=6)
+        history = await simulator.generate_conversation(max_turns=6)
 
         assert len(history) == 6
         for i in range(6):
@@ -43,7 +43,7 @@ class TestConversationSimulator:
         agent = MockLLM(name="agent", role=Role.PROVIDER, responses=["reply"] * 10)
         simulator = ConversationSimulator(persona=persona, agent=agent)
 
-        history = await simulator.start_conversation(max_turns=5)
+        history = await simulator.generate_conversation(max_turns=5)
 
         assert len(history) == 5
         assert history[-1]["turn"] == 5
@@ -60,7 +60,7 @@ class TestConversationSimulator:
 
         simulator.termination_signal = "Goodbye"
 
-        history = await simulator.start_conversation(max_turns=10)
+        history = await simulator.generate_conversation(max_turns=10)
 
         assert len(history) == 3
         assert history[-1]["early_termination"] is True
@@ -76,7 +76,7 @@ class TestConversationSimulator:
         agent = MockLLM(name="agent", role=Role.PROVIDER, responses=["Hi there"] * 5)
         simulator = ConversationSimulator(persona=persona, agent=agent)
 
-        history = await simulator.start_conversation(max_turns=10)
+        history = await simulator.generate_conversation(max_turns=10)
 
         assert len(history) == 3
         assert history[-1]["early_termination"] is True
@@ -88,7 +88,7 @@ class TestConversationSimulator:
         agent = MockLLM(name="agent", role=Role.PROVIDER, responses=["Test reply"])
         simulator = ConversationSimulator(persona=persona, agent=agent)
 
-        history = await simulator.start_conversation(max_turns=2)
+        history = await simulator.generate_conversation(max_turns=2)
 
         assert len(history) == 2
         for turn in history:
@@ -110,7 +110,7 @@ class TestConversationSimulator:
         agent = MockLLM(name="agent", role=Role.PROVIDER, responses=["Acknowledged"])
         simulator = ConversationSimulator(persona=persona, agent=agent)
 
-        history = await simulator.start_conversation(initial_message=None, max_turns=2)
+        history = await simulator.generate_conversation(max_turns=2)
 
         assert len(history) == 2
         assert (
@@ -119,22 +119,26 @@ class TestConversationSimulator:
         assert history[0]["response"] == "Started conversation"
 
     async def test_explicit_initial_message(self):
-        """Test conversation with explicit initial message."""
+        """Test conversation with static initial message (no LLM call for 1st turn)."""
         persona = MockLLM(
-            name="persona", role=Role.PERSONA, responses=["Response to custom message"]
+            name="persona",
+            role=Role.PERSONA,
+            responses=["Response to custom message"],
+            initial_message="Custom start",
         )
         agent = MockLLM(
             name="agent", role=Role.PROVIDER, responses=["Acknowledged custom"]
         )
         simulator = ConversationSimulator(persona=persona, agent=agent)
 
-        history = await simulator.start_conversation(
-            initial_message="Custom start", max_turns=2
-        )
+        history = await simulator.generate_conversation(max_turns=2)
 
         assert len(history) == 2
-        assert history[0]["input"] == "Custom start"
-        assert "Custom start" in persona.calls
+        assert history[0]["response"] == "Custom start"
+        assert history[0]["input"] is None  # static first message has no prompt
+        assert (
+            "Custom start" in agent.calls
+        )  # agent was prompted with persona's message
 
     async def test_llm_error_handling(self):
         """Test handling of LLM errors gracefully."""
@@ -148,7 +152,7 @@ class TestConversationSimulator:
 
         # Act & Assert
         with pytest.raises(Exception) as exc_info:
-            await simulator.start_conversation(max_turns=2)
+            await simulator.generate_conversation(max_turns=2)
 
         assert "Simulated API error" in str(exc_info.value)
 
@@ -158,7 +162,7 @@ class TestConversationSimulator:
         agent = MockLLM(name="agent", role=Role.PROVIDER, responses=["Reply"])
         simulator = ConversationSimulator(persona=persona, agent=agent)
 
-        history = await simulator.start_conversation(max_turns=2)
+        history = await simulator.generate_conversation(max_turns=2)
 
         assert "logging" in history[0]
         assert "logging" in history[1]
@@ -181,7 +185,7 @@ class TestConversationSimulator:
         simulator = ConversationSimulator(persona=persona, agent=agent)
         simulator.termination_signal = "Goodbye"
 
-        history = await simulator.start_conversation(max_turns=6)
+        history = await simulator.generate_conversation(max_turns=6)
 
         assert len(history) == 6
         assert all(not turn["early_termination"] for turn in history)
@@ -196,7 +200,7 @@ class TestConversationSimulator:
         )
         simulator = ConversationSimulator(persona=persona, agent=agent)
 
-        history = await simulator.start_conversation(max_turns=4)
+        history = await simulator.generate_conversation(max_turns=4)
 
         # Turn 2's input should be turn 1's response
         assert history[1]["input"] == history[0]["response"]
@@ -214,7 +218,7 @@ class TestConversationSimulator:
         simulator = ConversationSimulator(persona=persona, agent=agent)
         simulator.termination_signal = "Goodbye"  # Must match exact case
 
-        history = await simulator.start_conversation(max_turns=10)
+        history = await simulator.generate_conversation(max_turns=10)
 
         assert len(history) == 3
         assert history[0]["early_termination"] is False
@@ -227,8 +231,8 @@ class TestConversationSimulator:
         agent = MockLLM(name="agent", role=Role.PROVIDER, responses=["Reply"] * 10)
         simulator = ConversationSimulator(persona=persona, agent=agent)
 
-        history1 = await simulator.start_conversation(max_turns=2)
-        history2 = await simulator.start_conversation(max_turns=3)
+        history1 = await simulator.generate_conversation(max_turns=2)
+        history2 = await simulator.generate_conversation(max_turns=3)
 
         assert len(history1) == 2
         assert len(history2) == 3
@@ -246,7 +250,7 @@ class TestConversationSimulator:
         simulator = ConversationSimulator(persona=persona, agent=agent)
         simulator.termination_signal = "goodbye"
 
-        history = await simulator.start_conversation(max_turns=10)
+        history = await simulator.generate_conversation(max_turns=10)
 
         assert len(history) == 3
         assert history[-1]["early_termination"] is True
@@ -270,7 +274,9 @@ class TestConversationSimulator:
         )
         simulator = ConversationSimulator(persona=persona, agent=agent)
 
-        history = await simulator.start_conversation(max_turns=10, max_total_words=10)
+        history = await simulator.generate_conversation(
+            max_turns=10, max_total_words=10
+        )
 
         # Turn 1: User says "Hello there" (2 words, total: 2)
         # Turn 2: agent says "I am doing well today" (5 words, total: 7)
@@ -298,7 +304,7 @@ class TestConversationSimulator:
         simulator = ConversationSimulator(persona=persona, agent=agent)
 
         # Even though user exceeds limit, should only stop after agent
-        history = await simulator.start_conversation(max_turns=10, max_total_words=5)
+        history = await simulator.generate_conversation(max_turns=10, max_total_words=5)
 
         # Should complete at least 2 turns (user then provider)
         assert len(history) >= 2
@@ -319,7 +325,9 @@ class TestConversationSimulator:
         )
         simulator = ConversationSimulator(persona=persona, agent=agent)
 
-        history = await simulator.start_conversation(max_turns=6, max_total_words=None)
+        history = await simulator.generate_conversation(
+            max_turns=6, max_total_words=None
+        )
 
         assert len(history) == 6
 
@@ -329,7 +337,7 @@ class TestConversationSimulator:
         agent = MockLLM(name="test-agent", role=Role.PROVIDER, responses=["Hi there"])
         simulator = ConversationSimulator(persona=persona, agent=agent)
 
-        await simulator.start_conversation(max_turns=2)
+        await simulator.generate_conversation(max_turns=2)
 
         with patch(
             "generate_conversations.conversation_simulator.save_conversation_to_file"

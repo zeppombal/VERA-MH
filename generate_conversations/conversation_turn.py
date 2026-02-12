@@ -20,7 +20,8 @@ class ConversationTurn:
     Attributes:
         turn: Sequential turn number (1-indexed)
         speaker: Role identifier of the speaker (Role.PERSONA or Role.PROVIDER)
-        input_message: The message string that prompted the response_message
+        input_message: The message string that prompted the response_message,
+        or None if the response did not come from a prompt.
         response_message: The LangChain message object (HumanMessage or AIMessage)
         early_termination: Whether this turn marked the end of conversation
         logging_metadata: Metadata from LLM provider (tokens, timing, etc.)
@@ -28,7 +29,7 @@ class ConversationTurn:
 
     turn: int
     speaker: Role
-    input_message: str
+    input_message: Optional[str]
     response_message: BaseMessage
     early_termination: bool = False
     logging_metadata: Optional[Dict[str, Any]] = None

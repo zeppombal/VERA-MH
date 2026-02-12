@@ -470,7 +470,11 @@ class TestClaudeLLM(TestJudgeLLMBase):
     async def test_generate_response_with_empty_conversation_history(
         self, mock_chat_anthropic, mock_response_factory
     ):
-        """Test generate_response with empty conversation_history."""
+        """Test generate_response with empty conversation_history
+        uses default trigger.
+        """
+        from llm_clients.llm_interface import DEFAULT_TRIGGER_MESSAGE
+
         mock_response = mock_response_factory(
             text="Response", response_id="msg_empty", provider="claude"
         )
@@ -485,13 +489,12 @@ class TestClaudeLLM(TestJudgeLLMBase):
 
         assert response == "Response"
 
-        # Verify ainvoke was called
+        # Empty history: SystemMessage + HumanMessage(default trigger)
         call_args = mock_llm.ainvoke.call_args
         messages = call_args[0][0]
-
-        # Should have: SystemMessage only (no history messages)
-        assert len(messages) == 1
+        assert len(messages) == 2
         assert messages[0].text == "Test"
+        assert messages[1].content == DEFAULT_TRIGGER_MESSAGE
 
     @pytest.mark.asyncio
     @patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key")
@@ -499,7 +502,11 @@ class TestClaudeLLM(TestJudgeLLMBase):
     async def test_generate_response_with_none_conversation_history(
         self, mock_chat_anthropic, mock_response_factory
     ):
-        """Test generate_response with None conversation_history (default)."""
+        """Test generate_response with None conversation_history
+        uses default trigger.
+        """
+        from llm_clients.llm_interface import DEFAULT_TRIGGER_MESSAGE
+
         mock_response = mock_response_factory(
             text="Response", response_id="msg_none", provider="claude"
         )
@@ -515,13 +522,12 @@ class TestClaudeLLM(TestJudgeLLMBase):
 
         assert response == "Response"
 
-        # Verify ainvoke was called
+        # None history: SystemMessage + HumanMessage(default trigger)
         call_args = mock_llm.ainvoke.call_args
         messages = call_args[0][0]
-
-        # Should have: SystemMessage only (no history messages)
-        assert len(messages) == 1
+        assert len(messages) == 2
         assert messages[0].text == "Test"
+        assert messages[1].content == DEFAULT_TRIGGER_MESSAGE
 
     @pytest.mark.asyncio
     @patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key")

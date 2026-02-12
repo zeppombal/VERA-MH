@@ -1,6 +1,7 @@
 import copy
 import uuid
 from abc import ABC, abstractmethod
+from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Type, TypeVar
 
@@ -17,11 +18,20 @@ class Role(Enum):
     JUDGE = "judge"  # Judge role, used for judge operations
 
 
+# Default prompt sent to the LLM when starting a conversation (trigger mode).
+DEFAULT_TRIGGER_MESSAGE = "Start the conversation based on the system prompt"
+
+
 class LLMInterface(ABC):
     """Abstract base class for LLM implementations.
 
     Provides basic text generation capabilities. All LLM implementations
     must support basic text generation and system prompt management.
+
+    When conversation history is empty:
+    - initial_message: If set, return this string as the first turn (no LLM call).
+    - trigger_message: If initial_message is not set, use this as the prompt to
+      the LLM to generate the first turn. Defaults to DEFAULT_TRIGGER_MESSAGE.
     """
 
     def __init__(
@@ -29,10 +39,14 @@ class LLMInterface(ABC):
         name: str,
         role: Role,
         system_prompt: Optional[str] = None,
+        initial_message: Optional[str] = None,
+        trigger_message: Optional[str] = None,
     ):
         self.name = name
         self.role = role
         self.system_prompt = system_prompt or ""
+        self.initial_message = initial_message  # static first message (no LLM call)
+        self.trigger_message = trigger_message  # prompt to LLM when history empty
         self._last_response_metadata: Dict[str, Any] = {}
         self.conversation_id = self.create_conversation_id()
 
@@ -66,6 +80,36 @@ class LLMInterface(ABC):
         cid = (self._last_response_metadata or {}).get("conversation_id")
         if cid is not None:
             self.conversation_id = cid
+
+    def _set_response_metadata(self, provider: str, **extra: Any) -> None:
+        """Set last_response_metadata with common fields; pass extra keys as kwargs.
+
+        Always sets: response_id, model, provider, role, timestamp, usage.
+        Override or add keys via kwargs (e.g. error=..., response_time_seconds=...).
+        """
+        self.last_response_metadata = {
+            "response_id": extra.pop("response_id", None),
+            "model": extra.pop("model", getattr(self, "model_name", None)),
+            "provider": provider,
+            "role": self.role.value,
+            "timestamp": datetime.now().isoformat(),
+            "usage": extra.pop("usage", {}),
+            **extra,
+        }
+
+    @abstractmethod
+    def start_conversation(self) -> List[Dict[str, Any]]:
+        """Build the initial turn(s) used to trigger the LLM when history is empty.
+
+        Used only when initial_message is not set. Returns a list of dicts
+        (e.g. [{"turn": 0, "response": "<trigger or DEFAULT_TRIGGER_MESSAGE>"}])
+        that will be passed to the message builder and then to the LLM.
+
+        Returns:
+            List of dicts representing the initial conversation turn(s)
+            (e.g. [{"turn": 0, "response": "<trigger text>"}]).
+        """
+        pass
 
     @abstractmethod
     async def generate_response(

@@ -143,7 +143,7 @@ def build_langchain_messages(
     Returns:
         List of LangChain message objects (HumanMessage, AIMessage)
     """
-    messages = []
+    messages: List[BaseMessage] = []
 
     # Add conversation history if provided
     if conversation_history:

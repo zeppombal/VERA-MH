@@ -1,10 +1,10 @@
-from typing import Optional
+from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock
 
 import pytest
 
 from llm_clients import Role
-from llm_clients.llm_interface import LLMInterface
+from llm_clients.llm_interface import DEFAULT_TRIGGER_MESSAGE, LLMInterface
 
 
 class ConcreteLLM(LLMInterface):
@@ -16,6 +16,12 @@ class ConcreteLLM(LLMInterface):
         self.llm = MagicMock(spec=["temperature", "max_tokens", "custom_method"])
         self.llm.temperature = 0.7
         self.llm.max_tokens = 1000
+
+    def start_conversation(self) -> List[Dict[str, Any]]:
+        """Concrete implementation of abstract method."""
+        return [
+            {"turn": 0, "response": self.trigger_message or DEFAULT_TRIGGER_MESSAGE}
+        ]
 
     async def generate_response(self, conversation_history=None):
         """Concrete implementation of abstract method."""
@@ -108,6 +114,9 @@ class TestLLMInterface:
         class MinimalLLM(LLMInterface):
             """Minimal implementation without self.llm."""
 
+            def start_conversation(self) -> List[Dict[str, Any]]:
+                return [{"turn": 0, "response": DEFAULT_TRIGGER_MESSAGE}]
+
             async def generate_response(self, conversation_history=None):
                 return "response"
 
@@ -131,6 +140,9 @@ class TestLLMInterface:
             ):
                 super().__init__(name, role, system_prompt)
                 self.llm = None
+
+            def start_conversation(self) -> List[Dict[str, Any]]:
+                return [{"turn": 0, "response": DEFAULT_TRIGGER_MESSAGE}]
 
             async def generate_response(self, conversation_history=None):
                 return "response"
@@ -190,6 +202,9 @@ class TestLLMInterface:
                 self.llm.float_attr = 3.14
                 self.llm.bool_attr = True
                 self.llm.list_attr = [1, 2, 3]
+
+            def start_conversation(self) -> List[Dict[str, Any]]:
+                return [{"turn": 0, "response": DEFAULT_TRIGGER_MESSAGE}]
 
             async def generate_response(self, conversation_history=None):
                 return "response"

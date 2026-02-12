@@ -5,6 +5,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from generate_conversations.conversation_turn import ConversationTurn
 from llm_clients import LLMInterface
+from llm_clients.llm_interface import DEFAULT_TRIGGER_MESSAGE
 from utils.conversation_utils import save_conversation_to_file
 
 
@@ -36,10 +37,9 @@ class ConversationSimulator:
 
         return False
 
-    async def start_conversation(
+    async def generate_conversation(
         self,
         max_turns: int,
-        initial_message: Optional[str] = None,
         max_total_words: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
@@ -47,19 +47,12 @@ class ConversationSimulator:
 
         Args:
             max_turns: Maximum number of conversation turns
-            initial_message: Optional initial message (for the first speaker)
-                to start the conversation. By default, first speaker is persona.
             max_total_words: Optional maximum total words across all responses
-
 
         Returns:
             List of conversation turns with speaker and message
         """
         self.conversation_history = []
-
-        # Set up initial message for the conversation
-        if initial_message is None:
-            initial_message = "Start the conversation based on the system prompt"
 
         # Start with persona by default, but this can be changed
         # The role-based logic in build_langchain_messages() handles any starting order
@@ -68,16 +61,8 @@ class ConversationSimulator:
 
         total_words = 0
         for turn in range(max_turns):
-            # Generate response with conversation history
-            # On turn 0, create a "turn 0" entry for the initial message
-            # This acts as a trigger for the LLM to start the conversation
-            # without counting as a real conversation turn
-            if turn == 0:
-                initial_turn = {"turn": 0, "response": initial_message}
-                history_dicts = [initial_turn]
-            else:
-                # Convert conversation history to dict format for LLM interface
-                history_dicts = [t.to_dict() for t in self.conversation_history]
+            # Convert conversation history to dict format for LLM interface
+            history_dicts = [t.to_dict() for t in self.conversation_history]
 
             response = await current_speaker.generate_response(
                 conversation_history=history_dicts
@@ -85,17 +70,24 @@ class ConversationSimulator:
 
             total_words += len(response.split())
 
-            # Create LangChain message based on speaker
+            # Create LangChain message based on speaker for overall conversation storage
+            # Note: each LLM Client will handle rebuilding the message type to
+            # always see themselves as AIMessage
             if current_speaker == self.persona:
                 lc_message = HumanMessage(content=response)
             else:
                 lc_message = AIMessage(content=response)
 
             # Determine input message for metadata tracking
-            # On turn 0, it's the initial message
-            # On subsequent turns, it's the previous speaker's response
+            # Turn 0: trigger_message if LLM used, else None (static first message)
+            # On subsequent turns: the previous speaker's response
             if turn == 0:
-                input_msg = initial_message
+                # get input message to store in the conversation turn below
+                input_msg = (
+                    (current_speaker.trigger_message or DEFAULT_TRIGGER_MESSAGE)
+                    if current_speaker.initial_message is None
+                    else None
+                )
             else:
                 # Get the last turn's response as input for this turn
                 if self.conversation_history:
