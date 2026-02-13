@@ -121,10 +121,29 @@ Example:
         help="Custom run ID for conversation folder (default: timestamp)",
     )
     parser.add_argument(
-        "--agent-speaks-first",
+        "--provider-speaks-first",
         action="store_true",
-        help="Provider agent speaks first; max_turns will be adjusted "
-        "to ensure agent speaks last.",
+        help="Provider speaks first; max_turns adjusted so provider speaks last.",
+    )
+    parser.add_argument(
+        "--user-initial-message",
+        help="Static first message from user-agent (no LLM call for first turn).",
+        default=None,
+    )
+    parser.add_argument(
+        "--user-trigger-message",
+        help="Prompt sent to user-agent LLM when starting conversation (first turn).",
+        default=None,
+    )
+    parser.add_argument(
+        "--provider-initial-message",
+        help="Static first message from provider (no LLM call for first turn).",
+        default=None,
+    )
+    parser.add_argument(
+        "--provider-trigger-message",
+        help="Prompt sent to provider LLM when starting conversation (first turn).",
+        default=None,
     )
     parser.add_argument(
         "--debug", action="store_true", help="Enable debug logging for generation"
@@ -219,12 +238,20 @@ async def main():
         "model": args.user_agent,
         **args.user_agent_extra_params,
     }
+    if args.user_initial_message is not None:
+        persona_model_config["initial_message"] = args.user_initial_message
+    if args.user_trigger_message is not None:
+        persona_model_config["trigger_message"] = args.user_trigger_message
 
     agent_model_config = {
         "model": args.provider_agent,
         "name": args.provider_agent,
         **args.provider_agent_extra_params,
     }
+    if args.provider_initial_message is not None:
+        agent_model_config["initial_message"] = args.provider_initial_message
+    if args.provider_trigger_message is not None:
+        agent_model_config["trigger_message"] = args.provider_trigger_message
 
     # Call generate.py's main function directly
     _, conversation_folder = await generate_main(
@@ -247,7 +274,7 @@ async def main():
         max_concurrent=args.max_concurrent,
         max_total_words=args.max_total_words,
         max_personas=args.max_personas,
-        agent_speaks_first=args.agent_speaks_first,
+        provider_speaks_first=args.provider_speaks_first,
     )
 
     print("")

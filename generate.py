@@ -26,7 +26,7 @@ async def main(
     max_concurrent: Optional[int] = None,
     max_total_words: Optional[int] = None,
     max_personas: Optional[int] = None,
-    agent_speaks_first: bool = False,
+    provider_speaks_first: bool = False,
 ) -> tuple[List[Dict[str, Any]], str]:
     """
     Generate conversations and return results.
@@ -48,7 +48,7 @@ async def main(
             conversations concurrently.
         max_personas: Optional maximum number of personas to load from CSV. If None,
             loads all personas.
-        agent_speaks_first: If True, provider agent speaks first; otherwise persona
+        provider_speaks_first: If True, provider agent speaks first; otherwise persona
             speaks first. When True, max_turns is adjusted so the agent speaks last.
 
     Returns:
@@ -59,9 +59,9 @@ async def main(
         Exception: Other errors
     """
     # Ensure provider agent always speaks last
-    # (persona_speaks_first = not agent_speaks_first)
+    # (persona_speaks_first = not provider_speaks_first)
     max_turns = ensure_provider_has_last_turn(
-        max_turns, persona_speaks_first=not agent_speaks_first
+        max_turns, persona_speaks_first=not provider_speaks_first
     )
     if verbose:
         print("🔄 Generating conversations with the following parameters:")
@@ -77,7 +77,7 @@ async def main(
         print(f"  - Max concurrent: {max_concurrent}")
         print(f"  - Max total words: {max_total_words}")
         print(f"  - Max personas: {max_personas}")
-        print(f"  - Agent speaks first: {agent_speaks_first}")
+        print(f"  - Provider speaks first: {provider_speaks_first}")
 
     # Generate default folder name if not provided
     if folder_name is None:
@@ -112,7 +112,7 @@ async def main(
         max_concurrent=max_concurrent,
         max_total_words=max_total_words,
         max_personas=max_personas,
-        agent_speaks_first=agent_speaks_first,
+        provider_speaks_first=provider_speaks_first,
     )
 
     # Run conversations
@@ -233,11 +233,35 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--agent-speaks-first",
+        "--provider-speaks-first",
         help="Provider agent speaks first; max_turns will be adjusted "
         "to ensure agent speaks last.",
         action="store_true",
         default=False,
+    )
+
+    parser.add_argument(
+        "--provider-initial-message",
+        help="Static first message from provider (no LLM call for first turn).",
+        default=None,
+    )
+
+    parser.add_argument(
+        "--provider-trigger-message",
+        help="Prompt sent to provider LLM when starting conversation (first turn).",
+        default=None,
+    )
+
+    parser.add_argument(
+        "--user-initial-message",
+        help="Static first message from user-agent (no LLM call for first turn).",
+        default=None,
+    )
+
+    parser.add_argument(
+        "--user-trigger-message",
+        help="Prompt sent to user-agent LLM when starting conversation (first turn).",
+        default=None,
     )
 
     parser.add_argument(
@@ -258,6 +282,10 @@ if __name__ == "__main__":
         "model": args.user_agent,
         **args.user_agent_extra_params,
     }
+    if args.user_initial_message is not None:
+        persona_model_config["initial_message"] = args.user_initial_message
+    if args.user_trigger_message is not None:
+        persona_model_config["trigger_message"] = args.user_trigger_message
 
     agent_model_config = {
         "model": args.provider_agent,
@@ -265,6 +293,10 @@ if __name__ == "__main__":
         "name": args.provider_agent,
         **args.provider_agent_extra_params,
     }
+    if args.provider_initial_message is not None:
+        agent_model_config["initial_message"] = args.provider_initial_message
+    if args.provider_trigger_message is not None:
+        agent_model_config["trigger_message"] = args.provider_trigger_message
 
     # TODO: Do the run id here, so that it can be printed when starting
     results, output_folder = asyncio.run(
@@ -303,6 +335,6 @@ if __name__ == "__main__":
             max_concurrent=args.max_concurrent,
             max_total_words=args.max_total_words,
             max_personas=args.max_personas,
-            agent_speaks_first=args.agent_speaks_first,
+            provider_speaks_first=args.provider_speaks_first,
         )
     )

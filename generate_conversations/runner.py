@@ -36,12 +36,12 @@ class ConversationRunner:
         max_concurrent: Optional[int] = None,
         max_total_words: Optional[int] = None,
         max_personas: Optional[int] = None,
-        agent_speaks_first: bool = False,
+        provider_speaks_first: bool = False,
     ):
         self.persona_model_config = persona_model_config
         self.agent_model_config = agent_model_config
         self.max_turns = ensure_provider_has_last_turn(
-            max_turns, persona_speaks_first=not agent_speaks_first
+            max_turns, persona_speaks_first=not provider_speaks_first
         )
         self.runs_per_prompt = runs_per_prompt
         self.folder_name = folder_name
@@ -52,7 +52,7 @@ class ConversationRunner:
         self.max_concurrent = max_concurrent
         self.max_total_words = max_total_words
         self.max_personas = max_personas
-        self.agent_speaks_first = agent_speaks_first
+        self.provider_speaks_first = provider_speaks_first
 
     async def run_single_conversation(
         self,
@@ -146,7 +146,7 @@ class ConversationRunner:
             conversation = await simulator.generate_conversation(
                 max_turns=max_turns,
                 max_total_words=self.max_total_words,
-                persona_speaks_first=not self.agent_speaks_first,
+                persona_speaks_first=not self.provider_speaks_first,
             )
 
             # Log each conversation turn

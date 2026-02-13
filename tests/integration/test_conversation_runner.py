@@ -345,14 +345,14 @@ class TestConversationRunnerSingle:
         # Verify conversation file exists
         assert Path(result["filename"]).exists()
 
-    async def test_agent_speaks_first_first_turn_is_provider(
+    async def test_provider_speaks_first_first_turn_is_provider(
         self,
         tmp_path: Path,
         basic_persona_config: Dict[str, Any],
         basic_agent_config: Dict[str, Any],
         mock_llm_factory,
     ) -> None:
-        """Test agent_speaks_first=True: first turn is from the provider."""
+        """Test provider_speaks_first=True: first turn is from the provider."""
         conv_folder = tmp_path / "conversations"
         run_id = "test_agent_first"
 
@@ -361,7 +361,7 @@ class TestConversationRunnerSingle:
             agent_model_config=basic_agent_config,
             run_id=run_id,
             folder_name=str(conv_folder),
-            agent_speaks_first=True,
+            provider_speaks_first=True,
         )
 
         persona_config = {
