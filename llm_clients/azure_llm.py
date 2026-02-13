@@ -12,7 +12,7 @@ from utils.conversation_utils import build_langchain_messages
 from utils.debug import debug_print
 
 from .config import Config
-from .llm_interface import DEFAULT_TRIGGER_MESSAGE, JudgeLLM
+from .llm_interface import JudgeLLM
 
 # Define type variable for Pydantic models
 T = TypeVar("T", bound=BaseModel)
@@ -131,11 +131,6 @@ class AzureLLM(JudgeLLM):
         self.temperature = getattr(self.llm, "temperature", None)
         self.max_tokens = getattr(self.llm, "max_tokens", None)
         self.top_p = getattr(self.llm, "top_p", None)
-
-    def start_conversation(self) -> List[Dict[str, Any]]:
-        """Build the initial turn used to trigger the LLM when history is empty."""
-        trigger = self.trigger_message or DEFAULT_TRIGGER_MESSAGE
-        return [{"turn": 0, "response": trigger}]
 
     async def generate_response(
         self,

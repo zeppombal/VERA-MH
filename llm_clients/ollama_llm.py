@@ -7,7 +7,7 @@ from utils.conversation_utils import format_conversation_as_string
 from utils.debug import debug_print
 
 from .config import Config
-from .llm_interface import DEFAULT_TRIGGER_MESSAGE, LLMInterface, Role
+from .llm_interface import LLMInterface, Role
 
 
 class OllamaLLM(LLMInterface):
@@ -81,11 +81,6 @@ class OllamaLLM(LLMInterface):
         # If temperature wasn't set, try to get it from the llm object
         if self.temperature is None:
             self.temperature = getattr(self.llm, "temperature", None)
-
-    def start_conversation(self) -> List[Dict[str, Any]]:
-        """Build the initial turn used to trigger the LLM when history is empty."""
-        trigger = self.trigger_message or DEFAULT_TRIGGER_MESSAGE
-        return [{"turn": 0, "response": trigger}]
 
     async def generate_response(
         self,

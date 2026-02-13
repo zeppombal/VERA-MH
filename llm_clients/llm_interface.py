@@ -97,19 +97,20 @@ class LLMInterface(ABC):
             **extra,
         }
 
-    @abstractmethod
     def start_conversation(self) -> List[Dict[str, Any]]:
         """Build the initial turn(s) used to trigger the LLM when history is empty.
 
         Used only when initial_message is not set. Returns a list of dicts
         (e.g. [{"turn": 0, "response": "<trigger or DEFAULT_TRIGGER_MESSAGE>"}])
         that will be passed to the message builder and then to the LLM.
+        Subclasses may override if they need different behavior.
 
         Returns:
             List of dicts representing the initial conversation turn(s)
             (e.g. [{"turn": 0, "response": "<trigger text>"}]).
         """
-        pass
+        trigger = self.trigger_message or DEFAULT_TRIGGER_MESSAGE
+        return [{"turn": 0, "response": trigger}]
 
     @abstractmethod
     async def generate_response(
@@ -120,11 +121,23 @@ class LLMInterface(ABC):
 
         Args:
             conversation_history: List of previous conversation turns.
-                Each turn is a dict with keys: 'turn', 'speaker', 'response'.
-                On the first turn (turn 0), conversation_history will contain
-                a single entry with turn=0, speaker="system", and the initial
-                message in the 'response' field. This provides context for
-                starting the conversation.
+                Each turn is a dict with 'turn' and 'response'. Format depends
+                on whether the first entry is a trigger or a prior response:
+
+                - **initial_message**: When set on the LLM, it is used as the
+                  first response (counted as turn 1) with no LLM call; later
+                  calls to generate_response then receive history starting
+                  from that turn.
+                - **Turn 0 as trigger**: When history is built from
+                  start_conversation(), the first entry has turn=0 and
+                  'response' (trigger text). Speaker is not required: that
+                  entry is input used to elicit the LLM's first response for turn 1,
+                  not a prior utterance.
+                - **Later turns**: Each turn has 'turn', 'speaker', and
+                  'response' fields. speaker is required because the message is the
+                  'response' fields. "speaker" is now required for proper
+                  LangChain message building.
+                  See llm_clients/claude_llm.py for an example.
 
         Returns:
             str: The response text. Metadata in self.last_response_metadata

@@ -9,7 +9,7 @@ from utils.conversation_utils import build_langchain_messages
 from utils.debug import debug_print
 
 from .config import Config
-from .llm_interface import DEFAULT_TRIGGER_MESSAGE, JudgeLLM, Role
+from .llm_interface import JudgeLLM, Role
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -62,11 +62,6 @@ class OpenAILLM(JudgeLLM):
             print(f"  Extra parameters: {extra_params}")
 
         self.llm = ChatOpenAI(**llm_params)
-
-    def start_conversation(self) -> List[Dict[str, Any]]:
-        """Build the initial turn used to trigger the LLM when history is empty."""
-        trigger = self.trigger_message or DEFAULT_TRIGGER_MESSAGE
-        return [{"turn": 0, "response": trigger}]
 
     async def generate_response(
         self,
