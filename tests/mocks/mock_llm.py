@@ -86,7 +86,7 @@ class MockLLM(JudgeLLM):
 
         self._set_response_metadata(
             "mock",
-            model=self.name,
+            model=self.model_name,
             usage={
                 "prompt_tokens": 10,
                 "completion_tokens": 20,
