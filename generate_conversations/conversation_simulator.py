@@ -6,7 +6,10 @@ from langchain_core.messages import AIMessage, HumanMessage
 from generate_conversations.conversation_turn import ConversationTurn
 from llm_clients import LLMInterface
 from llm_clients.llm_interface import DEFAULT_TRIGGER_MESSAGE
-from utils.conversation_utils import save_conversation_to_file
+from utils.conversation_utils import (
+    ensure_provider_has_last_turn,
+    save_conversation_to_file,
+)
 
 
 class ConversationSimulator:
@@ -55,6 +58,7 @@ class ConversationSimulator:
             List of conversation turns with speaker and message
         """
         self.conversation_history = []
+        max_turns = ensure_provider_has_last_turn(max_turns, persona_speaks_first)
 
         if persona_speaks_first:
             current_speaker = self.persona

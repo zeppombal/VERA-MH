@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from generate_conversations import ConversationRunner
+from utils.conversation_utils import ensure_provider_has_last_turn
 from utils.debug import set_debug
 from utils.utils import parse_key_value_list
 
@@ -57,19 +58,11 @@ async def main(
         ValueError: Configuration error
         Exception: Other errors
     """
-    # Ensure agent always speaks last:
-    # persona first -> even turns -> agent speaks last;
-    # agent first -> odd turns -> agent speaks last
-    if not agent_speaks_first and max_turns % 2 != 0:
-        print(
-            "Max turns is odd, which means the last turn will be the user, "
-            "without an agent's response."
-        )
-        print("Changing max turns to an even number.")
-        max_turns = max_turns + 1
-    elif agent_speaks_first and max_turns % 2 == 0:
-        print("Agent speaks first; adding one turn so the agent speaks last.")
-        max_turns = max_turns + 1
+    # Ensure provider agent always speaks last
+    # (persona_speaks_first = not agent_speaks_first)
+    max_turns = ensure_provider_has_last_turn(
+        max_turns, persona_speaks_first=not agent_speaks_first
+    )
     if verbose:
         print("🔄 Generating conversations with the following parameters:")
         print(f"  - Persona model: {persona_model_config}")

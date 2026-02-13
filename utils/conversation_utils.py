@@ -11,6 +11,20 @@ from llm_clients.llm_interface import Role
 from .debug import debug_print
 
 
+def ensure_provider_has_last_turn(max_turns: int, persona_speaks_first: bool) -> int:
+    """
+    Return max_turns adjusted so the provider agent always has the last turn.
+
+    - persona_speaks_first=True (persona first): need even number of turns.
+    - persona_speaks_first=False (agent first): need odd number of turns.
+    """
+    if persona_speaks_first and max_turns % 2 != 0:
+        return max_turns + 1
+    if not persona_speaks_first and max_turns % 2 == 0:
+        return max_turns + 1
+    return max_turns
+
+
 def add_timestamp_to_path(path: Path) -> Path:
     """
     Add timestamp to filename before extension.

@@ -38,15 +38,17 @@ class TestConversationSimulator:
                 assert history[i]["speaker"] == "provider"
 
     async def test_max_turns_respected(self):
-        """Test that conversation stops at max_turns."""
+        """Test that conversation stops at max_turns (provider speaks last)."""
         persona = MockLLM(name="persona", role=Role.PERSONA, responses=["msg"] * 10)
         agent = MockLLM(name="agent", role=Role.PROVIDER, responses=["reply"] * 10)
         simulator = ConversationSimulator(persona=persona, agent=agent)
 
-        history = await simulator.generate_conversation(max_turns=5)
+        # Use even max_turns so no normalization (persona_speaks_first=True)
+        history = await simulator.generate_conversation(max_turns=6)
 
-        assert len(history) == 5
-        assert history[-1]["turn"] == 5
+        assert len(history) == 6
+        assert history[-1]["turn"] == 6
+        assert history[-1]["speaker"] == "provider"
 
     async def test_agent_speaks_first(self):
         """persona_speaks_first=False: agent speaks first and last (odd max_turns)."""
@@ -186,8 +188,18 @@ class TestConversationSimulator:
 
     async def test_metadata_captured(self):
         """Test that metadata is captured in conversation history."""
-        persona = MockLLM(name="persona", role=Role.PERSONA, responses=["Test"])
-        agent = MockLLM(name="agent", role=Role.PROVIDER, responses=["Reply"])
+        persona = MockLLM(
+            name="persona",
+            model_name="persona-model",
+            role=Role.PERSONA,
+            responses=["Test"],
+        )
+        agent = MockLLM(
+            name="agent",
+            model_name="agent-model",
+            role=Role.PROVIDER,
+            responses=["Reply"],
+        )
         simulator = ConversationSimulator(persona=persona, agent=agent)
 
         history = await simulator.generate_conversation(max_turns=2)
@@ -195,7 +207,7 @@ class TestConversationSimulator:
         assert "logging" in history[0]
         assert "logging" in history[1]
         assert history[0]["logging"]["provider"] == "mock"
-        assert history[0]["logging"]["model"] == "persona"
+        assert history[0]["logging"]["model"] == "persona-model"
         assert "prompt_tokens" in history[0]["logging"]
         assert "completion_tokens" in history[0]["logging"]
         assert "total_tokens" in history[0]["logging"]
@@ -260,10 +272,11 @@ class TestConversationSimulator:
         simulator = ConversationSimulator(persona=persona, agent=agent)
 
         history1 = await simulator.generate_conversation(max_turns=2)
-        history2 = await simulator.generate_conversation(max_turns=3)
+        # Use even max_turns so no normalization (persona_speaks_first=True)
+        history2 = await simulator.generate_conversation(max_turns=4)
 
         assert len(history1) == 2
-        assert len(history2) == 3
+        assert len(history2) == 4
         assert history2[0]["turn"] == 1
         internal_history_dicts = [t.to_dict() for t in simulator.conversation_history]
         assert internal_history_dicts == history2
