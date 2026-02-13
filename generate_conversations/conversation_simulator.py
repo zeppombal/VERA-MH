@@ -87,11 +87,14 @@ class ConversationSimulator:
             # On subsequent turns, we use the previous speaker's response as the input
             if turn == 0:
                 # get input message to store in the conversation turn below
-                input_msg = (
-                    (current_speaker.trigger_message or DEFAULT_TRIGGER_MESSAGE)
-                    if current_speaker.initial_message is None
-                    else None
-                )
+                if current_speaker.initial_message is None:
+                    trigger_message = current_speaker.trigger_message
+                    if trigger_message is None:
+                        input_msg = DEFAULT_TRIGGER_MESSAGE
+                    else:
+                        input_msg = trigger_message
+                else:
+                    input_msg = None
             else:
                 # Get the last turn's response as input for this turn
                 if self.conversation_history:
