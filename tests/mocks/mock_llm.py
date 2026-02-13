@@ -42,7 +42,11 @@ class MockLLM(JudgeLLM):
 
     def start_conversation(self) -> List[Dict[str, Any]]:
         """Build the initial turn used to trigger the LLM when history is empty."""
-        trigger = self.trigger_message or DEFAULT_TRIGGER_MESSAGE
+        trigger = (
+            self.trigger_message
+            if self.trigger_message is not None
+            else DEFAULT_TRIGGER_MESSAGE
+        )
         return [{"turn": 0, "response": trigger}]
 
     async def generate_response(
