@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Type, TypeVar
 
-from llm_clients.llm_interface import DEFAULT_TRIGGER_MESSAGE, JudgeLLM, Role
+from llm_clients.llm_interface import JudgeLLM, Role
 
 T = TypeVar("T")
 
@@ -40,14 +40,12 @@ class MockLLM(JudgeLLM):
         self.temperature = temperature
         self.max_tokens = max_tokens
 
-    def start_conversation(self) -> List[Dict[str, Any]]:
-        """Build the initial turn used to trigger the LLM when history is empty."""
-        trigger = (
-            self.trigger_message
-            if self.trigger_message is not None
-            else DEFAULT_TRIGGER_MESSAGE
-        )
-        return [{"turn": 0, "response": trigger}]
+    async def start_conversation(self) -> str:
+        """Produce the first response (static initial_message or next in sequence)."""
+        if self.initial_message is not None:
+            self._set_response_metadata("mock", static_first_message=True)
+            return self.initial_message
+        return await self.generate_response(self.get_initial_trigger_turns())
 
     async def generate_response(
         self,
@@ -61,12 +59,8 @@ class MockLLM(JudgeLLM):
         Returns:
             Response text string
         """
-        # When history is empty: static first message or use trigger to get LLM response
         if not conversation_history or len(conversation_history) == 0:
-            if self.initial_message is not None:
-                self._set_response_metadata("mock", static_first_message=True)
-                return self.initial_message
-            conversation_history = self.start_conversation()
+            return await self.start_conversation()
 
         # Extract the last message from conversation history for tracking
         message = ""

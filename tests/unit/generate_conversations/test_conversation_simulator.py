@@ -266,7 +266,7 @@ class TestConversationSimulator:
         assert history[2]["early_termination"] is True
 
     async def test_conversation_history_reset_on_new_conversation(self):
-        """Test that simulator clears history on each start_conversation call."""
+        """Test that simulator clears history on each new generate_conversation call."""
         persona = MockLLM(name="persona", role=Role.PERSONA, responses=["First"] * 10)
         agent = MockLLM(name="agent", role=Role.PROVIDER, responses=["Reply"] * 10)
         simulator = ConversationSimulator(persona=persona, agent=agent)

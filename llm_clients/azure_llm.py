@@ -132,6 +132,13 @@ class AzureLLM(JudgeLLM):
         self.max_tokens = getattr(self.llm, "max_tokens", None)
         self.top_p = getattr(self.llm, "top_p", None)
 
+    async def start_conversation(self) -> str:
+        """Produce the first response (static initial_message or LLM with trigger)."""
+        if self.initial_message is not None:
+            self._set_response_metadata("azure", static_first_message=True)
+            return self.initial_message
+        return await self.generate_response(self.get_initial_trigger_turns())
+
     async def generate_response(
         self,
         conversation_history: Optional[List[Dict[str, Any]]] = None,
@@ -141,17 +148,13 @@ class AzureLLM(JudgeLLM):
         Args:
             conversation_history: Optional list of previous conversation turns
         """
+        if not conversation_history or len(conversation_history) == 0:
+            return await self.start_conversation()
+
         messages = []
 
         if self.system_prompt:
             messages.append(SystemMessage(content=self.system_prompt))
-
-        # When history is empty: static first message or trigger the LLM
-        if not conversation_history or len(conversation_history) == 0:
-            if self.initial_message is not None:
-                self._set_response_metadata("azure", static_first_message=True)
-                return self.initial_message
-            conversation_history = self.start_conversation()
 
         # Build messages from history
         # Role reminder is automatically added for personas by build_langchain_messages

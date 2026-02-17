@@ -69,12 +69,15 @@ class ConversationSimulator:
 
         total_words = 0
         for turn in range(max_turns):
-            # Convert conversation history to dict format for LLM interface
-            history_dicts = [t.to_dict() for t in self.conversation_history]
-
-            response = await current_speaker.generate_response(
-                conversation_history=history_dicts
-            )
+            # start or continue the conversation
+            if turn == 0:
+                response = await current_speaker.start_conversation()
+            else:
+                # generate a response based on the conversation history
+                history_dicts = [t.to_dict() for t in self.conversation_history]
+                response = await current_speaker.generate_response(
+                    conversation_history=history_dicts
+                )
 
             total_words += len(response.split())
 

@@ -82,6 +82,13 @@ class OllamaLLM(LLMInterface):
         if self.temperature is None:
             self.temperature = getattr(self.llm, "temperature", None)
 
+    async def start_conversation(self) -> str:
+        """Produce the first response (static initial_message or LLM with trigger)."""
+        if self.initial_message is not None:
+            self._set_response_metadata("ollama", static_first_message=True)
+            return self.initial_message
+        return await self.generate_response(self.get_initial_trigger_turns())
+
     async def generate_response(
         self,
         conversation_history: Optional[List[Dict[str, Any]]] = None,
@@ -92,12 +99,8 @@ class OllamaLLM(LLMInterface):
             conversation_history: Optional list of previous conversation turns
         """
         try:
-            # When history is empty: static first message or trigger the LLM
             if not conversation_history or len(conversation_history) == 0:
-                if self.initial_message is not None:
-                    self._set_response_metadata("ollama", static_first_message=True)
-                    return self.initial_message
-                conversation_history = self.start_conversation()
+                return await self.start_conversation()
 
             # Build full message using utility function
             full_message = format_conversation_as_string(

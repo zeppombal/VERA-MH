@@ -1,11 +1,11 @@
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Optional
 from unittest.mock import MagicMock
 
 import pytest
 
 from llm_clients import Role
-from llm_clients.llm_interface import DEFAULT_TRIGGER_MESSAGE, LLMInterface
+from llm_clients.llm_interface import LLMInterface
 
 
 class ConcreteLLM(LLMInterface):
@@ -18,11 +18,9 @@ class ConcreteLLM(LLMInterface):
         self.llm.temperature = 0.7
         self.llm.max_tokens = 1000
 
-    def start_conversation(self) -> List[Dict[str, Any]]:
+    async def start_conversation(self) -> str:
         """Concrete implementation of abstract method."""
-        return [
-            {"turn": 0, "response": self.trigger_message or DEFAULT_TRIGGER_MESSAGE}
-        ]
+        return "test response"
 
     async def generate_response(self, conversation_history=None):
         """Concrete implementation of abstract method."""
@@ -115,8 +113,8 @@ class TestLLMInterface:
         class MinimalLLM(LLMInterface):
             """Minimal implementation without self.llm."""
 
-            def start_conversation(self) -> List[Dict[str, Any]]:
-                return [{"turn": 0, "response": DEFAULT_TRIGGER_MESSAGE}]
+            async def start_conversation(self) -> str:
+                return "response"
 
             async def generate_response(self, conversation_history=None):
                 return "response"
@@ -142,8 +140,8 @@ class TestLLMInterface:
                 super().__init__(name, role, system_prompt)
                 self.llm = None
 
-            def start_conversation(self) -> List[Dict[str, Any]]:
-                return [{"turn": 0, "response": DEFAULT_TRIGGER_MESSAGE}]
+            async def start_conversation(self) -> str:
+                return "response"
 
             async def generate_response(self, conversation_history=None):
                 return "response"
@@ -205,8 +203,8 @@ class TestLLMInterface:
                 self.llm.bool_attr = True
                 self.llm.list_attr = [1, 2, 3]
 
-            def start_conversation(self) -> List[Dict[str, Any]]:
-                return [{"turn": 0, "response": DEFAULT_TRIGGER_MESSAGE}]
+            async def start_conversation(self) -> str:
+                return "response"
 
             async def generate_response(self, conversation_history=None):
                 return "response"
@@ -267,7 +265,7 @@ class TestLLMInterface:
 
     @pytest.mark.asyncio
     async def test_conversation_id_available_after_generate_response(self):
-        """Test that conversation_id remains set after generate_response."""
+        """Test that conversation_id remains set after start_conversation."""
         llm = ConcreteLLM(name="TestLLM", role=Role.PROVIDER)
-        await llm.generate_response(conversation_history=[])
+        await llm.start_conversation()
         assert llm.conversation_id is not None

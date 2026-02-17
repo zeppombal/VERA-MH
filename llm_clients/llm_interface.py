@@ -97,13 +97,13 @@ class LLMInterface(ABC):
             **extra,
         }
 
-    def start_conversation(self) -> List[Dict[str, Any]]:
+    def get_initial_trigger_turns(self) -> List[Dict[str, Any]]:
         """Build the initial turn(s) used to trigger the LLM when history is empty.
 
-        Used only when initial_message is not set. Returns a list of dicts
-        (e.g. [{"turn": 0, "response": "<trigger or DEFAULT_TRIGGER_MESSAGE>"}])
-        that will be passed to the message builder and then to the LLM.
-        Subclasses may override if they need different behavior.
+        Returns a list of dicts (e.g. [{"turn": 0, "response": "<trigger or
+        DEFAULT_TRIGGER_MESSAGE>"}]) that can be passed to the message builder
+        and then to the LLM. Used by raw LLM implementations that delegate from
+        start_conversation() to generate_response(...). Subclasses may override.
 
         Returns:
             List of dicts representing the initial conversation turn(s)
@@ -117,26 +117,43 @@ class LLMInterface(ABC):
         return [{"turn": 0, "response": trigger}]
 
     @abstractmethod
+    async def start_conversation(self) -> str:
+        """Produce the first response of the conversation.
+
+        Called by the simulator on turn 0. When initial_message is set, return
+        it (and set metadata) without calling the API. Otherwise, raw LLM
+        implementations may call generate_response(self.get_initial_trigger_turns());
+        service-based clients may call their own start endpoint (e.g. POST
+        /start_conversation) and return the returned message.
+
+        Returns:
+            str: The first response text. Metadata in self.last_response_metadata
+                (getter returns a copy so callers need not copy).
+        """
+        pass
+
+    @abstractmethod
     async def generate_response(
         self,
         conversation_history: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         """Generate a response based on conversation history.
 
+        When used by the simulator, conversation_history is only passed for
+        turns 1+ (turn 0 uses start_conversation()). Callers may still pass
+        empty history for backward compatibility; implementations can delegate
+        to await self.start_conversation() in that case if desired.
+
         Args:
             conversation_history: List of previous conversation turns.
                 Each turn is a dict with 'turn' and 'response'. Format depends
                 on whether the first entry is a trigger or a prior response:
 
-                - **initial_message**: When set on the LLM, it is used as the
-                  first response (counted as turn 1) with no LLM call; later
-                  calls to generate_response then receive history starting
-                  from that turn.
                 - **Turn 0 as trigger**: When history is built from
-                  start_conversation(), the first entry has turn=0 and
+                  get_initial_trigger_turns(), the first entry has turn=0 and
                   'response' (trigger text). Speaker is not required: that
-                  entry is input used to elicit the LLM's first response for turn 1,
-                  not a prior utterance.
+                  entry is input used to elicit the LLM's first response for
+                  turn 1, not a prior utterance.
                 - **Later turns**: Each turn must include 'turn', 'speaker',
                   and 'response' fields. The 'speaker' field is required for
                   correct LangChain message construction from conversation
