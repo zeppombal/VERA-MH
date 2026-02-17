@@ -121,10 +121,13 @@ Example:
         help="Custom run ID for conversation folder (default: timestamp)",
     )
     parser.add_argument(
+        "-psf",
         "--provider-speaks-first",
         action="store_true",
-        help="Provider speaks first (persona_speaks_first=False). "
-        "max_turns adjusted so provider speaks last. Default: persona speaks first.",
+        help=(
+            "Provider speaks first. max_turns adjusted so provider speaks last. "
+            "Default: persona speaks first."
+        ),
     )
     parser.add_argument(
         "--user-initial-message",

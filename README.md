@@ -104,6 +104,7 @@ python3 run_pipeline.py --help
 | `-w` | `--max-total-words` | Optional maximum total words across all responses in a conversation |
 | `-i` | `--run-id` | Run ID for the conversations (if not provided, a default will be generated) |
 | `-mp` | `--max-personas` | Maximum number of personas to use (limits personas loaded from [data/personas.tsv](data/personas.tsv)) |
+| `-psf` | `--provider-speaks-first` | Provider speaks first (default: persona speaks first). max_turns is adjusted so provider speaks last. |
 | `-d` | `--debug` | Enable debug logging for conversation generation |
 
 This will generate conversations and store them in a subfolder of `conversations` unless specified otherwise.

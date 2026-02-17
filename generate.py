@@ -230,6 +230,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "-psf",
         "--provider-speaks-first",
         help="Provider agent speaks first; max_turns will be adjusted "
         "to ensure agent speaks last.",
