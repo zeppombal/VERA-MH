@@ -139,7 +139,6 @@ async def generate_response(
     except Exception as e:
         self._set_response_metadata(
             "your_provider",
-            "timestamp": datetime.now().isoformat(),
             error=str(e),
             # Add other metadata as needed
         )
