@@ -45,8 +45,10 @@ class LLMInterface(ABC):
         self.name = name
         self.role = role
         self.system_prompt = system_prompt or ""
-        self.first_message = first_message  # static first message (no LLM call)
-        self.start_prompt = start_prompt  # prompt to LLM when history empty
+        self.first_message = first_message
+        self.start_prompt = (
+            start_prompt if start_prompt is not None else DEFAULT_START_PROMPT
+        )
         self._last_response_metadata: Dict[str, Any] = {}
         self.conversation_id = self.create_conversation_id()
 
@@ -100,8 +102,8 @@ class LLMInterface(ABC):
     def get_initial_prompt_turns(self) -> List[Dict[str, Any]]:
         """Build the initial turn(s) used to prompt the LLM when history is empty.
 
-        Returns a list of dicts (e.g. [{"turn": 0, "response": "<start_prompt or
-        DEFAULT_START_PROMPT>"}]) that can be passed to the message builder
+        Returns a list of dicts (e.g. [{"turn": 0, "response": "<start_prompt>"}])
+        that can be passed to the message builder
         and then to the LLM. Used by raw LLM implementations that delegate from
         start_conversation() to generate_response(...). Subclasses may override.
 
@@ -109,10 +111,7 @@ class LLMInterface(ABC):
             List of dicts representing the initial conversation turn(s)
             (e.g. [{"turn": 0, "response": "<start prompt text>"}]).
         """
-        prompt = (
-            self.start_prompt if self.start_prompt is not None else DEFAULT_START_PROMPT
-        )
-        return [{"turn": 0, "response": prompt}]
+        return [{"turn": 0, "response": self.start_prompt}]
 
     def get_first_turn_input_message(self) -> Optional[str]:
         """Return the input message used for the first turn, for metadata only.
@@ -127,9 +126,7 @@ class LLMInterface(ABC):
         """
         if self.first_message is not None:
             return None
-        return (
-            self.start_prompt if self.start_prompt is not None else DEFAULT_START_PROMPT
-        )
+        return self.start_prompt
 
     @abstractmethod
     async def start_conversation(self) -> str:
@@ -161,19 +158,16 @@ class LLMInterface(ABC):
 
         Args:
             conversation_history: List of previous conversation turns.
-                Each turn is a dict with 'turn' and 'response'. Format depends
-                on whether the first entry is a trigger or a prior response:
-
-                - **Turn 0 as trigger**: When history is built from
+                Each turn is a dict with keys: 'turn', 'speaker', 'response'.
+                - **Turn 0 (start prompt)**: When history is built from
                   get_initial_prompt_turns(), the first entry has turn=0 and
-                  'response' (trigger text). Speaker is not required: that
-                  entry is input used to elicit the LLM's first response for
-                  turn 1, not a prior utterance.
+                  'response' (start prompt text). Turn 0 does not require
+                  'speaker' because that message is not used by
+                  build_langchain_messages() to construct Human/AIMessage roles.
                 - **Later turns**: Each turn must include 'turn', 'speaker',
-                  and 'response' fields. The 'speaker' field is required for
-                  correct LangChain message construction from conversation
-                  history.
-                  See llm_clients/claude_llm.py for an example.
+                  and 'response'. The 'speaker' field is required for correct
+                  message construction.
+                See llm_clients/claude_llm.py for an example.
 
         Returns:
             str: The response text. Metadata in self.last_response_metadata
