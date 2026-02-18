@@ -104,7 +104,14 @@ python3 run_pipeline.py --help
 | `-w` | `--max-total-words` | Optional maximum total words across all responses in a conversation |
 | `-i` | `--run-id` | Run ID for the conversations (if not provided, a default will be generated) |
 | `-mp` | `--max-personas` | Maximum number of personas to use (limits personas loaded from [data/personas.tsv](data/personas.tsv)) |
+| `-psf` | `--provider-speaks-first` | Provider speaks first (default: persona speaks first). max_turns is adjusted so provider speaks last. |
+| `-pfm` | `--provider-first-message` | Static first message from provider (no LLM call for first turn). E.g. `"How are you today?"` Used on turn 0 when `--provider-speaks-first` is set. |
+| `-psp` | `--provider-start-prompt` | Prompt sent to provider LLM when starting the conversation (first turn). Used on turn 0 when `--provider-speaks-first` is set. Default: `"Start the conversation based on the system prompt"` |
+| `-usm` | `--user-first-message` | Static first message from user-agent/persona (no LLM call for first turn). Used on turn 0 when the persona/user-agent speaks first (i.e., when `--provider-speaks-first` is not set). |
+| `-usp` | `--user-start-prompt` | Prompt sent to user-agent LLM when starting the conversation (first turn). Used on turn 0 when the persona/user-agent speaks first (i.e., when `--provider-speaks-first` is not set). Default: `"Start the conversation based on the system prompt"` |
 | `-d` | `--debug` | Enable debug logging for conversation generation |
+
+**First message and start prompt:** When a role (provider or persona) speaks first, you can either supply a **first message** (a fixed string returned with no LLM call, e.g. `"How are you today?"`) or let the LLM generate the first turn using a **start prompt** (the prompt sent to the LLM when history is empty; default: `"Start the conversation based on the system prompt"`). If a first message is set for that role, the start prompt is not used for that turn. This supports both provider- and persona-first flows and records which turn used a static message vs an LLM response.
 
 This will generate conversations and store them in a subfolder of `conversations` unless specified otherwise.
 
