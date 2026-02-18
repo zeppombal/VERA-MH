@@ -467,10 +467,12 @@ class TestFirstSpeakerAndFirstMessageCombinations:
             persona_speaks_first=False,
         )
 
+        assert len(history) == 3  # assert max_turns + 1 because provider speaks first
         assert history[0]["speaker"] == "provider"
         assert history[0]["input"] == DEFAULT_START_PROMPT
         assert history[0]["response"] == "Provider opening"
         assert history[1]["speaker"] == "persona"
+        assert history[2]["speaker"] == "provider"
         assert "Provider opening" in persona.calls
 
     async def test_provider_first_first_message(self):
@@ -495,8 +497,10 @@ class TestFirstSpeakerAndFirstMessageCombinations:
             persona_speaks_first=False,
         )
 
+        assert len(history) == 3  # assert max_turns + 1 because provider speaks first
         assert history[0]["speaker"] == "provider"
         assert history[0]["input"] is None
         assert history[0]["response"] == "Provider says hello first"
         assert history[1]["speaker"] == "persona"
+        assert history[2]["speaker"] == "provider"
         assert "Provider says hello first" in persona.calls
