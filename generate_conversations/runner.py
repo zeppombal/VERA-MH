@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional
 
 from llm_clients import LLMFactory
 from llm_clients.llm_interface import Role
-from utils.conversation_utils import ensure_provider_has_last_turn
 from utils.logging_utils import (
     cleanup_logger,
     log_conversation_end,
@@ -40,9 +39,7 @@ class ConversationRunner:
     ):
         self.persona_model_config = persona_model_config
         self.agent_model_config = agent_model_config
-        self.max_turns = ensure_provider_has_last_turn(
-            max_turns, persona_speaks_first=persona_speaks_first
-        )
+        self.max_turns = max_turns
         self.runs_per_prompt = runs_per_prompt
         self.folder_name = folder_name
         self.run_id = run_id

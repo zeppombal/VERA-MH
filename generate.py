@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Optional
 
 from generate_conversations import ConversationRunner
 from llm_clients.llm_interface import DEFAULT_START_PROMPT
-from utils.conversation_utils import ensure_provider_has_last_turn
 from utils.debug import set_debug
 from utils.utils import parse_key_value_list
 
@@ -59,8 +58,6 @@ async def main(
         ValueError: Configuration error
         Exception: Other errors
     """
-    # Ensure provider agent always speaks last
-    max_turns = ensure_provider_has_last_turn(max_turns, persona_speaks_first)
     if verbose:
         print("🔄 Generating conversations with the following parameters:")
         print(f"  - Persona model: {persona_model_config}")
@@ -229,7 +226,7 @@ if __name__ == "__main__":
         "-psf",
         "--provider-speaks-first",
         help="Provider agent speaks first; max_turns will be adjusted "
-        "to ensure agent speaks last.",
+        "so provider has last turn. Default: persona speaks first.",
         action="store_true",
         default=False,
     )

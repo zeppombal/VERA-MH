@@ -126,7 +126,7 @@ Example:
         "--provider-speaks-first",
         action="store_true",
         help=(
-            "Provider speaks first. max_turns adjusted so provider speaks last. "
+            "Provider speaks first. max_turns adjusted so provider has last turn. "
             "Default: persona speaks first."
         ),
     )
