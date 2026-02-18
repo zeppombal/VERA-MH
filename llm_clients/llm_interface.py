@@ -158,16 +158,11 @@ class LLMInterface(ABC):
 
         Args:
             conversation_history: List of previous conversation turns.
-                Each turn is a dict with keys: 'turn', 'speaker', 'response'.
-                - **Turn 0 (start prompt)**: When history is built from
-                  get_initial_prompt_turns(), the first entry has turn=0 and
-                  'response' (start prompt text). Turn 0 does not require
-                  'speaker' because that message is not used by
-                  build_langchain_messages() to construct Human/AIMessage roles.
-                - **Later turns**: Each turn must include 'turn', 'speaker',
-                  and 'response'. The 'speaker' field is required for correct
-                  message construction.
-                See llm_clients/claude_llm.py for an example.
+                When the simulator calls this, history is non-empty with turns
+                1, 2, … (first response is turn 1). Each turn: 'turn', 'speaker',
+                'response'. If start_conversation() delegates here, it may pass
+                get_initial_prompt_turns() (turn=0, 'response' only; no
+                'speaker'). See llm_clients/claude_llm.py for an example.
 
         Returns:
             str: The response text. Metadata in self.last_response_metadata

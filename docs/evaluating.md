@@ -5,7 +5,7 @@ VERA-MH is ready to be used to evaluate any chat-based interface.
 Four concrete implementations of that class are provided for the APIs of ChatGPT, Claude, Gemini, Azure, and Llama (via Ollama).
 
 To test your service, you need to instantiate a concrete class and implement these key methods:
-- `start_conversation()`: Async method that returns the first response as a string. For raw LLM APIs you can call `generate_response(self.get_initial_prompt_turns())`; for service-based APIs you may call your own start endpoint (e.g. POST /start_conversation) and return the message.
+- `start_conversation()`: Async method that returns the first conversational turn as a string. For raw LLM APIs you can call `generate_response(self.get_initial_prompt_turns())`; for service-based APIs you may call your own start endpoint (e.g. POST /start_conversation) and return the message.
 - `generate_response(conversation_history)`: Returns a string (the chatbot response) given conversation history. Used for subsequent turns (turn 1+); when called from the simulator, conversation_history is non-empty. You may delegate to `await self.start_conversation()` when history is empty for backward compatibility.
 - `generate_structured_response()`: Returns a Pydantic model instance for structured outputs (used by the judge system)
 
@@ -70,7 +70,7 @@ class YourLLM(JudgeLLM):
 
 The simulator calls this on turn 0. Return the first response string.
 
-**Raw LLM (e.g. LangChain):** return a static `first_message` if set, otherwise delegate to `generate_response` with the start prompt:
+**Raw LLM (e.g. LangChain):** return a static `first_message` if set, otherwise call `generate_response(self.get_initial_prompt_turns())` to produce the first turn.
 
 ```python
 async def start_conversation(self) -> str:
@@ -98,15 +98,12 @@ async def generate_response(
 
     Args:
         conversation_history: List of previous conversation turns.
-            Each turn is a dict with keys: 'turn', 'speaker', 'response'.
-            - **Turn 0 (start prompt)**: When history is built from
-              get_initial_prompt_turns(), the first entry has turn=0 and
-              'response' (start prompt text). Turn 0 does not require
-              'speaker' because that message is not used by
-              build_langchain_messages() to construct Human/AIMessage roles.
-            - **Later turns**: Each turn must include 'turn', 'speaker',
-              and 'response'. The 'speaker' field is required for correct
-              message construction.
+            When the simulator calls generate_response, history is non-empty
+            and contains turns 1, 2, … (the first response, e.g. "How can I help
+            today?", is turn 1). Each turn must include 'turn', 'speaker', and
+            'response'. If your start_conversation() delegates to
+            generate_response(), it may pass get_initial_prompt_turns(); that
+            internal format uses turn=0 and 'response' only (no 'speaker').
 
     Returns:
         The LLM's response as a string
