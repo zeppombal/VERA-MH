@@ -3,6 +3,7 @@
 VERA-MH is ready to be used to evaluate any chat-based interface.
 [This](../llm_clients/llm_interface.py) Abstract Base Class (ABC) represents the interface to be implemented.
 Four concrete implementations of that class are provided for the APIs of ChatGPT, Claude, Gemini, Azure, and Llama (via Ollama).
+For developers who wish to use their own API as the provider agent, [EndpointLLM](../llm_clients/endpoint_llm.py) serves as a working example (currently chat-only; no judge support).
 
 To test your service, you need to instantiate a concrete class and implement these key methods:
 - `start_conversation()`: Async method that returns the first conversational turn as a string. For raw LLM APIs you can call `generate_response(self.get_initial_prompt_turns())`; for service-based APIs you may call your own start endpoint (e.g. POST /start_conversation) and return the message.

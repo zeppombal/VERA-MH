@@ -302,6 +302,7 @@ VERA-MH simulates realistic conversations between Large Language Models (LLMs) f
   - **`gemini_llm.py`**: Google Gemini implementation with structured output
   - **`azure_llm.py`**: Azure OpenAI and Azure AI Foundry implementation with structured output
   - **`ollama_llm.py`**: Ollama model implementation
+  - **`endpoint_llm.py`**: Example for using your own API as the provider agent (currently chat-only; see [evaluating.md](docs/evaluating.md))
   - **`config.py`**: Configuration management for API keys and model settings
 - **`utils/`**: Utility functions and helpers
   - **`prompt_loader.py`**: Functions for loading prompt configurations
