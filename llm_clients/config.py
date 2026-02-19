@@ -25,13 +25,15 @@ class Config:
 
     # API Keys
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")  # For Gemini
+
+    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
     AZURE_API_KEY = os.getenv("AZURE_API_KEY")
     AZURE_ENDPOINT = os.getenv("AZURE_ENDPOINT")
-    AZURE_API_VERSION = os.getenv("AZURE_API_VERSION")  # Optional
+    AZURE_API_VERSION = os.getenv("AZURE_API_VERSION")
 
-    # Custom endpoint (chat-only provider)
     ENDPOINT_API_KEY = os.getenv("ENDPOINT_API_KEY", None)
     ENDPOINT_URL = os.getenv("ENDPOINT_URL", None)
     ENDPOINT_START_URL = os.getenv("ENDPOINT_START_URL", None)
@@ -92,8 +94,9 @@ class Config:
 
         Returns base_url (no /api/chat path), api_key, and default model.
         Runtime parameters can override via kwargs.
-        Raises ValueError if ENDPOINT_API_KEY, ENDPOINT_URL, or ENDPOINT_START_URL
+        Raises ValueError if ENDPOINT_API_KEY or ENDPOINT_URL
         are not set in the environment.
+        ENDPOINT_START_URL is optional and can be set to None.
         """
         missing = []
         if cls.ENDPOINT_API_KEY is None:
