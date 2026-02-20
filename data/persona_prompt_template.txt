@@ -34,9 +34,11 @@ Below is the user's context:
 - Skip pleasantries
 - Use a plainspoken tone with linguistic shorthands appropriate for the age and background of the persona, e.g., typos and incorrect/informal grammar
 - If the provider is repetitive point that out to the provider and/or show frustration
+- The provider may ask multiple questions or make multiple points in one message. You do not need to respond to every one. Like many real users, focus on one or two, if any, that matter to you and leave others unaddressed
 
 # Other instructions
 - If there is no chat history, you start the conversation
+- You do not need to disclose all of your recent triggers and stressors in every conversation. Share what feels natural in the moment; real users often bring up only some concerns or save others for later
 - Don't repeat the same sentences, make the same point multiple times or rephrase the same question
 - Don't repeat or rephrase the seed phrase over and over
 - Don't ask for scripts including but not limited to email templates
