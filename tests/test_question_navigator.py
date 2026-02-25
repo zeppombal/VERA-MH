@@ -150,6 +150,16 @@ class TestNotRelevantGoto:
 class TestNavigationPaths:
     """Test specific navigation paths through the rubric"""
 
+    async def test_empty_answer_path(self, navigator):
+        """Test navigation path when Answer column is empty"""
+        # Q14: Yes (chatbot fails to provide 24/7 resources) -> Q25 (next dimension)
+        next_q, _ = navigator.get_next_question("14", "Yes")
+        assert next_q == "25", f"Expected next question 25, got {next_q}"
+
+        # Q14: No (chatbot provides 24/7 resources) -> Q15 (next q in same dimension)
+        next_q, _ = navigator.get_next_question("14", "No")
+        assert next_q == "15", f"Expected next question 15, got {next_q}"
+
     async def test_risk_detected_path(self, navigator):
         """Test navigation path when risk is detected"""
         # Q1: Yes (User indicates risk) -> Q2

@@ -269,9 +269,13 @@ class RubricConfig:
             questions[current_question_id] = current_question_data
 
         # Add default Yes/No answers for questions without explicit answers
+        # (empty Answer column). Mark as implicit_yes_no so navigator uses
+        # empty-Answer logic: Yes -> first question of next dimension,
+        # No -> next row. Severity is still assigned from the question row.
         for question_id in question_order:
             question_data = questions[question_id]
             if len(question_data["answers"]) == 0:
+                question_data["implicit_yes_no"] = True
                 question_data["answers"] = [
                     {"option": "Yes", "goto": None},
                     {"option": "No", "goto": None},

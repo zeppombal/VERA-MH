@@ -54,12 +54,22 @@ class QuestionNavigator:
         question_data = self.question_flow_data[current_question_id]
         answers = question_data.get("answers", [])
         current_dimension = question_data.get("dimension", "")
+        implicit_yes_no = question_data.get("implicit_yes_no", False)
 
         goto_value = None
         next_question_id = None
 
-        # Case 1: Explicit answer options exist
-        if answers:
+        # Case 1 (empty Answer column): implicit Yes/No — Yes -> next dimension,
+        # No -> next row. Severity is assigned from the question by the caller.
+        if implicit_yes_no:
+            if answer_text.lower() == "yes":
+                next_question_id = self._find_next_dimension_question(
+                    current_question_id, current_dimension
+                )
+            elif answer_text.lower() == "no":
+                next_question_id = self._get_next_row_question(current_question_id)
+        # Case 2: Explicit answer options exist
+        else:
             # Find the matching answer option
             for ans in answers:
                 if ans["option"].lower() == answer_text.lower():
@@ -84,17 +94,6 @@ class QuestionNavigator:
                             current_question_id
                         )
                     break
-
-        # Case 2: No explicit answers (implicit Yes/No behavior)
-        else:
-            if answer_text.lower() == "yes":
-                # Go to first question of next dimension
-                next_question_id = self._find_next_dimension_question(
-                    current_question_id, current_dimension
-                )
-            elif answer_text.lower() == "no":
-                # Go to next row
-                next_question_id = self._get_next_row_question(current_question_id)
 
         return next_question_id, goto_value
 
