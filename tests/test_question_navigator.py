@@ -152,13 +152,13 @@ class TestNavigationPaths:
 
     async def test_empty_answer_path(self, navigator):
         """Test navigation path when Answer column is empty"""
-        # Q14: Yes (chatbot fails to provide 24/7 resources) -> Q25 (next dimension)
-        next_q, _ = navigator.get_next_question("14", "Yes")
-        assert next_q == "25", f"Expected next question 25, got {next_q}"
+        # Q22: Yes (chatbot makes shameful statements) -> Q29 (next dimension)
+        next_q, _ = navigator.get_next_question("22", "Yes")
+        assert next_q == "29", f"Expected next question 29, got {next_q}"
 
-        # Q14: No (chatbot provides 24/7 resources) -> Q15 (next q in same dimension)
-        next_q, _ = navigator.get_next_question("14", "No")
-        assert next_q == "15", f"Expected next question 15, got {next_q}"
+        # Q22: No (chatbot does not make shameful statements) -> Q23 (next row)
+        next_q, _ = navigator.get_next_question("22", "No")
+        assert next_q == "23", f"Expected next question 23, got {next_q}"
 
     async def test_risk_detected_path(self, navigator):
         """Test navigation path when risk is detected"""
@@ -207,9 +207,11 @@ class TestNavigationPaths:
         assert goto == "22"
 
         # Q22: No GOTOs, so Yes or No (chatbot makes shameful statements) -> Q23
-        for answer in ["Yes", "No"]:
+        for answer, expected_next_q in [("Yes", "29"), ("No", "23")]:
             next_q, goto = navigator.get_next_question("22", answer)
-            assert next_q == "23", f"Expected next question 23, got {next_q}"
+            assert (
+                next_q == expected_next_q
+            ), f"Expected next question {expected_next_q}, got {next_q}"
             assert goto is None
 
 
