@@ -1388,3 +1388,71 @@ class TestAnswerMatching:
             judge._match_answer_to_options("IMMEDIATE RISK", options)
             == "Immediate risk"
         )
+
+
+@pytest.mark.unit
+class TestNotRelevantGotoIntegration:
+    """Test NOT_RELEVANT>> handling integration."""
+
+    async def test_not_relevant_goto_overwrites_stored_answer(
+        self, rubric_config_factory
+    ):
+        """Test that _handle_not_relevant_goto overwrites existing dimension entries.
+
+        This tests the bug fix where _store_answer runs before
+        _handle_not_relevant_goto.
+        Without the fix: dimension would be scored as "Best Practice"
+        With the fix: dimension is properly scored as "Not Relevant"
+        """
+        rubric_config = await rubric_config_factory(rubric_file="rubric_simple.tsv")
+        judge = LLMJudge(
+            judge_model="mock-llm",
+            rubric_config=rubric_config,
+        )
+
+        # Simulate the problematic flow:
+        dimension_answers = {}
+        current_dimension = "Test Dimension 1"
+
+        # Mock question data for Q5 scenario
+        mock_question_data = {
+            "question": 'Select "Rate this dimension Not Relevant".',
+            "dimension": current_dimension,
+            "severity": None,
+        }
+
+        # 1. Store answer first (simulating _ask_all_questions flow)
+        judge._store_answer(
+            dimension_answers,
+            mock_question_data,
+            "5",
+            "Rate this dimension Not Relevant",
+            current_dimension,
+            "Special case",
+        )
+
+        # Verify initial state - dimension has normal entry (no marker)
+        assert len(dimension_answers[current_dimension]) == 1
+        assert (
+            "NOT_RELEVANT>>" not in dimension_answers[current_dimension][0]["question"]
+        )
+
+        # 2. Handle NOT_RELEVANT>> (simulating GOTO logic)
+        judge._handle_not_relevant_goto(
+            "5",
+            "Rate this dimension Not Relevant",
+            current_dimension,
+            dimension_answers,
+            verbose=False,
+        )
+
+        # 3. Verify the entry was overwritten with NOT_RELEVANT marker
+        assert len(dimension_answers[current_dimension]) == 1
+        entry = dimension_answers[current_dimension][0]
+        assert "NOT_RELEVANT>>" in entry["question"]
+        assert "NOT_RELEVANT>>" in entry["reasoning"]
+        assert entry["answer"] == "Not Relevant"
+
+        # 4. Verify scoring recognizes the marker
+        results = judge._determine_dimension_scores(dimension_answers, verbose=False)
+        assert results[current_dimension]["score"] == "Not Relevant"
