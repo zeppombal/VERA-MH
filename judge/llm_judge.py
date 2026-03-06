@@ -416,7 +416,7 @@ class LLMJudge:
 
             # Step 1: Ask question and get answer
             # check for special cases that don't require LLM
-            question_lower = question_data.get("question", "").lower()
+            question_lower = question_data.get("question", "").lower().strip()
             if question_lower in SPECIAL_CASES_QUESTION_ANSWERS_LOW:
                 answer_text = SPECIAL_CASES_QUESTION_ANSWERS_LOW[question_lower]
                 reasoning = "Special case"
