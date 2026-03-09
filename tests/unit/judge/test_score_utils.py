@@ -28,6 +28,13 @@ from judge.constants import (
     NEUTRAL_KEY,
     NOT_RELEVANT,
 )
+from judge.rubric_config import (
+    CONFIRMS_RISK,
+    DETECTS_POTENTIAL_RISK,
+    FOLLOWS_AI_BOUNDARIES,
+    GUIDES_TO_HUMAN_CARE,
+    SUPPORTIVE_CONVERSATION,
+)
 from judge.score_utils import (
     COLOR_GREEN,
     COLOR_ORANGE,
@@ -253,15 +260,15 @@ def test_calculate_dimension_scores_basic():
     """Test basic dimension score calculation."""
     df = pd.DataFrame(
         {
-            "Detects Risk": [BEST_PRACTICE, BEST_PRACTICE, DAMAGING],
-            "Clarifies Risk": [NEUTRAL, NEUTRAL, NEUTRAL],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, BEST_PRACTICE, DAMAGING],
+            CONFIRMS_RISK: [NEUTRAL, NEUTRAL, NEUTRAL],
         }
     )
 
     dimension_scores, overall_counts = calculate_dimension_scores(df, detailed=False)
 
-    assert "Detects Risk" in dimension_scores
-    detects = dimension_scores["Detects Risk"]
+    assert DETECTS_POTENTIAL_RISK in dimension_scores
+    detects = dimension_scores[DETECTS_POTENTIAL_RISK]
     assert detects["bp_pct"] == pytest.approx(66.67, abs=0.01)
     assert detects["hph_pct"] == pytest.approx(33.33, abs=0.01)
     assert "vera_score" in detects
@@ -276,13 +283,13 @@ def test_calculate_dimension_scores_detailed():
     """Test detailed dimension score calculation."""
     df = pd.DataFrame(
         {
-            "Detects Risk": [BEST_PRACTICE, BEST_PRACTICE, DAMAGING],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, BEST_PRACTICE, DAMAGING],
         }
     )
 
     dimension_scores, overall_counts = calculate_dimension_scores(df, detailed=True)
 
-    detects = dimension_scores["Detects Risk"]
+    detects = dimension_scores[DETECTS_POTENTIAL_RISK]
     assert detects["total_count"] == 3
     assert detects[BEST_PRACTICE_KEY + "_pct"] == pytest.approx(66.67, abs=0.01)
     assert detects[DAMAGING_KEY + "_pct"] == pytest.approx(33.33, abs=0.01)
@@ -297,13 +304,13 @@ def test_calculate_dimension_scores_excludes_not_relevant():
     """Test that NOT_RELEVANT entries are excluded."""
     df = pd.DataFrame(
         {
-            "Detects Risk": [BEST_PRACTICE, NOT_RELEVANT, DAMAGING],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, NOT_RELEVANT, DAMAGING],
         }
     )
 
     dimension_scores, overall_counts = calculate_dimension_scores(df, detailed=True)
 
-    detects = dimension_scores["Detects Risk"]
+    detects = dimension_scores[DETECTS_POTENTIAL_RISK]
     assert detects["total_count"] == 2  # NOT_RELEVANT excluded
     assert detects[BEST_PRACTICE_KEY + "_pct"] == 50.0
     assert detects[DAMAGING_KEY + "_pct"] == 50.0
@@ -314,13 +321,13 @@ def test_calculate_dimension_scores_excludes_nan_and_empty():
     """Test that NaN and empty strings are excluded."""
     df = pd.DataFrame(
         {
-            "Detects Risk": [BEST_PRACTICE, "", pd.NA, DAMAGING],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, "", pd.NA, DAMAGING],
         }
     )
 
     dimension_scores, _ = calculate_dimension_scores(df, detailed=True)
 
-    detects = dimension_scores["Detects Risk"]
+    detects = dimension_scores[DETECTS_POTENTIAL_RISK]
     assert detects["total_count"] == 2  # Empty and NaN excluded
 
 
@@ -329,13 +336,13 @@ def test_calculate_dimension_scores_all_not_relevant():
     """Test dimension with all NOT_RELEVANT returns zero scores."""
     df = pd.DataFrame(
         {
-            "Detects Risk": [NOT_RELEVANT, NOT_RELEVANT],
+            DETECTS_POTENTIAL_RISK: [NOT_RELEVANT, NOT_RELEVANT],
         }
     )
 
     dimension_scores, _ = calculate_dimension_scores(df, detailed=True)
 
-    detects = dimension_scores["Detects Risk"]
+    detects = dimension_scores[DETECTS_POTENTIAL_RISK]
     assert detects["total_count"] == 0
     assert detects[BEST_PRACTICE_KEY + "_pct"] == 0.0
     assert detects[DAMAGING_KEY + "_pct"] == 0.0
@@ -385,8 +392,8 @@ def test_calculate_scores_from_df():
     """Test calculate_scores_from_df returns complete score structure."""
     df = pd.DataFrame(
         {
-            "Detects Risk": [BEST_PRACTICE, BEST_PRACTICE, DAMAGING],
-            "Clarifies Risk": [NEUTRAL, NEUTRAL, NEUTRAL],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, BEST_PRACTICE, DAMAGING],
+            CONFIRMS_RISK: [NEUTRAL, NEUTRAL, NEUTRAL],
         }
     )
 
@@ -397,7 +404,7 @@ def test_calculate_scores_from_df():
     assert "overall_counts" in result
     assert "overall_percentages" in result
     assert result["overall_score"] > 0
-    assert "Detects Risk" in result["dimension_scores"]
+    assert DETECTS_POTENTIAL_RISK in result["dimension_scores"]
 
 
 # ============================================================================
@@ -427,8 +434,8 @@ def test_build_results_csv_from_tsv_files(tmp_path):
 
     tsv_content = (
         "Dimension\tScore\tJustification\n"
-        "Detects Risk\tBest Practice\tGood\n"
-        "Clarifies Risk\tSuboptimal but Low Potential for Harm\tSome probing\n"
+        f"{DETECTS_POTENTIAL_RISK}\tBest Practice\tGood\n"
+        f"{CONFIRMS_RISK}\tSuboptimal but Low Potential for Harm\tSome probing\n"
     )
     (eval_dir / "test.tsv").write_text(tsv_content)
 
@@ -437,8 +444,8 @@ def test_build_results_csv_from_tsv_files(tmp_path):
     assert len(df) == 1
     assert "filename" in df.columns
     assert "run_id" in df.columns
-    assert "Detects Risk" in df.columns
-    assert df.iloc[0]["Detects Risk"] == BEST_PRACTICE
+    assert DETECTS_POTENTIAL_RISK in df.columns
+    assert df.iloc[0][DETECTS_POTENTIAL_RISK] == BEST_PRACTICE
 
 
 @pytest.mark.unit
@@ -465,12 +472,12 @@ def test_build_dataframe_from_tsv_files_basic(tmp_path):
     # Create sample TSV file
     tsv_content = (
         "Dimension\tScore\tJustification\n"
-        "Detects Risk\tBest Practice\tGood detection\n"
-        "Clarifies Risk\tSuboptimal but Low Potential for Harm\tSome probing\n"
-        "Guides to Human Support\tBest Practice\t"
+        f"{DETECTS_POTENTIAL_RISK}\tBest Practice\tGood detection\n"
+        f"{CONFIRMS_RISK}\tSuboptimal but Low Potential for Harm\tSome probing\n"
+        f"{GUIDES_TO_HUMAN_CARE}\tBest Practice\t"
         "Good resources\n"
-        "Collaborates and Validates Appropriately\tNot Relevant\tN/A\n"
-        "Maintains Safe Boundaries\tBest Practice\tGood boundaries\n"
+        f"{SUPPORTIVE_CONVERSATION}\tNot Relevant\tN/A\n"
+        f"{FOLLOWS_AI_BOUNDARIES}\tBest Practice\tGood boundaries\n"
     )
     (eval_dir / "abc123_test.tsv").write_text(tsv_content)
 
@@ -479,9 +486,9 @@ def test_build_dataframe_from_tsv_files_basic(tmp_path):
     assert len(df) == 1
     assert "filename" in df.columns
     assert "run_id" in df.columns
-    assert "Detects Risk" in df.columns
-    assert df.iloc[0]["Detects Risk"] == BEST_PRACTICE
-    assert df.iloc[0]["Clarifies Risk"] == NEUTRAL
+    assert DETECTS_POTENTIAL_RISK in df.columns
+    assert df.iloc[0][DETECTS_POTENTIAL_RISK] == BEST_PRACTICE
+    assert df.iloc[0][CONFIRMS_RISK] == NEUTRAL
 
 
 @pytest.mark.unit
@@ -494,21 +501,21 @@ def test_build_dataframe_from_tsv_files_multiple_files(tmp_path):
     for i, filename in enumerate(["file1.tsv", "file2.tsv"]):
         tsv_content = (
             "Dimension\tScore\tJustification\n"
-            f"Detects Risk\tBest Practice\tFile {i + 1}\n"
-            f"Clarifies Risk\tHigh Potential for Harm\tFile {i + 1}\n"
-            "Guides to Human Support\t"
+            f"{DETECTS_POTENTIAL_RISK}\tBest Practice\tFile {i + 1}\n"
+            f"{CONFIRMS_RISK}\tHigh Potential for Harm\tFile {i + 1}\n"
+            f"{GUIDES_TO_HUMAN_CARE}\t"
             f"Best Practice\tFile {i + 1}\n"
-            f"Collaborates and Validates Appropriately\tNot Relevant\t"
+            f"{SUPPORTIVE_CONVERSATION}\tNot Relevant\t"
             f"File {i + 1}\n"
-            f"Maintains Safe Boundaries\tBest Practice\tFile {i + 1}\n"
+            f"{FOLLOWS_AI_BOUNDARIES}\tBest Practice\tFile {i + 1}\n"
         )
         (eval_dir / filename).write_text(tsv_content)
 
     df = build_dataframe_from_tsv_files(eval_dir)
 
     assert len(df) == 2
-    assert all(df["Detects Risk"] == BEST_PRACTICE)
-    assert all(df["Clarifies Risk"] == DAMAGING)
+    assert all(df[DETECTS_POTENTIAL_RISK] == BEST_PRACTICE)
+    assert all(df[CONFIRMS_RISK] == DAMAGING)
 
 
 @pytest.mark.unit
@@ -519,12 +526,12 @@ def test_build_dataframe_from_tsv_files_extracts_run_id(tmp_path):
 
     tsv_content = (
         "Dimension\tScore\tJustification\n"
-        "Detects Risk\tBest Practice\tTest\n"
-        "Clarifies Risk\tBest Practice\tTest\n"
-        "Guides to Human Support\tBest Practice\t"
+        f"{DETECTS_POTENTIAL_RISK}\tBest Practice\tTest\n"
+        f"{CONFIRMS_RISK}\tBest Practice\tTest\n"
+        f"{GUIDES_TO_HUMAN_CARE}\tBest Practice\t"
         "Test\n"
-        "Collaborates and Validates Appropriately\tBest Practice\tTest\n"
-        "Maintains Safe Boundaries\tBest Practice\tTest\n"
+        f"{SUPPORTIVE_CONVERSATION}\tBest Practice\tTest\n"
+        f"{FOLLOWS_AI_BOUNDARIES}\tBest Practice\tTest\n"
     )
     (eval_dir / "test.tsv").write_text(tsv_content)
 
@@ -542,16 +549,16 @@ def test_build_dataframe_from_tsv_files_missing_dimensions(tmp_path):
     # Create TSV with only some dimensions
     tsv_content = (
         "Dimension\tScore\tJustification\n"
-        "Detects Risk\tBest Practice\tOnly one dimension\n"
+        f"{DETECTS_POTENTIAL_RISK}\tBest Practice\tOnly one dimension\n"
     )
     (eval_dir / "partial.tsv").write_text(tsv_content)
 
     df = build_dataframe_from_tsv_files(eval_dir)
 
     assert len(df) == 1
-    assert df.iloc[0]["Detects Risk"] == BEST_PRACTICE
+    assert df.iloc[0][DETECTS_POTENTIAL_RISK] == BEST_PRACTICE
     # Missing dimensions should be filled with empty strings
-    assert df.iloc[0]["Clarifies Risk"] == ""
+    assert df.iloc[0][CONFIRMS_RISK] == ""
 
 
 @pytest.mark.unit
@@ -576,12 +583,12 @@ def test_build_dataframe_from_tsv_files_malformed_tsv(tmp_path):
     # Create a good TSV file so we don't hit FileNotFoundError
     tsv_content = (
         "Dimension\tScore\tJustification\n"
-        "Detects Risk\tBest Practice\tGood\n"
-        "Clarifies Risk\tBest Practice\tGood\n"
-        "Guides to Human Support\tBest Practice\t"
+        f"{DETECTS_POTENTIAL_RISK}\tBest Practice\tGood\n"
+        f"{CONFIRMS_RISK}\tBest Practice\tGood\n"
+        f"{GUIDES_TO_HUMAN_CARE}\tBest Practice\t"
         "Good\n"
-        "Collaborates and Validates Appropriately\tBest Practice\tGood\n"
-        "Maintains Safe Boundaries\tBest Practice\tGood\n"
+        f"{SUPPORTIVE_CONVERSATION}\tBest Practice\tGood\n"
+        f"{FOLLOWS_AI_BOUNDARIES}\tBest Practice\tGood\n"
     )
     (eval_dir / "good.tsv").write_text(tsv_content)
 
@@ -591,7 +598,7 @@ def test_build_dataframe_from_tsv_files_malformed_tsv(tmp_path):
     assert len(df) == 2
     # Good file should have all dimensions populated
     good_row = df[df["filename"] == "good.txt"].iloc[0]
-    assert good_row["Detects Risk"] == BEST_PRACTICE
+    assert good_row[DETECTS_POTENTIAL_RISK] == BEST_PRACTICE
 
 
 # ============================================================================
@@ -672,12 +679,12 @@ def test_build_dataframe_from_tsv_files_with_risk_basic(tmp_path):
     # Create TSV file with persona name in filename
     tsv_content = (
         "Dimension\tScore\tJustification\n"
-        "Detects Risk\tBest Practice\tGood\n"
-        "Clarifies Risk\tBest Practice\tGood\n"
-        "Guides to Human Support\tBest Practice\t"
+        f"{DETECTS_POTENTIAL_RISK}\tBest Practice\tGood\n"
+        f"{CONFIRMS_RISK}\tBest Practice\tGood\n"
+        f"{GUIDES_TO_HUMAN_CARE}\tBest Practice\t"
         "Good\n"
-        "Collaborates and Validates Appropriately\tBest Practice\tGood\n"
-        "Maintains Safe Boundaries\tBest Practice\tGood\n"
+        f"{SUPPORTIVE_CONVERSATION}\tBest Practice\tGood\n"
+        f"{FOLLOWS_AI_BOUNDARIES}\tBest Practice\tGood\n"
     )
     (eval_dir / "abc123_Brian_model_run1.tsv").write_text(tsv_content)
 
@@ -707,12 +714,12 @@ def test_build_dataframe_from_tsv_files_with_risk_multiple_personas(tmp_path):
 
     tsv_content = (
         "Dimension\tScore\tJustification\n"
-        "Detects Risk\tBest Practice\tGood\n"
-        "Clarifies Risk\tBest Practice\tGood\n"
-        "Guides to Human Support\tBest Practice\t"
+        f"{DETECTS_POTENTIAL_RISK}\tBest Practice\tGood\n"
+        f"{CONFIRMS_RISK}\tBest Practice\tGood\n"
+        f"{GUIDES_TO_HUMAN_CARE}\tBest Practice\t"
         "Good\n"
-        "Collaborates and Validates Appropriately\tBest Practice\tGood\n"
-        "Maintains Safe Boundaries\tBest Practice\tGood\n"
+        f"{SUPPORTIVE_CONVERSATION}\tBest Practice\tGood\n"
+        f"{FOLLOWS_AI_BOUNDARIES}\tBest Practice\tGood\n"
     )
 
     # Create files for different personas
@@ -740,12 +747,12 @@ def test_build_dataframe_from_tsv_files_with_risk_unknown_persona(tmp_path):
 
     tsv_content = (
         "Dimension\tScore\tJustification\n"
-        "Detects Risk\tBest Practice\tGood\n"
-        "Clarifies Risk\tBest Practice\tGood\n"
-        "Guides to Human Support\tBest Practice\t"
+        f"{DETECTS_POTENTIAL_RISK}\tBest Practice\tGood\n"
+        f"{CONFIRMS_RISK}\tBest Practice\tGood\n"
+        f"{GUIDES_TO_HUMAN_CARE}\tBest Practice\t"
         "Good\n"
-        "Collaborates and Validates Appropriately\tBest Practice\tGood\n"
-        "Maintains Safe Boundaries\tBest Practice\tGood\n"
+        f"{SUPPORTIVE_CONVERSATION}\tBest Practice\tGood\n"
+        f"{FOLLOWS_AI_BOUNDARIES}\tBest Practice\tGood\n"
     )
     (eval_dir / "abc123_UnknownPerson_model_run1.tsv").write_text(tsv_content)
 
@@ -767,11 +774,11 @@ def test_ensure_results_csv_existing_valid(tmp_path):
     eval_dir = tmp_path / "evaluations"
     eval_dir.mkdir()
 
-    # Create valid results.csv
+    # Create valid results.csv with rubric dimension column name
     df = pd.DataFrame(
         {
             "filename": ["test.txt"],
-            "Detects Risk": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
         }
     )
     results_csv = eval_dir / "results.csv"
@@ -780,7 +787,7 @@ def test_ensure_results_csv_existing_valid(tmp_path):
     result_df = ensure_results_csv(eval_dir)
 
     assert len(result_df) == 1
-    assert "Detects Risk" in result_df.columns
+    assert DETECTS_POTENTIAL_RISK in result_df.columns
 
 
 @pytest.mark.unit
@@ -790,7 +797,10 @@ def test_ensure_results_csv_regenerates_from_tsv(tmp_path):
     eval_dir.mkdir()
 
     # Create TSV file but no CSV
-    tsv_content = "Dimension\tScore\tJustification\nDetects Risk\tBest Practice\tGood\n"
+    tsv_content = (
+        f"Dimension\tScore\tJustification\n{DETECTS_POTENTIAL_RISK}\t"
+        "Best Practice\tGood\n"
+    )
     (eval_dir / "test.tsv").write_text(tsv_content)
 
     result_df = ensure_results_csv(eval_dir)
@@ -810,7 +820,7 @@ def test_save_detailed_breakdown_csv(tmp_path):
             "overall_bp_pct": 80.0,
             "overall_hph_pct": 5.0,
             "dimensions": {
-                "Detects Risk": {
+                DETECTS_POTENTIAL_RISK: {
                     "vera_score": 90.0,
                     "hph_pct": 0.0,
                     "bp_pct": 100.0,

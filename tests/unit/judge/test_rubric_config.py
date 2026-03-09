@@ -14,7 +14,7 @@ from judge.rubric_config import (
     COL_QUESTION_ID,
     COL_RISK_TYPE,
     COL_SEVERITY,
-    DIMENSION_SHORT_NAMES,
+    EXPECTED_DIMENSION_NAMES,
     IGNORE_COLUMNS,
 )
 
@@ -68,10 +68,10 @@ class TestRubricConfigConstants:
         )
 
     def test_dimension_values_match_rubric(self):
-        """Test that DIMENSION_SHORT_NAMES keys match actual dimensions in rubric.tsv.
+        """Test that EXPECTED_DIMENSION_NAMES matches actual dimensions in rubric.tsv.
 
         This ensures that if dimensions are added/removed/renamed in the rubric,
-        the DIMENSION_SHORT_NAMES dict is updated.
+        EXPECTED_DIMENSION_NAMES in rubric_config.py is updated.
         """
         # Load the actual rubric file
         rubric_path = Path("data/rubric.tsv")
@@ -82,40 +82,34 @@ class TestRubricConfigConstants:
         # Get actual dimensions from the file
         actual_dimensions = set(df[COL_DIMENSION].dropna().unique())
 
-        # Get dimensions from our constants
-        expected_dimensions = set(DIMENSION_SHORT_NAMES.keys())
+        # Get expected dimensions from our constants
+        expected_dimensions = EXPECTED_DIMENSION_NAMES
 
-        # Check that all dimensions in the rubric have short names defined
-        missing_short_names = actual_dimensions - expected_dimensions
-        assert not missing_short_names, (
-            f"Dimensions in rubric.tsv without short names defined: "
-            f"{missing_short_names}. Please add them to DIMENSION_SHORT_NAMES "
-            f"in rubric_config.py."
+        # Check that all dimensions in the rubric are in EXPECTED_DIMENSION_NAMES
+        missing = actual_dimensions - expected_dimensions
+        assert not missing, (
+            f"Dimensions in rubric.tsv not in EXPECTED_DIMENSION_NAMES: {missing}."
+            "Please add them to EXPECTED_DIMENSION_NAMES in rubric_config.py."
         )
 
-        # Check for dimensions with short names that no longer exist in rubric
-        extra_short_names = expected_dimensions - actual_dimensions
-        assert not extra_short_names, (
-            f"Dimensions with short names defined but not in rubric.tsv: "
-            f"{extra_short_names}. Please remove them from DIMENSION_SHORT_NAMES "
-            f"in rubric_config.py."
+        # Check for expected dimensions that no longer exist in rubric
+        extra = expected_dimensions - actual_dimensions
+        assert not extra, (
+            f"EXPECTED_DIMENSION_NAMES contains dimensions not in rubric.tsv: {extra}."
+            "Please remove them from EXPECTED_DIMENSION_NAMES in rubric_config.py."
         )
 
-    def test_dimension_short_names_structure(self):
-        """Test that DIMENSION_SHORT_NAMES has valid structure."""
+    def test_expected_dimension_names_structure(self):
+        """Test that EXPECTED_DIMENSION_NAMES has valid structure."""
         assert isinstance(
-            DIMENSION_SHORT_NAMES, dict
-        ), "DIMENSION_SHORT_NAMES should be a dictionary"
+            EXPECTED_DIMENSION_NAMES, set
+        ), "EXPECTED_DIMENSION_NAMES should be a set"
 
-        for full_name, short_name in DIMENSION_SHORT_NAMES.items():
+        for name in EXPECTED_DIMENSION_NAMES:
             assert isinstance(
-                full_name, str
-            ), f"Dimension full name should be a string, got {type(full_name)}"
-            assert isinstance(
-                short_name, str
-            ), f"Dimension short name should be a string, got {type(short_name)}"
-            assert full_name, "Dimension full name should not be empty"
-            assert short_name, "Dimension short name should not be empty"
+                name, str
+            ), f"Dimension name should be a string, got {type(name)}"
+            assert name, "Dimension name should not be empty"
 
     def test_rubric_file_can_be_parsed_with_constants(self):
         """Test that the prod rubric file can be successfully parsed using constants."""
@@ -150,8 +144,8 @@ class TestRubricConfigConstants:
         unique_dimensions = set(dimensions)
 
         # It's okay to have dimensions repeated across rows (for different questions),
-        # but the unique set should match DIMENSION_SHORT_NAMES
-        assert len(unique_dimensions) == len(DIMENSION_SHORT_NAMES), (
+        # but the unique set should match EXPECTED_DIMENSION_NAMES
+        assert len(unique_dimensions) == len(EXPECTED_DIMENSION_NAMES), (
             f"Number of unique dimensions in rubric ({len(unique_dimensions)}) "
-            f"doesn't match DIMENSION_SHORT_NAMES ({len(DIMENSION_SHORT_NAMES)})"
+            f"doesn't match EXPECTED_DIMENSION_NAMES ({len(EXPECTED_DIMENSION_NAMES)})"
         )

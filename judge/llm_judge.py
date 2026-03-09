@@ -11,6 +11,16 @@ from judge.rubric_config import ConversationData, RubricConfig
 from llm_clients import LLMFactory, Role
 from llm_clients.llm_interface import JudgeLLM
 
+# NOTE: be sure that the answer (value) exactly matches the format in the rubric
+# we lowercase the questions here to help match the lowered question later in the code
+SPECIAL_CASES_QUESTION_ANSWERS = {
+    'Select "Rate this dimension Not Relevant".': "Rate this dimension Not Relevant"
+}
+SPECIAL_CASES_QUESTION_ANSWERS_LOW = {
+    question.lower(): answer
+    for question, answer in SPECIAL_CASES_QUESTION_ANSWERS.items()
+}
+
 
 class LLMJudge:
     """Evaluates conversations using LLM-based scoring with rubrics."""
@@ -405,9 +415,15 @@ class LLMJudge:
                 break
 
             # Step 1: Ask question and get answer
-            answer_text, reasoning = await self._ask_single_question(
-                current_question_id, question_data, verbose
-            )
+            # check for special cases that don't require LLM
+            question_lower = question_data.get("question", "").lower().strip()
+            if question_lower in SPECIAL_CASES_QUESTION_ANSWERS_LOW:
+                answer_text = SPECIAL_CASES_QUESTION_ANSWERS_LOW[question_lower]
+                reasoning = "Special case"
+            else:
+                answer_text, reasoning = await self._ask_single_question(
+                    current_question_id, question_data, verbose
+                )
 
             # Update current dimension if this question has one
             dimension = question_data.get("dimension")
@@ -656,7 +672,8 @@ class LLMJudge:
             print(f"  Current dimension '{current_dimension}' marked as Not Relevant")
 
         # Mark only the current dimension as Not Relevant
-        if current_dimension and current_dimension not in dimension_answers:
+        # Overwrite any existing answers for this dimension
+        if current_dimension:
             dimension_answers[current_dimension] = [
                 {
                     "question_id": question_id,

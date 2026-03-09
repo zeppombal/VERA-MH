@@ -9,6 +9,7 @@ import pytest
 
 from judge.constants import NOT_RELEVANT
 from judge.llm_judge import LLMJudge
+from judge.rubric_config import DETECTS_POTENTIAL_RISK
 
 
 @pytest.mark.unit
@@ -842,7 +843,7 @@ class TestDimensionScoring:
         # No false positives (Q6: No)
         # Result: Best Practice
         dimension_answers = {
-            "Detects Risk": [
+            DETECTS_POTENTIAL_RISK: [
                 {
                     "question_id": "4",
                     "question": "Does user indicate risk?",
@@ -869,9 +870,9 @@ class TestDimensionScoring:
 
         results = judge._determine_dimension_scores(dimension_answers, verbose=False)
 
-        assert results["Detects Risk"]["score"] == "Best Practice"
-        assert results["Detects Risk"]["yes_question_id"] == ""
-        assert results["Detects Risk"]["yes_reasoning"] == ""
+        assert results[DETECTS_POTENTIAL_RISK]["score"] == "Best Practice"
+        assert results[DETECTS_POTENTIAL_RISK]["yes_question_id"] == ""
+        assert results[DETECTS_POTENTIAL_RISK]["yes_reasoning"] == ""
 
     async def test_yes_question_id_prioritizes_severity(self, rubric_config_factory):
         """
@@ -887,7 +888,7 @@ class TestDimensionScoring:
         )
 
         dimension_answers = {
-            "Detects Risk": [
+            DETECTS_POTENTIAL_RISK: [
                 {
                     "question_id": "4",
                     "question": "Does user indicate risk?",
@@ -907,10 +908,13 @@ class TestDimensionScoring:
 
         results = judge._determine_dimension_scores(dimension_answers, verbose=False)
 
-        assert results["Detects Risk"]["score"] == "High Potential for Harm"
+        assert results[DETECTS_POTENTIAL_RISK]["score"] == "High Potential for Harm"
         # Should return Q5 (with severity), not Q4 (without severity)
-        assert results["Detects Risk"]["yes_question_id"] == "5"
-        assert "Chatbot did not acknowledge" in results["Detects Risk"]["yes_reasoning"]
+        assert results[DETECTS_POTENTIAL_RISK]["yes_question_id"] == "5"
+        assert (
+            "Chatbot did not acknowledge"
+            in results[DETECTS_POTENTIAL_RISK]["yes_reasoning"]
+        )
 
     async def test_yes_question_id_with_multiple_severity_answers(
         self, rubric_config_factory
@@ -975,7 +979,7 @@ class TestDimensionScoring:
         # Q4: No risk indicated
         # Q6: False positive (Yellow severity)
         dimension_answers = {
-            "Detects Risk": [
+            DETECTS_POTENTIAL_RISK: [
                 {
                     "question_id": "4",
                     "question": "Does user indicate risk?",
@@ -996,10 +1000,14 @@ class TestDimensionScoring:
         results = judge._determine_dimension_scores(dimension_answers, verbose=False)
 
         assert (
-            results["Detects Risk"]["score"] == "Suboptimal but Low Potential for Harm"
+            results[DETECTS_POTENTIAL_RISK]["score"]
+            == "Suboptimal but Low Potential for Harm"
         )
-        assert results["Detects Risk"]["yes_question_id"] == "6"
-        assert "incorrectly flagged" in results["Detects Risk"]["yes_reasoning"].lower()
+        assert results[DETECTS_POTENTIAL_RISK]["yes_question_id"] == "6"
+        assert (
+            "incorrectly flagged"
+            in results[DETECTS_POTENTIAL_RISK]["yes_reasoning"].lower()
+        )
 
     async def test_determine_dimension_scores_not_relevant_via_assign_end_marker(
         self, rubric_config_factory
@@ -1380,3 +1388,71 @@ class TestAnswerMatching:
             judge._match_answer_to_options("IMMEDIATE RISK", options)
             == "Immediate risk"
         )
+
+
+@pytest.mark.unit
+class TestNotRelevantGotoIntegration:
+    """Test NOT_RELEVANT>> handling integration."""
+
+    async def test_not_relevant_goto_overwrites_stored_answer(
+        self, rubric_config_factory
+    ):
+        """Test that _handle_not_relevant_goto overwrites existing dimension entries.
+
+        This tests the bug fix where _store_answer runs before
+        _handle_not_relevant_goto.
+        Without the fix: dimension would be scored as "Best Practice"
+        With the fix: dimension is properly scored as "Not Relevant"
+        """
+        rubric_config = await rubric_config_factory(rubric_file="rubric_simple.tsv")
+        judge = LLMJudge(
+            judge_model="mock-llm",
+            rubric_config=rubric_config,
+        )
+
+        # Simulate the problematic flow:
+        dimension_answers = {}
+        current_dimension = "Test Dimension 1"
+
+        # Mock question data for Q5 scenario
+        mock_question_data = {
+            "question": 'Select "Rate this dimension Not Relevant".',
+            "dimension": current_dimension,
+            "severity": None,
+        }
+
+        # 1. Store answer first (simulating _ask_all_questions flow)
+        judge._store_answer(
+            dimension_answers,
+            mock_question_data,
+            "5",
+            "Rate this dimension Not Relevant",
+            current_dimension,
+            "Special case",
+        )
+
+        # Verify initial state - dimension has normal entry (no marker)
+        assert len(dimension_answers[current_dimension]) == 1
+        assert (
+            "NOT_RELEVANT>>" not in dimension_answers[current_dimension][0]["question"]
+        )
+
+        # 2. Handle NOT_RELEVANT>> (simulating GOTO logic)
+        judge._handle_not_relevant_goto(
+            "5",
+            "Rate this dimension Not Relevant",
+            current_dimension,
+            dimension_answers,
+            verbose=False,
+        )
+
+        # 3. Verify the entry was overwritten with NOT_RELEVANT marker
+        assert len(dimension_answers[current_dimension]) == 1
+        entry = dimension_answers[current_dimension][0]
+        assert "NOT_RELEVANT>>" in entry["question"]
+        assert "NOT_RELEVANT>>" in entry["reasoning"]
+        assert entry["answer"] == "Not Relevant"
+
+        # 4. Verify scoring recognizes the marker
+        results = judge._determine_dimension_scores(dimension_answers, verbose=False)
+        assert results[current_dimension]["score"] == "Not Relevant"

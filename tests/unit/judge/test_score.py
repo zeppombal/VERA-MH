@@ -27,6 +27,13 @@ from judge.constants import (
     NOT_RELEVANT,
     NOT_RELEVANT_KEY,
 )
+from judge.rubric_config import (
+    CONFIRMS_RISK,
+    DETECTS_POTENTIAL_RISK,
+    FOLLOWS_AI_BOUNDARIES,
+    GUIDES_TO_HUMAN_CARE,
+    SUPPORTIVE_CONVERSATION,
+)
 from judge.score import (
     OPTION_MAP,
     REVERSE_OPTION_MAP,
@@ -88,11 +95,11 @@ def test_score_results_basic(tmp_path):
         {
             "filename": ["file1.txt"],
             "run_id": ["test_run"],
-            "Detects Risk": [BEST_PRACTICE],
-            "Clarifies Risk": [NEUTRAL],
-            "Guides to Human Support": [BEST_PRACTICE],
-            "Collaborates and Validates Appropriately": [NOT_RELEVANT],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
+            CONFIRMS_RISK: [NEUTRAL],
+            GUIDES_TO_HUMAN_CARE: [BEST_PRACTICE],
+            SUPPORTIVE_CONVERSATION: [NOT_RELEVANT],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -116,21 +123,21 @@ def test_score_results_dimension_scores(tmp_path):
         {
             "filename": ["f1.txt", "f2.txt", "f3.txt", "f4.txt"],
             "run_id": ["run1"] * 4,
-            "Detects Risk": [BEST_PRACTICE, BEST_PRACTICE, DAMAGING, NEUTRAL],
-            "Clarifies Risk": [NEUTRAL, NEUTRAL, NEUTRAL, NEUTRAL],
-            "Guides to Human Support": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, BEST_PRACTICE, DAMAGING, NEUTRAL],
+            CONFIRMS_RISK: [NEUTRAL, NEUTRAL, NEUTRAL, NEUTRAL],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 DAMAGING,
                 BEST_PRACTICE,
                 NOT_RELEVANT,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Maintains Safe Boundaries": [
+            FOLLOWS_AI_BOUNDARIES: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
@@ -144,7 +151,7 @@ def test_score_results_dimension_scores(tmp_path):
     results = score_results(str(csv_path))
 
     # Assert
-    detects_risk = results["dimensions"]["Detects Risk"]
+    detects_risk = results["dimensions"][DETECTS_POTENTIAL_RISK]
     # 2 Best Practice, 1 Damaging, 1 Neutral out of 4
     assert detects_risk["total_count"] == 4
     assert detects_risk[BEST_PRACTICE_KEY + "_pct"] == 50.0
@@ -161,19 +168,19 @@ def test_score_results_excludes_not_relevant(tmp_path):
         {
             "filename": ["f1.txt", "f2.txt", "f3.txt"],
             "run_id": ["run1"] * 3,
-            "Detects Risk": [BEST_PRACTICE, NOT_RELEVANT, DAMAGING],
-            "Clarifies Risk": [BEST_PRACTICE, BEST_PRACTICE, BEST_PRACTICE],
-            "Guides to Human Support": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, NOT_RELEVANT, DAMAGING],
+            CONFIRMS_RISK: [BEST_PRACTICE, BEST_PRACTICE, BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Maintains Safe Boundaries": [
+            FOLLOWS_AI_BOUNDARIES: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
@@ -186,7 +193,7 @@ def test_score_results_excludes_not_relevant(tmp_path):
     results = score_results(str(csv_path))
 
     # Assert
-    detects_risk = results["dimensions"]["Detects Risk"]
+    detects_risk = results["dimensions"][DETECTS_POTENTIAL_RISK]
     # We have 3 entries: BEST_PRACTICE (f1), NOT_RELEVANT (f2), DAMAGING (f3)
     # But NOT_RELEVANT should be excluded from counts, so total_count should be 2
     assert detects_risk["total_count"] == 2  # NOT_RELEVANT excluded
@@ -205,11 +212,11 @@ def test_score_results_aggregate_calculations(tmp_path):
         {
             "filename": ["f1.txt"],
             "run_id": ["run1"],
-            "Detects Risk": [BEST_PRACTICE],
-            "Clarifies Risk": [DAMAGING],
-            "Guides to Human Support": [NEUTRAL],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
+            CONFIRMS_RISK: [DAMAGING],
+            GUIDES_TO_HUMAN_CARE: [NEUTRAL],
+            SUPPORTIVE_CONVERSATION: [BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -234,11 +241,11 @@ def test_score_results_worst_band_determination(tmp_path):
         {
             "filename": ["f1.txt"],
             "run_id": ["run1"],
-            "Detects Risk": [DAMAGING],
-            "Clarifies Risk": [NEUTRAL],
-            "Guides to Human Support": [BEST_PRACTICE],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [DAMAGING],
+            CONFIRMS_RISK: [NEUTRAL],
+            GUIDES_TO_HUMAN_CARE: [BEST_PRACTICE],
+            SUPPORTIVE_CONVERSATION: [BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -262,18 +269,18 @@ def test_score_results_min_max_dimensions(tmp_path):
             "filename": ["f1.txt", "f2.txt"],
             "run_id": ["run1"] * 2,
             # Detects Risk: 100% Best Practice
-            "Detects Risk": [BEST_PRACTICE, BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, BEST_PRACTICE],
             # Clarifies Risk: 0% Best Practice, 100% Damaging
-            "Clarifies Risk": [DAMAGING, DAMAGING],
-            "Guides to Human Support": [
+            CONFIRMS_RISK: [DAMAGING, DAMAGING],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 NEUTRAL,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Maintains Safe Boundaries": [BEST_PRACTICE, BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE, BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -283,8 +290,8 @@ def test_score_results_min_max_dimensions(tmp_path):
 
     # Assert
     agg = results["aggregates"]
-    assert "Clarifies Risk" in agg["min_best_practice_dimensions"]
-    assert "Clarifies Risk" in agg["max_damaging_dimensions"]
+    assert CONFIRMS_RISK in agg["min_best_practice_dimensions"]
+    assert CONFIRMS_RISK in agg["max_damaging_dimensions"]
 
 
 @pytest.mark.unit
@@ -297,19 +304,19 @@ def test_score_results_conversation_level_metrics(tmp_path):
             "filename": ["f1.txt", "f2.txt", "f3.txt"],
             "run_id": ["run1"] * 3,
             # f1: All Best Practice
-            "Detects Risk": [BEST_PRACTICE, DAMAGING, BEST_PRACTICE],
-            "Clarifies Risk": [BEST_PRACTICE, BEST_PRACTICE, BEST_PRACTICE],
-            "Guides to Human Support": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, DAMAGING, BEST_PRACTICE],
+            CONFIRMS_RISK: [BEST_PRACTICE, BEST_PRACTICE, BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Maintains Safe Boundaries": [
+            FOLLOWS_AI_BOUNDARIES: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
@@ -339,11 +346,11 @@ def test_score_results_saves_json(tmp_path):
         {
             "filename": ["f1.txt"],
             "run_id": ["run1"],
-            "Detects Risk": [BEST_PRACTICE],
-            "Clarifies Risk": [BEST_PRACTICE],
-            "Guides to Human Support": [BEST_PRACTICE],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
+            CONFIRMS_RISK: [BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [BEST_PRACTICE],
+            SUPPORTIVE_CONVERSATION: [BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -369,11 +376,11 @@ def test_score_results_default_json_path(tmp_path):
         {
             "filename": ["f1.txt"],
             "run_id": ["run1"],
-            "Detects Risk": [BEST_PRACTICE],
-            "Clarifies Risk": [BEST_PRACTICE],
-            "Guides to Human Support": [BEST_PRACTICE],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
+            CONFIRMS_RISK: [BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [BEST_PRACTICE],
+            SUPPORTIVE_CONVERSATION: [BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -396,11 +403,11 @@ def test_score_results_extracts_model_names(tmp_path):
         {
             "filename": ["f1.txt"],
             "run_id": ["run1"],
-            "Detects Risk": [BEST_PRACTICE],
-            "Clarifies Risk": [BEST_PRACTICE],
-            "Guides to Human Support": [BEST_PRACTICE],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
+            CONFIRMS_RISK: [BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [BEST_PRACTICE],
+            SUPPORTIVE_CONVERSATION: [BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -423,19 +430,19 @@ def test_score_results_dimension_percentage_rounding(tmp_path):
         {
             "filename": ["f1.txt", "f2.txt", "f3.txt"],
             "run_id": ["run1", "run1", "run1"],
-            "Detects Risk": [BEST_PRACTICE, BEST_PRACTICE, NEUTRAL],
-            "Clarifies Risk": [BEST_PRACTICE, BEST_PRACTICE, BEST_PRACTICE],
-            "Guides to Human Support": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, BEST_PRACTICE, NEUTRAL],
+            CONFIRMS_RISK: [BEST_PRACTICE, BEST_PRACTICE, BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Maintains Safe Boundaries": [BEST_PRACTICE, BEST_PRACTICE, BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE, BEST_PRACTICE, BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -444,7 +451,7 @@ def test_score_results_dimension_percentage_rounding(tmp_path):
     results = score_results(str(csv_path))
 
     # Assert
-    dimension = results["dimensions"]["Detects Risk"]
+    dimension = results["dimensions"][DETECTS_POTENTIAL_RISK]
     assert dimension["best_practice_pct"] == 66.67
     assert dimension["neutral_pct"] == 33.33
     assert dimension["damaging_pct"] == 0.0
@@ -459,7 +466,7 @@ def test_score_results_missing_dimension_column_skipped(tmp_path, capsys):
         {
             "filename": ["f1.txt"],
             "run_id": ["run1"],
-            "Detects Risk": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -468,12 +475,12 @@ def test_score_results_missing_dimension_column_skipped(tmp_path, capsys):
     results = score_results(str(csv_path))
 
     # Assert
-    assert "Detects Risk" in results["dimensions"]
-    assert "Clarifies Risk" not in results["dimensions"]
+    assert DETECTS_POTENTIAL_RISK in results["dimensions"]
+    assert CONFIRMS_RISK not in results["dimensions"]
 
     # Should print warning
     captured = capsys.readouterr()
-    assert "Warning: Dimension 'Clarifies Risk' not found" in captured.out
+    assert f"Warning: Dimension '{CONFIRMS_RISK}' not found" in captured.out
 
 
 @pytest.mark.unit
@@ -484,26 +491,26 @@ def test_score_results_dimension_counts_match_percentages(tmp_path):
         {
             "filename": ["f1.txt", "f2.txt", "f3.txt", "f4.txt"],
             "run_id": ["run1", "run1", "run1", "run1"],
-            "Detects Risk": [BEST_PRACTICE, BEST_PRACTICE, NEUTRAL, DAMAGING],
-            "Clarifies Risk": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, BEST_PRACTICE, NEUTRAL, DAMAGING],
+            CONFIRMS_RISK: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Guides to Human Support": [
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Maintains Safe Boundaries": [
+            FOLLOWS_AI_BOUNDARIES: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
@@ -517,7 +524,7 @@ def test_score_results_dimension_counts_match_percentages(tmp_path):
     results = score_results(str(csv_path))
 
     # Assert
-    dimension = results["dimensions"]["Detects Risk"]
+    dimension = results["dimensions"][DETECTS_POTENTIAL_RISK]
     total = dimension["total_count"]
     counts = dimension["counts"]
 
@@ -540,14 +547,14 @@ def test_score_results_multiple_dimensions_tied_for_min_max(tmp_path):
         {
             "filename": ["f1.txt", "f2.txt"],
             "run_id": ["run1", "run1"],
-            "Detects Risk": [BEST_PRACTICE, DAMAGING],
-            "Clarifies Risk": [BEST_PRACTICE, DAMAGING],
-            "Guides to Human Support": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, DAMAGING],
+            CONFIRMS_RISK: [BEST_PRACTICE, DAMAGING],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE, BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE, BEST_PRACTICE],
+            SUPPORTIVE_CONVERSATION: [BEST_PRACTICE, BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE, BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -560,13 +567,13 @@ def test_score_results_multiple_dimensions_tied_for_min_max(tmp_path):
 
     # Both should be in min best practice (50% each)
     assert len(agg["min_best_practice_dimensions"]) == 2
-    assert "Detects Risk" in agg["min_best_practice_dimensions"]
-    assert "Clarifies Risk" in agg["min_best_practice_dimensions"]
+    assert DETECTS_POTENTIAL_RISK in agg["min_best_practice_dimensions"]
+    assert CONFIRMS_RISK in agg["min_best_practice_dimensions"]
 
     # Both should be in max damaging (50% each)
     assert len(agg["max_damaging_dimensions"]) == 2
-    assert "Detects Risk" in agg["max_damaging_dimensions"]
-    assert "Clarifies Risk" in agg["max_damaging_dimensions"]
+    assert DETECTS_POTENTIAL_RISK in agg["max_damaging_dimensions"]
+    assert CONFIRMS_RISK in agg["max_damaging_dimensions"]
 
 
 @pytest.mark.unit
@@ -577,19 +584,19 @@ def test_score_results_conversation_metrics_exclude_all_not_relevant(tmp_path):
         {
             "filename": ["f1.txt", "f2.txt", "f3.txt"],
             "run_id": ["run1", "run1", "run1"],
-            "Detects Risk": [BEST_PRACTICE, NOT_RELEVANT, DAMAGING],
-            "Clarifies Risk": [BEST_PRACTICE, NOT_RELEVANT, BEST_PRACTICE],
-            "Guides to Human Support": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, NOT_RELEVANT, DAMAGING],
+            CONFIRMS_RISK: [BEST_PRACTICE, NOT_RELEVANT, BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 NOT_RELEVANT,
                 BEST_PRACTICE,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 NOT_RELEVANT,
                 BEST_PRACTICE,
             ],
-            "Maintains Safe Boundaries": [BEST_PRACTICE, NOT_RELEVANT, BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE, NOT_RELEVANT, BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -616,26 +623,31 @@ def test_score_results_pct_all_best_practice_or_not_relevant(tmp_path):
         {
             "filename": ["f1.txt", "f2.txt", "f3.txt", "f4.txt"],
             "run_id": ["run1", "run1", "run1", "run1"],
-            "Detects Risk": [BEST_PRACTICE, BEST_PRACTICE, DAMAGING, NOT_RELEVANT],
-            "Clarifies Risk": [
+            DETECTS_POTENTIAL_RISK: [
+                BEST_PRACTICE,
+                BEST_PRACTICE,
+                DAMAGING,
+                NOT_RELEVANT,
+            ],
+            CONFIRMS_RISK: [
                 BEST_PRACTICE,
                 NOT_RELEVANT,
                 BEST_PRACTICE,
                 NOT_RELEVANT,
             ],
-            "Guides to Human Support": [
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 NOT_RELEVANT,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 NOT_RELEVANT,
             ],
-            "Maintains Safe Boundaries": [
+            FOLLOWS_AI_BOUNDARIES: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
@@ -667,21 +679,21 @@ def test_score_results_pct_with_at_least_one_high_harm(tmp_path):
         {
             "filename": ["f1.txt", "f2.txt", "f3.txt", "f4.txt"],
             "run_id": ["run1", "run1", "run1", "run1"],
-            "Detects Risk": [BEST_PRACTICE, DAMAGING, BEST_PRACTICE, NEUTRAL],
-            "Clarifies Risk": [BEST_PRACTICE, BEST_PRACTICE, DAMAGING, BEST_PRACTICE],
-            "Guides to Human Support": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, DAMAGING, BEST_PRACTICE, NEUTRAL],
+            CONFIRMS_RISK: [BEST_PRACTICE, BEST_PRACTICE, DAMAGING, BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Maintains Safe Boundaries": [
+            FOLLOWS_AI_BOUNDARIES: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
@@ -713,11 +725,11 @@ def test_score_results_empty_dataframe_handles_gracefully(tmp_path):
         {
             "filename": [],
             "run_id": [],
-            "Detects Risk": [],
-            "Clarifies Risk": [],
-            "Guides to Human Support": [],
-            "Collaborates and Validates Appropriately": [],
-            "Maintains Safe Boundaries": [],
+            DETECTS_POTENTIAL_RISK: [],
+            CONFIRMS_RISK: [],
+            GUIDES_TO_HUMAN_CARE: [],
+            SUPPORTIVE_CONVERSATION: [],
+            FOLLOWS_AI_BOUNDARIES: [],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -739,14 +751,14 @@ def test_score_results_dimension_all_not_relevant_returns_zero_scores(tmp_path, 
         {
             "filename": ["f1.txt", "f2.txt"],
             "run_id": ["run1", "run1"],
-            "Detects Risk": [BEST_PRACTICE, BEST_PRACTICE],
-            "Clarifies Risk": [NOT_RELEVANT, NOT_RELEVANT],
-            "Guides to Human Support": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, BEST_PRACTICE],
+            CONFIRMS_RISK: [NOT_RELEVANT, NOT_RELEVANT],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE, BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE, BEST_PRACTICE],
+            SUPPORTIVE_CONVERSATION: [BEST_PRACTICE, BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE, BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -756,7 +768,7 @@ def test_score_results_dimension_all_not_relevant_returns_zero_scores(tmp_path, 
 
     # Assert
     # Clarifies Risk should have zero counts
-    clarifies = results["dimensions"]["Clarifies Risk"]
+    clarifies = results["dimensions"][CONFIRMS_RISK]
     assert clarifies["total_count"] == 0
     assert clarifies["best_practice_pct"] == 0.0
     assert clarifies["neutral_pct"] == 0.0
@@ -784,17 +796,17 @@ def test_score_results_by_risk_basic(mock_build_df, tmp_path, fixtures_dir):
             "run_id": ["run1", "run1"],
             "persona_name": ["Brian", "Sarah"],
             "risk_level": ["High", "Low"],
-            "Detects Risk": [BEST_PRACTICE, DAMAGING],
-            "Clarifies Risk": [NEUTRAL, BEST_PRACTICE],
-            "Guides to Human Support": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, DAMAGING],
+            CONFIRMS_RISK: [NEUTRAL, BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Maintains Safe Boundaries": [BEST_PRACTICE, BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE, BEST_PRACTICE],
         }
     )
     mock_build_df.return_value = mock_df
@@ -825,17 +837,17 @@ def test_score_results_by_risk_dimension_scores(mock_build_df, tmp_path, fixture
             "run_id": ["run1", "run1"],
             "persona_name": ["Brian", "Brian"],
             "risk_level": ["High", "High"],
-            "Detects Risk": [BEST_PRACTICE, DAMAGING],
-            "Clarifies Risk": [NEUTRAL, NEUTRAL],
-            "Guides to Human Support": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, DAMAGING],
+            CONFIRMS_RISK: [NEUTRAL, NEUTRAL],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Maintains Safe Boundaries": [BEST_PRACTICE, BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE, BEST_PRACTICE],
         }
     )
     mock_build_df.return_value = mock_df
@@ -848,7 +860,7 @@ def test_score_results_by_risk_dimension_scores(mock_build_df, tmp_path, fixture
     # Assert
     high_risk = results["risk_level_scores"]["High"]
     assert high_risk["total_conversations"] == 2
-    detects_risk_scores = high_risk["dimensions"]["Detects Risk"]
+    detects_risk_scores = high_risk["dimensions"][DETECTS_POTENTIAL_RISK]
     assert detects_risk_scores[BEST_PRACTICE_KEY + "_pct"] == 50.0
     assert detects_risk_scores[DAMAGING_KEY + "_pct"] == 50.0
 
@@ -869,11 +881,11 @@ def test_score_results_by_risk_includes_not_relevant(
             "run_id": ["run1"],
             "persona_name": ["Emma"],
             "risk_level": ["None"],
-            "Detects Risk": [BEST_PRACTICE],
-            "Clarifies Risk": [NOT_RELEVANT],
-            "Guides to Human Support": [BEST_PRACTICE],
-            "Collaborates and Validates Appropriately": [NOT_RELEVANT],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
+            CONFIRMS_RISK: [NOT_RELEVANT],
+            GUIDES_TO_HUMAN_CARE: [BEST_PRACTICE],
+            SUPPORTIVE_CONVERSATION: [NOT_RELEVANT],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE],
         }
     )
     mock_build_df.return_value = mock_df
@@ -885,7 +897,7 @@ def test_score_results_by_risk_includes_not_relevant(
 
     # Assert
     none_risk = results["risk_level_scores"]["None"]
-    probes_risk_scores = none_risk["dimensions"]["Clarifies Risk"]
+    probes_risk_scores = none_risk["dimensions"][CONFIRMS_RISK]
     # Should have NOT_RELEVANT in counts
     assert NOT_RELEVANT_KEY + "_pct" in probes_risk_scores
 
@@ -904,11 +916,11 @@ def test_score_results_by_risk_saves_updated_csv(mock_build_df, tmp_path, fixtur
             "run_id": ["run1"],
             "persona_name": ["Brian"],
             "risk_level": ["High"],
-            "Detects Risk": [BEST_PRACTICE],
-            "Clarifies Risk": [BEST_PRACTICE],
-            "Guides to Human Support": [BEST_PRACTICE],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
+            CONFIRMS_RISK: [BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [BEST_PRACTICE],
+            SUPPORTIVE_CONVERSATION: [BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE],
         }
     )
     mock_build_df.return_value = mock_df
@@ -939,11 +951,11 @@ def test_score_results_by_risk_saves_json(mock_build_df, tmp_path, fixtures_dir)
             "run_id": ["run1"],
             "persona_name": ["Brian"],
             "risk_level": ["High"],
-            "Detects Risk": [BEST_PRACTICE],
-            "Clarifies Risk": [BEST_PRACTICE],
-            "Guides to Human Support": [BEST_PRACTICE],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
+            CONFIRMS_RISK: [BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [BEST_PRACTICE],
+            SUPPORTIVE_CONVERSATION: [BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE],
         }
     )
     mock_build_df.return_value = mock_df
@@ -978,11 +990,11 @@ def test_score_results_by_risk_extracts_model_names(
             "run_id": ["run1"],
             "persona_name": ["Brian"],
             "risk_level": ["High"],
-            "Detects Risk": [BEST_PRACTICE],
-            "Clarifies Risk": [BEST_PRACTICE],
-            "Guides to Human Support": [BEST_PRACTICE],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
+            CONFIRMS_RISK: [BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [BEST_PRACTICE],
+            SUPPORTIVE_CONVERSATION: [BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE],
         }
     )
     mock_build_df.return_value = mock_df

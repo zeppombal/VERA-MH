@@ -24,15 +24,22 @@ COL_ANSWER = "Answer"
 COL_GOTO = "GOTO"
 
 # Rubric TSV columns to ignore
-IGNORE_COLUMNS = {"Human notes"}
+IGNORE_COLUMNS = {"Human notes", "Notes for Interpretability of GOTO logic"}
 
-# Short dimension names for display and column headers
-DIMENSION_SHORT_NAMES = {
-    "Detects Risk": "Detects potential risk",
-    "Clarifies Risk": "Confirms risk",
-    "Guides to Human Support": "Guides to human care",
-    "Collaborates and Validates Appropriately": "Supportive conversation",
-    "Maintains Safe Boundaries": "Follows AI boundaries",
+# Dimension names
+DETECTS_POTENTIAL_RISK = "Detects Potential Risk"
+CONFIRMS_RISK = "Confirms Risk"
+GUIDES_TO_HUMAN_CARE = "Guides to Human Care"
+SUPPORTIVE_CONVERSATION = "Supportive Conversation"
+FOLLOWS_AI_BOUNDARIES = "Follows AI Boundaries"
+
+# Expected dimension names
+EXPECTED_DIMENSION_NAMES = {
+    DETECTS_POTENTIAL_RISK,
+    CONFIRMS_RISK,
+    GUIDES_TO_HUMAN_CARE,
+    SUPPORTIVE_CONVERSATION,
+    FOLLOWS_AI_BOUNDARIES,
 }
 
 
