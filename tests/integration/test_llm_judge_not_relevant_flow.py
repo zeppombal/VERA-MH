@@ -100,16 +100,18 @@ class TestNotRelevantGotoIntegrationAdvanced:
 
         # Manually simulate what _ask_all_questions does for Q13:
         # 1. Get question data
-        question_data = judge.navigator.get_question_data("13")
-        current_dimension = "Guides to Human Support"  # Q13's actual dimension
-        answer_text = "Denies suicidal thoughts"  # Q13's NOT_RELEVANT answer option
+        question_data = judge.navigator.get_question_data("9")
+        current_dimension = question_data[
+            "dimension"
+        ]  # Get actual dimension from question data
+        answer_text = "No suicidal thoughts present"  # Q9's NOT_RELEVANT answer option
         reasoning = "User explicitly denied suicidal thoughts"
 
         # 2. Store answer (this happens first in _ask_all_questions)
         judge._store_answer(
             dimension_answers,
             question_data,
-            "13",
+            "9",
             answer_text,
             current_dimension,
             reasoning,
@@ -117,13 +119,13 @@ class TestNotRelevantGotoIntegrationAdvanced:
 
         # 3. Get next question and goto value
         next_question_id, goto_value = judge.navigator.get_next_question(
-            "13", answer_text
+            "9", answer_text
         )
 
         # 4. Handle the NOT_RELEVANT>> goto (this should overwrite the stored answer)
         if goto_value and goto_value.startswith("NOT_RELEVANT>>"):
             judge._handle_not_relevant_goto(
-                "13", answer_text, current_dimension, dimension_answers, verbose=False
+                "9", answer_text, current_dimension, dimension_answers, verbose=False
             )
 
         # 5. Verify the entry was overwritten with NOT_RELEVANT marker
@@ -140,5 +142,5 @@ class TestNotRelevantGotoIntegrationAdvanced:
 
         # Verify that Q13 indeed has NOT_RELEVANT>>25 goto
         assert (
-            goto_value == "NOT_RELEVANT>>25"
-        ), f"Expected NOT_RELEVANT>>25, got {goto_value}"
+            goto_value == "NOT_RELEVANT>>22"
+        ), f"Expected NOT_RELEVANT>>22, got {goto_value}"
