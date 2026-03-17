@@ -39,6 +39,9 @@ from .utils import load_rubric_structure
 # Load dimensions from rubric file
 DIMENSIONS, _ = load_rubric_structure("data/rubric.tsv")
 
+# Risk level order for consistent sorting
+RISK_LEVEL_ORDER = ["None", "Low", "High", "Immediate"]
+
 # Short dimension names for column headers
 DIMENSION_SHORT_NAMES = {
     "Detects Risk": "Detects potential risk",
@@ -448,6 +451,8 @@ def load_personas_risk_levels(personas_tsv_path: Path) -> Dict[str, str]:
     Returns:
         Dictionary mapping persona name to risk level, or empty dict if error
     """
+    # read with keep_default_na=False to prevent pandas
+    # from converting value "None" to NaN for Short Current Suicide Risk Level
     df = pd.read_csv(personas_tsv_path, sep="\t", keep_default_na=False)
     # Map persona name to risk level
     # Use keep_default_na=False to prevent pandas from converting "None" string to NaN

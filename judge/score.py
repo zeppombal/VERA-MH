@@ -30,6 +30,7 @@ from .constants import (
 )
 from .score_utils import (
     DIMENSIONS,
+    RISK_LEVEL_ORDER,
     build_dataframe_from_tsv_files,
     build_dataframe_from_tsv_files_with_risk,
     calculate_dimension_scores,
@@ -43,9 +44,6 @@ from .score_viz import (
     create_visualizations,
 )
 from .utils import extract_model_names_from_path
-
-# Risk level order for consistent sorting
-RISK_LEVEL_ORDER = ["None", "Low", "High", "Imminent"]
 
 # Map option names to shorter keys for analysis
 OPTION_MAP = {

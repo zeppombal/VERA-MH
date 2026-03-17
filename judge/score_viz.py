@@ -29,10 +29,7 @@ from .constants import (
     NOT_RELEVANT,
     NOT_RELEVANT_KEY,
 )
-from .score_utils import DIMENSIONS
-
-# Risk level order for consistent sorting
-RISK_LEVEL_ORDER = ["None", "Low", "High", "Imminent"]
+from .score_utils import DIMENSIONS, RISK_LEVEL_ORDER
 
 # Visualization constants
 VIZ_FIG_SIZE = (8, 12)
