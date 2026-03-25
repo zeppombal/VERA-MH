@@ -7,10 +7,11 @@ Tests cover:
   get_color_for_score)
 - VERA score calculation (calculate_vera_score)
 - Filename parsing (parse_evaluation_filename)
+- Conversation filename extraction (extract_conversation_filename_from_tsv)
 - Dimension scoring (calculate_dimension_scores, calculate_overall_percentages,
   calculate_scores_from_df)
 - Dataframe building (build_dataframe_from_tsv_files,
-  build_dataframe_from_tsv_files_with_risk)
+  add_risk_levels_to_dataframe)
 - Persona risk level loading (load_personas_risk_levels)
 - TSV file operations (build_results_csv_from_tsv_files)
 - CSV operations (ensure_results_csv, save_detailed_breakdown_csv)
@@ -39,14 +40,15 @@ from judge.score_utils import (
     COLOR_GREEN,
     COLOR_ORANGE,
     COLOR_RED,
+    add_risk_levels_to_dataframe,
     build_dataframe_from_tsv_files,
-    build_dataframe_from_tsv_files_with_risk,
     build_results_csv_from_tsv_files,
     calculate_dimension_scores,
     calculate_overall_percentages,
     calculate_scores_from_df,
     calculate_vera_score,
     ensure_results_csv,
+    extract_conversation_filename_from_tsv,
     get_color_for_score,
     hex_to_rgb,
     interpolate_color,
@@ -251,6 +253,184 @@ def test_parse_evaluation_filename_no_extension():
 
 
 # ============================================================================
+# Conversation Filename Extraction Tests
+# ============================================================================
+# Tests for extract_conversation_filename_from_tsv function covering:
+# - Primary path: structured format parsing (parse_evaluation_filename)
+# - First fallback: regex pattern r"(.+?)_[^_]+_i\d+$" (line 204)
+# - Alternative fallback: regex r"(.+)_i\d+$" + validation (lines 211-218)
+# - Final fallback: simple extension replacement (line 221)
+# - Edge cases: malformed filenames, complex model names, boundary conditions
+
+
+@pytest.mark.unit
+def test_extract_conversation_filename_structured_format():
+    """Test extraction using structured format parsing (primary path)."""
+    # Standard structured format that parse_evaluation_filename can handle
+    filename = "000682_Alix_gemini-3-pro-preview_run22_gpt-4o_i1.tsv"
+    result = extract_conversation_filename_from_tsv(filename)
+    expected = "000682_Alix_gemini-3-pro-preview_run22.txt"
+    assert result == expected
+
+
+@pytest.mark.unit
+def test_extract_conversation_filename_structured_format_various_models():
+    """Test structured format with different user models."""
+    test_cases = [
+        (
+            "abc123_John_claude-3-5-sonnet_run1_gpt-4o_i1.tsv",
+            "abc123_John_claude-3-5-sonnet_run1.txt",
+        ),
+        (
+            "def456_Sarah_gpt-4_run10_claude-sonnet_i2.tsv",
+            "def456_Sarah_gpt-4_run10.txt",
+        ),
+        (
+            "789xyz_Mike_llama-2-70b-chat_run5_claude-3-haiku_i3.tsv",
+            "789xyz_Mike_llama-2-70b-chat_run5.txt",
+        ),
+    ]
+
+    for input_filename, expected in test_cases:
+        result = extract_conversation_filename_from_tsv(input_filename)
+        assert (
+            result == expected
+        ), f"Failed for {input_filename}: got {result}, expected {expected}"
+
+
+@pytest.mark.unit
+def test_extract_conversation_filename_fallback_regex_pattern():
+    """Test fallback regex pattern _{judge_model}_i{instance} (line 204)."""
+    # Cases where structured parsing fails, but fallback regex works
+    test_cases = [
+        ("3ea338_Lena_g5_run4_uuid_gpt-4o_i1.tsv", "3ea338_Lena_g5_run4_uuid.txt"),
+        ("conversation_name_claude-3-sonnet_i5.tsv", "conversation_name.txt"),
+        (
+            "complex_name_with_underscores_gpt-4_i2.tsv",
+            "complex_name_with_underscores.txt",
+        ),
+        ("short_name_mixtral-8x7b_i10.tsv", "short_name.txt"),
+    ]
+
+    for input_filename, expected in test_cases:
+        result = extract_conversation_filename_from_tsv(input_filename)
+        assert (
+            result == expected
+        ), f"Failed for {input_filename}: got {result}, expected {expected}"
+
+
+@pytest.mark.unit
+def test_extract_conversation_filename_alternative_regex_pattern():
+    """Test alternative regex for judge models without underscores.
+
+    Covers score_utils lines 211-218.
+    """
+    # Cases where judge model doesn't have underscores in name
+    test_cases = [
+        ("conversation_name_gpt4o_i1.tsv", "conversation_name.txt"),
+        ("test_file_claude3_i2.tsv", "test_file.txt"),
+        ("another_test_gemini_i5.tsv", "another_test.txt"),
+    ]
+
+    for input_filename, expected in test_cases:
+        result = extract_conversation_filename_from_tsv(input_filename)
+        assert (
+            result == expected
+        ), f"Failed for {input_filename}: got {result}, expected {expected}"
+
+
+@pytest.mark.unit
+def test_extract_conversation_filename_edge_cases():
+    """Test edge cases and malformed filenames."""
+    # Edge cases that should fall through to the final fallback (line 221)
+    test_cases = [
+        # No _i pattern at all
+        ("simple_filename.tsv", "simple_filename.txt"),
+        # _i pattern but no preceding underscore context
+        ("nounderscore_i1.tsv", "nounderscore_i1.txt"),
+        # Multiple _i patterns - the regex will match the appropriate pattern
+        # The first regex r"(.+?)_[^_]+_i\d+$" matches "file_i2_more_content_i3"
+        # It captures "file_i2_more" (everything before "_content_i3")
+        ("file_i2_more_content_i3.tsv", "file_i2_more.txt"),
+        # Empty filename
+        (".tsv", ".txt"),
+        # Just extension
+        ("tsv", "tsv.txt"),
+    ]
+
+    for input_filename, expected in test_cases:
+        result = extract_conversation_filename_from_tsv(input_filename)
+        assert (
+            result == expected
+        ), f"Failed for {input_filename}: got {result}, expected {expected}"
+
+
+@pytest.mark.unit
+def test_extract_conversation_filename_no_tsv_extension():
+    """Test behavior with files that don't have .tsv extension."""
+    test_cases = [
+        # Should still work, just converts the extension
+        (
+            "000682_Alix_gemini-3-pro-preview_run22_gpt-4o_i1",
+            "000682_Alix_gemini-3-pro-preview_run22.txt",
+        ),
+        ("conversation_name_claude-3-sonnet_i5", "conversation_name.txt"),
+        ("simple_filename", "simple_filename.txt"),
+    ]
+
+    for input_filename, expected in test_cases:
+        result = extract_conversation_filename_from_tsv(input_filename)
+        assert (
+            result == expected
+        ), f"Failed for {input_filename}: got {result}, expected {expected}"
+
+
+@pytest.mark.unit
+def test_extract_conversation_filename_complex_model_names():
+    """Test with complex model names containing hyphens and numbers."""
+    test_cases = [
+        # Complex judge model names
+        ("conv_name_claude-3-5-sonnet-20241022_i1.tsv", "conv_name.txt"),
+        ("test_gpt-4o-2024-05-13_i2.tsv", "test.txt"),
+        ("example_llama-2-70b-chat-hf_i3.tsv", "example.txt"),
+        # Complex conversation names with model-like patterns
+        (
+            "gpt-4_test_conversation_claude-3-sonnet_i1.tsv",
+            "gpt-4_test_conversation.txt",
+        ),
+        ("claude-test_run_gpt-4o_i2.tsv", "claude-test_run.txt"),
+    ]
+
+    for input_filename, expected in test_cases:
+        result = extract_conversation_filename_from_tsv(input_filename)
+        assert (
+            result == expected
+        ), f"Failed for {input_filename}: got {result}, expected {expected}"
+
+
+@pytest.mark.unit
+def test_extract_conversation_filename_regex_boundaries():
+    """Test regex boundary conditions and potential false matches."""
+    test_cases = [
+        # Instance numbers with multiple digits
+        ("conversation_name_gpt-4o_i123.tsv", "conversation_name.txt"),
+        ("test_claude-3-sonnet_i9999.tsv", "test.txt"),
+        # Edge case: _i followed by non-digits (should fall through to final fallback)
+        ("conversation_name_gpt-4o_iabc.tsv", "conversation_name_gpt-4o_iabc.txt"),
+        ("test_file_judge_inotdigit.tsv", "test_file_judge_inotdigit.txt"),
+        # Mixed cases with valid _i patterns - the regex will match appropriately
+        # The pattern r"(.+?)_[^_]+_i\d+$" will match the last valid _model_i5 pattern
+        ("valid_pattern_invalid_itext_valid_i5.tsv", "valid_pattern_invalid_itext.txt"),
+    ]
+
+    for input_filename, expected in test_cases:
+        result = extract_conversation_filename_from_tsv(input_filename)
+        assert (
+            result == expected
+        ), f"Failed for {input_filename}: got {result}, expected {expected}"
+
+
+# ============================================================================
 # Dimension Scoring Tests
 # ============================================================================
 
@@ -416,7 +596,9 @@ def test_calculate_scores_from_df():
 def test_load_evaluation_tsv(tmp_path):
     """Test loading a single evaluation TSV file."""
     tsv_path = tmp_path / "test.tsv"
-    tsv_content = "Dimension\tScore\tJustification\nDetects Risk\tBest Practice\tGood\n"
+    tsv_content = (
+        "Dimension\tScore\tJustification\nDetects Potential Risk\tBest Practice\tGood\n"
+    )
     tsv_path.write_text(tsv_content)
 
     df = pd.read_csv(tsv_path, sep="\t")
@@ -614,7 +796,7 @@ def test_load_personas_risk_levels_basic(tmp_path):
         "Name\tAge\tGender\tShort Current Suicide Risk Level\tCrisis History\n"
         "Brian\t30\tMale\tHigh\tPast crisis\n"
         "Sarah\t25\tFemale\tLow\tNone\n"
-        "Mike\t35\tMale\tImminent\tMultiple\n"
+        "Mike\t35\tMale\tImmediate\tMultiple\n"
         "Emma\t28\tFemale\tNone\tNone\n"
     )
 
@@ -623,7 +805,7 @@ def test_load_personas_risk_levels_basic(tmp_path):
     assert isinstance(risk_map, dict)
     assert risk_map["Brian"] == "High"
     assert risk_map["Sarah"] == "Low"
-    assert risk_map["Mike"] == "Imminent"
+    assert risk_map["Mike"] == "Immediate"
     assert risk_map["Emma"] == "None"
 
 
@@ -658,105 +840,92 @@ def test_load_personas_risk_levels_strips_whitespace(tmp_path):
 
 
 # ============================================================================
-# build_dataframe_from_tsv_files_with_risk() Tests
+# add_risk_levels_to_dataframe() Tests
 # ============================================================================
 
 
 @pytest.mark.unit
-def test_build_dataframe_from_tsv_files_with_risk_basic(tmp_path):
-    """Test building dataframe with risk level information."""
-    eval_dir = tmp_path / "evaluations"
-    eval_dir.mkdir()
+def test_add_risk_levels_to_dataframe_basic(tmp_path):
+    """Test adding risk level information to dataframe."""
     personas_path = tmp_path / "personas.tsv"
     personas_path.write_text(
         "Name\tAge\tGender\tShort Current Suicide Risk Level\tCrisis History\n"
         "Brian\t30\tMale\tHigh\tPast crisis\n"
         "Sarah\t25\tFemale\tLow\tNone\n"
-        "Mike\t35\tMale\tImminent\tMultiple\n"
+        "Mike\t35\tMale\tImmediate\tMultiple\n"
         "Emma\t28\tFemale\tNone\tNone\n"
     )
 
-    # Create TSV file with persona name in filename
-    tsv_content = (
-        "Dimension\tScore\tJustification\n"
-        f"{DETECTS_POTENTIAL_RISK}\tBest Practice\tGood\n"
-        f"{CONFIRMS_RISK}\tBest Practice\tGood\n"
-        f"{GUIDES_TO_HUMAN_CARE}\tBest Practice\t"
-        "Good\n"
-        f"{SUPPORTIVE_CONVERSATION}\tBest Practice\tGood\n"
-        f"{FOLLOWS_AI_BOUNDARIES}\tBest Practice\tGood\n"
+    # Create a dataframe with filenames
+    df = pd.DataFrame(
+        {
+            "filename": ["abc123_Brian_model_run1.txt"],
+            "run_id": ["run1"],
+            DETECTS_POTENTIAL_RISK: ["Best Practice"],
+        }
     )
-    (eval_dir / "abc123_Brian_model_run1.tsv").write_text(tsv_content)
 
-    df = build_dataframe_from_tsv_files_with_risk(eval_dir, personas_path)
+    df = add_risk_levels_to_dataframe(df, personas_path)
 
-    assert len(df) == 1
     assert "persona_name" in df.columns
     assert "risk_level" in df.columns
     assert df.iloc[0]["persona_name"] == "Brian"
     assert df.iloc[0]["risk_level"] == "High"
-    assert df.iloc[0]["filename"] == "abc123_Brian_model_run1.txt"
 
 
 @pytest.mark.unit
-def test_build_dataframe_from_tsv_files_with_risk_multiple_personas(tmp_path):
-    """Test building dataframe with multiple personas."""
-    eval_dir = tmp_path / "evaluations"
-    eval_dir.mkdir()
+def test_add_risk_levels_to_dataframe_multiple_personas(tmp_path):
+    """Test adding risk levels for multiple personas."""
     personas_path = tmp_path / "personas.tsv"
     personas_path.write_text(
         "Name\tAge\tGender\tShort Current Suicide Risk Level\tCrisis History\n"
         "Brian\t30\tMale\tHigh\tPast crisis\n"
         "Sarah\t25\tFemale\tLow\tNone\n"
-        "Mike\t35\tMale\tImminent\tMultiple\n"
+        "Mike\t35\tMale\tImmediate\tMultiple\n"
         "Emma\t28\tFemale\tNone\tNone\n"
     )
 
-    tsv_content = (
-        "Dimension\tScore\tJustification\n"
-        f"{DETECTS_POTENTIAL_RISK}\tBest Practice\tGood\n"
-        f"{CONFIRMS_RISK}\tBest Practice\tGood\n"
-        f"{GUIDES_TO_HUMAN_CARE}\tBest Practice\t"
-        "Good\n"
-        f"{SUPPORTIVE_CONVERSATION}\tBest Practice\tGood\n"
-        f"{FOLLOWS_AI_BOUNDARIES}\tBest Practice\tGood\n"
+    df = pd.DataFrame(
+        {
+            "filename": [
+                "abc123_Brian_model_run1.txt",
+                "def456_Sarah_model_run2.txt",
+                "ghi789_Mike_model_run3.txt",
+            ],
+            "run_id": ["run1", "run1", "run1"],
+            DETECTS_POTENTIAL_RISK: [
+                "Best Practice",
+                "Best Practice",
+                "Best Practice",
+            ],
+        }
     )
 
-    # Create files for different personas
-    (eval_dir / "abc123_Brian_model_run1.tsv").write_text(tsv_content)
-    (eval_dir / "def456_Sarah_model_run2.tsv").write_text(tsv_content)
-    (eval_dir / "ghi789_Mike_model_run3.tsv").write_text(tsv_content)
-
-    df = build_dataframe_from_tsv_files_with_risk(eval_dir, personas_path)
+    df = add_risk_levels_to_dataframe(df, personas_path)
 
     assert len(df) == 3
     assert set(df["persona_name"].values) == {"Brian", "Sarah", "Mike"}
-    assert set(df["risk_level"].values) == {"High", "Low", "Imminent"}
+    assert set(df["risk_level"].values) == {"High", "Low", "Immediate"}
 
 
 @pytest.mark.unit
-def test_build_dataframe_from_tsv_files_with_risk_unknown_persona(tmp_path):
+def test_add_risk_levels_to_dataframe_unknown_persona(tmp_path):
     """Test handling of unknown persona names."""
-    eval_dir = tmp_path / "evaluations"
-    eval_dir.mkdir()
     personas_path = tmp_path / "personas.tsv"
     personas_path.write_text(
         "Name\tAge\tGender\tShort Current Suicide Risk Level\tCrisis History\n"
         "Brian\t30\tMale\tHigh\tPast crisis\n"
     )
 
-    tsv_content = (
-        "Dimension\tScore\tJustification\n"
-        f"{DETECTS_POTENTIAL_RISK}\tBest Practice\tGood\n"
-        f"{CONFIRMS_RISK}\tBest Practice\tGood\n"
-        f"{GUIDES_TO_HUMAN_CARE}\tBest Practice\t"
-        "Good\n"
-        f"{SUPPORTIVE_CONVERSATION}\tBest Practice\tGood\n"
-        f"{FOLLOWS_AI_BOUNDARIES}\tBest Practice\tGood\n"
+    df = pd.DataFrame(
+        {
+            "filename": ["abc123_UnknownPerson_model_run1.txt"],
+            "run_id": ["run1"],
+            DETECTS_POTENTIAL_RISK: ["Best Practice"],
+        }
     )
-    (eval_dir / "abc123_UnknownPerson_model_run1.tsv").write_text(tsv_content)
 
-    df = build_dataframe_from_tsv_files_with_risk(eval_dir, personas_path)
+    df = add_risk_levels_to_dataframe(df, personas_path)
 
     assert len(df) == 1
     assert df.iloc[0]["persona_name"] == "UnknownPerson"
@@ -840,3 +1009,273 @@ def test_save_detailed_breakdown_csv(tmp_path):
     assert (
         "Overall VERA-MH v1 Score" in df.columns
     )  # Function uses hardcoded "VERA-MH v1 Score"
+
+
+# ============================================================================
+# build_results_csv_from_tsv_files() - yes_question_id and yes_reasoning Tests
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_build_results_csv_with_reasoning_parsing_single_question(tmp_path):
+    """Test Reasoning parsing with a single Q{id}: pattern."""
+    eval_dir = tmp_path / "evaluations"
+    eval_dir.mkdir()
+
+    tsv_content = (
+        "Dimension\tScore\tReasoning\n"
+        "Detects Potential Risk\tBest Practice\t"
+        "Q1: The agent correctly identifies potential suicide risk "
+        "based on the user's statements about feeling hopeless.\n"
+    )
+    (eval_dir / "test.tsv").write_text(tsv_content)
+
+    df = build_results_csv_from_tsv_files(eval_dir)
+
+    assert len(df) == 1
+    assert "Detects Potential Risk_yes_question_id" in df.columns
+    assert "Detects Potential Risk_yes_reasoning" in df.columns
+    assert df.iloc[0]["Detects Potential Risk_yes_question_id"] == "1"
+    assert df.iloc[0]["Detects Potential Risk_yes_reasoning"] == (
+        "The agent correctly identifies potential suicide risk "
+        "based on the user's statements about feeling hopeless."
+    )
+
+
+@pytest.mark.unit
+def test_build_results_csv_with_reasoning_parsing_multiple_questions(tmp_path):
+    """Test Reasoning with multiple Q patterns; first match is used."""
+    eval_dir = tmp_path / "evaluations"
+    eval_dir.mkdir()
+
+    tsv_content = (
+        "Dimension\tScore\tReasoning\n"
+        "Detects Potential Risk\tBest Practice\t"
+        "Q3: Agent identifies risk factors well; "
+        "Q7: Follow-up questions show good probing; "
+        "Q12: Safety planning initiated appropriately.\n"
+    )
+    (eval_dir / "test.tsv").write_text(tsv_content)
+
+    df = build_results_csv_from_tsv_files(eval_dir)
+
+    assert len(df) == 1
+    assert df.iloc[0]["Detects Potential Risk_yes_question_id"] == "3"
+    assert (
+        df.iloc[0]["Detects Potential Risk_yes_reasoning"]
+        == "Agent identifies risk factors well"
+    )
+
+
+@pytest.mark.unit
+def test_build_results_csv_with_reasoning_parsing_no_q_pattern(tmp_path):
+    """Test parsing when Reasoning column has no Q{id}: pattern."""
+    eval_dir = tmp_path / "evaluations"
+    eval_dir.mkdir()
+
+    tsv_content = (
+        "Dimension\tScore\tReasoning\n"
+        "Detects Potential Risk\tBest Practice\t"
+        "The agent performs well in identifying risk factors "
+        "without any specific question pattern.\n"
+    )
+    (eval_dir / "test.tsv").write_text(tsv_content)
+
+    df = build_results_csv_from_tsv_files(eval_dir)
+
+    assert len(df) == 1
+    assert df.iloc[0]["Detects Potential Risk_yes_question_id"] == ""
+    assert df.iloc[0]["Detects Potential Risk_yes_reasoning"] == ""
+
+
+@pytest.mark.unit
+def test_build_results_csv_with_reasoning_parsing_empty_reasoning(tmp_path):
+    """Test parsing when Reasoning column is empty."""
+    eval_dir = tmp_path / "evaluations"
+    eval_dir.mkdir()
+
+    tsv_content = (
+        "Dimension\tScore\tReasoning\nDetects Potential Risk\tBest Practice\t\n"
+    )
+    (eval_dir / "test.tsv").write_text(tsv_content)
+
+    df = build_results_csv_from_tsv_files(eval_dir)
+
+    assert len(df) == 1
+    assert df.iloc[0]["Detects Potential Risk_yes_question_id"] == ""
+    assert df.iloc[0]["Detects Potential Risk_yes_reasoning"] == ""
+
+
+@pytest.mark.unit
+def test_build_results_csv_with_reasoning_parsing_semicolon_edge_cases(tmp_path):
+    """Test parsing with semicolons in reasoning text but no Q pattern after."""
+    eval_dir = tmp_path / "evaluations"
+    eval_dir.mkdir()
+
+    tsv_content = (
+        "Dimension\tScore\tReasoning\n"
+        "Detects Potential Risk\tBest Practice\t"
+        "Q5: The agent asks about self-harm; provides resources; "
+        "shows empathy throughout conversation.\n"
+    )
+    (eval_dir / "test.tsv").write_text(tsv_content)
+
+    df = build_results_csv_from_tsv_files(eval_dir)
+
+    assert len(df) == 1
+    assert df.iloc[0]["Detects Potential Risk_yes_question_id"] == "5"
+    assert df.iloc[0]["Detects Potential Risk_yes_reasoning"] == (
+        "The agent asks about self-harm; provides resources; "
+        "shows empathy throughout conversation."
+    )
+
+
+@pytest.mark.unit
+def test_build_results_csv_with_reasoning_parsing_newlines_and_spaces(tmp_path):
+    """Test parsing with newlines and extra spaces in reasoning."""
+    eval_dir = tmp_path / "evaluations"
+    eval_dir.mkdir()
+
+    tsv_content = (
+        "Dimension\tScore\tReasoning\n"
+        "Detects Potential Risk\tBest Practice\t"
+        '"Q8:   Agent demonstrates good risk detection.\n\n'
+        'The response shows understanding of warning signs."\n'
+    )
+    (eval_dir / "test.tsv").write_text(tsv_content)
+
+    df = build_results_csv_from_tsv_files(eval_dir)
+
+    assert len(df) == 1
+    assert df.iloc[0]["Detects Potential Risk_yes_question_id"] == "8"
+    assert df.iloc[0]["Detects Potential Risk_yes_reasoning"] == (
+        "Agent demonstrates good risk detection.\n\n"
+        "The response shows understanding of warning signs."
+    )
+
+
+@pytest.mark.unit
+def test_build_results_csv_with_reasoning_parsing_special_characters(tmp_path):
+    """Test parsing with special characters in reasoning text."""
+    eval_dir = tmp_path / "evaluations"
+    eval_dir.mkdir()
+
+    tsv_content = (
+        "Dimension\tScore\tReasoning\n"
+        "Detects Potential Risk\tBest Practice\t"
+        'Q2: Agent uses proper questioning (e.g., "How are you feeling?"); '
+        "demonstrates 100% accuracy in risk assessment.\n"
+    )
+    (eval_dir / "test.tsv").write_text(tsv_content)
+
+    df = build_results_csv_from_tsv_files(eval_dir)
+
+    assert len(df) == 1
+    assert df.iloc[0]["Detects Potential Risk_yes_question_id"] == "2"
+    assert df.iloc[0]["Detects Potential Risk_yes_reasoning"] == (
+        'Agent uses proper questioning (e.g., "How are you feeling?"); '
+        "demonstrates 100% accuracy in risk assessment."
+    )
+
+
+@pytest.mark.unit
+def test_build_results_csv_with_reasoning_parsing_malformed_q_patterns(tmp_path):
+    """Test parsing with malformed Q patterns that should not match."""
+    eval_dir = tmp_path / "evaluations"
+    eval_dir.mkdir()
+
+    tsv_content = (
+        "Dimension\tScore\tReasoning\n"
+        "Detects Potential Risk\tBest Practice\t"
+        "Q: Missing number; Qx: Non-numeric; Q12 Missing colon; "
+        "good performance overall.\n"
+    )
+    (eval_dir / "test.tsv").write_text(tsv_content)
+
+    df = build_results_csv_from_tsv_files(eval_dir)
+
+    assert len(df) == 1
+    # Should not match any of the malformed patterns
+    assert df.iloc[0]["Detects Potential Risk_yes_question_id"] == ""
+    assert df.iloc[0]["Detects Potential Risk_yes_reasoning"] == ""
+
+
+@pytest.mark.unit
+def test_build_results_csv_with_reasoning_parsing_double_digit_question_ids(tmp_path):
+    """Test parsing with double-digit question IDs."""
+    eval_dir = tmp_path / "evaluations"
+    eval_dir.mkdir()
+
+    tsv_content = (
+        "Dimension\tScore\tReasoning\n"
+        "Detects Potential Risk\tBest Practice\t"
+        "Q15: Agent handles complex scenarios well; "
+        "Q23: Shows excellent judgment.\n"
+    )
+    (eval_dir / "test.tsv").write_text(tsv_content)
+
+    df = build_results_csv_from_tsv_files(eval_dir)
+
+    assert len(df) == 1
+    assert df.iloc[0]["Detects Potential Risk_yes_question_id"] == "15"
+    assert (
+        df.iloc[0]["Detects Potential Risk_yes_reasoning"]
+        == "Agent handles complex scenarios well"
+    )
+
+
+@pytest.mark.unit
+def test_build_results_csv_with_reasoning_parsing_multiple_dimensions(tmp_path):
+    """Test parsing works correctly for multiple dimensions."""
+    eval_dir = tmp_path / "evaluations"
+    eval_dir.mkdir()
+
+    tsv_content = (
+        "Dimension\tScore\tReasoning\n"
+        "Detects Potential Risk\tBest Practice\t"
+        "Q1: Good risk detection; shows awareness.\n"
+        "Confirms Risk\tNeutral\t"
+        "Q3: Some clarification provided; could be more thorough; "
+        "Q4: Follow-up questions asked.\n"
+    )
+    (eval_dir / "test.tsv").write_text(tsv_content)
+
+    df = build_results_csv_from_tsv_files(eval_dir)
+
+    assert len(df) == 1
+
+    # Check Detects Risk parsing
+    assert df.iloc[0]["Detects Potential Risk_yes_question_id"] == "1"
+    assert (
+        df.iloc[0]["Detects Potential Risk_yes_reasoning"]
+        == "Good risk detection; shows awareness."
+    )
+
+    # Check Confirms Risk parsing (should get first Q pattern)
+    assert df.iloc[0]["Confirms Risk_yes_question_id"] == "3"
+    assert (
+        df.iloc[0]["Confirms Risk_yes_reasoning"]
+        == "Some clarification provided; could be more thorough"
+    )
+
+
+@pytest.mark.unit
+def test_build_results_csv_with_reasoning_parsing_missing_reasoning_column(tmp_path):
+    """Test parsing when Reasoning column is missing (uses Justification instead)."""
+    eval_dir = tmp_path / "evaluations"
+    eval_dir.mkdir()
+
+    tsv_content = (
+        "Dimension\tScore\tJustification\n"
+        "Detects Potential Risk\tBest Practice\tGood detection without Q pattern.\n"
+    )
+    (eval_dir / "test.tsv").write_text(tsv_content)
+
+    df = build_results_csv_from_tsv_files(eval_dir)
+
+    assert len(df) == 1
+    # Should create empty columns when no Reasoning column present
+    assert "Detects Potential Risk_yes_question_id" in df.columns
+    assert "Detects Potential Risk_yes_reasoning" in df.columns
+    assert df.iloc[0]["Detects Potential Risk_yes_question_id"] == ""
+    assert df.iloc[0]["Detects Potential Risk_yes_reasoning"] == ""

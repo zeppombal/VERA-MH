@@ -11,6 +11,7 @@ Visualization in score.py main is not exercised here.
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -791,6 +792,48 @@ def _personas_tsv_header() -> str:
     )
 
 
+def _mock_results_df(**kwargs):
+    """Build a minimal results DataFrame with full rubric dimension column names."""
+    filename = kwargs.pop("filename", ["abc123_Brian_model_run1.txt"])
+    n = len(filename)
+    run_id = kwargs.pop("run_id", ["run1"] * n)
+    data = {
+        "filename": filename,
+        "run_id": run_id,
+        DETECTS_POTENTIAL_RISK: [BEST_PRACTICE] * n,
+        CONFIRMS_RISK: [BEST_PRACTICE] * n,
+        GUIDES_TO_HUMAN_CARE: [BEST_PRACTICE] * n,
+        SUPPORTIVE_CONVERSATION: [BEST_PRACTICE] * n,
+        FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE] * n,
+    }
+    data.update(kwargs)
+    return pd.DataFrame(data)
+
+
+@pytest.mark.unit
+@patch("judge.score.ensure_results_csv")
+def test_score_results_by_risk_basic(mock_ensure_csv, tmp_path, fixtures_dir):
+    """Test basic scoring by risk level."""
+    csv_path = tmp_path / "results.csv"
+    personas_path = fixtures_dir / "personas_with_risk.tsv"
+
+    mock_df = _mock_results_df(
+        filename=["abc123_Brian_model_run1.txt", "def456_Sarah_model_run2.txt"],
+        **{
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, DAMAGING],
+            CONFIRMS_RISK: [NEUTRAL, BEST_PRACTICE],
+        },
+    )
+    mock_ensure_csv.return_value = mock_df
+    mock_df.to_csv(csv_path, index=False)
+
+    results = score_results_by_risk(str(csv_path), str(personas_path))
+
+    assert "risk_level_scores" in results
+    assert "High" in results["risk_level_scores"]
+    assert "Low" in results["risk_level_scores"]
+
+
 def _write_personas(path, *rows: str) -> None:
     path.write_text(_personas_tsv_header() + "".join(rows))
 
@@ -838,6 +881,34 @@ def test_score_results_by_risk_groups_by_risk_from_tsv(tmp_path):
 
 
 @pytest.mark.unit
+@patch("judge.score.ensure_results_csv")
+def test_score_results_by_risk_dimension_scores(
+    mock_ensure_csv, tmp_path, fixtures_dir
+):
+    """Test dimension scoring within risk levels."""
+    csv_path = tmp_path / "results.csv"
+    personas_path = fixtures_dir / "personas_with_risk.tsv"
+
+    mock_df = _mock_results_df(
+        filename=["abc123_Brian_model_run1.txt", "def456_Brian_model_run2.txt"],
+        **{
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, DAMAGING],
+            CONFIRMS_RISK: [NEUTRAL, NEUTRAL],
+        },
+    )
+    mock_ensure_csv.return_value = mock_df
+    mock_df.to_csv(csv_path, index=False)
+
+    results = score_results_by_risk(str(csv_path), str(personas_path))
+
+    high_risk = results["risk_level_scores"]["High"]
+    assert high_risk["total_conversations"] == 2
+    detects_risk_scores = high_risk["dimensions"][DETECTS_POTENTIAL_RISK]
+    assert detects_risk_scores[BEST_PRACTICE_KEY + "_pct"] == 50.0
+    assert detects_risk_scores[DAMAGING_KEY + "_pct"] == 50.0
+
+
+@pytest.mark.unit
 def test_score_results_by_risk_dimension_percentages_same_risk_bucket(tmp_path):
     """Multiple rows in one risk level aggregate dimension % from real TSVs."""
     eval_dir = tmp_path / "eval_run"
@@ -860,6 +931,33 @@ def test_score_results_by_risk_dimension_percentages_same_risk_bucket(tmp_path):
     det = high["dimensions"][DETECTS_POTENTIAL_RISK]
     assert det[BEST_PRACTICE_KEY + "_pct"] == 50.0
     assert det[DAMAGING_KEY + "_pct"] == 50.0
+
+
+@pytest.mark.unit
+@patch("judge.score.ensure_results_csv")
+def test_score_results_by_risk_includes_not_relevant(
+    mock_ensure_csv, tmp_path, fixtures_dir
+):
+    """Test that 'Not Relevant' is included in risk-level scoring."""
+    csv_path = tmp_path / "results.csv"
+    personas_path = fixtures_dir / "personas_with_risk.tsv"
+
+    mock_df = _mock_results_df(
+        filename=["abc123_Emma_model_run1.txt"],
+        **{
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
+            CONFIRMS_RISK: [NOT_RELEVANT],
+            SUPPORTIVE_CONVERSATION: [NOT_RELEVANT],
+        },
+    )
+    mock_ensure_csv.return_value = mock_df
+    mock_df.to_csv(csv_path, index=False)
+
+    results = score_results_by_risk(str(csv_path), str(personas_path))
+
+    none_risk = results["risk_level_scores"]["None"]
+    clarifies = none_risk["dimensions"][CONFIRMS_RISK]
+    assert NOT_RELEVANT_KEY + "_pct" in clarifies
 
 
 @pytest.mark.unit
@@ -908,6 +1006,26 @@ def test_score_results_by_risk_rewrites_results_csv_from_tsv(tmp_path):
 
 
 @pytest.mark.unit
+@patch("judge.score.ensure_results_csv")
+def test_score_results_by_risk_saves_updated_csv(
+    mock_ensure_csv, tmp_path, fixtures_dir
+):
+    """Test that updated dataframe is saved to CSV."""
+    csv_path = tmp_path / "results.csv"
+    personas_path = fixtures_dir / "personas_with_risk.tsv"
+
+    mock_df = _mock_results_df()
+    mock_ensure_csv.return_value = mock_df
+    mock_df.to_csv(csv_path, index=False)
+
+    score_results_by_risk(str(csv_path), str(personas_path))
+
+    updated = pd.read_csv(csv_path)
+    assert "persona_name" in updated.columns
+    assert "risk_level" in updated.columns
+
+
+@pytest.mark.unit
 def test_score_results_by_risk_writes_scores_by_risk_json(tmp_path):
     eval_dir = tmp_path / "eval_run"
     eval_dir.mkdir()
@@ -928,6 +1046,26 @@ def test_score_results_by_risk_writes_scores_by_risk_json(tmp_path):
 
 
 @pytest.mark.unit
+@patch("judge.score.ensure_results_csv")
+def test_score_results_by_risk_saves_json(mock_ensure_csv, tmp_path, fixtures_dir):
+    """Test that results are saved to JSON file."""
+    csv_path = tmp_path / "results.csv"
+    personas_path = fixtures_dir / "personas_with_risk.tsv"
+    expected_json_path = tmp_path / "scores_by_risk.json"
+
+    mock_df = _mock_results_df()
+    mock_ensure_csv.return_value = mock_df
+    mock_df.to_csv(csv_path, index=False)
+
+    score_results_by_risk(str(csv_path), str(personas_path))
+
+    assert expected_json_path.exists()
+    with open(expected_json_path) as f:
+        saved_results = json.load(f)
+    assert "risk_level_scores" in saved_results
+
+
+@pytest.mark.unit
 def test_score_results_by_risk_model_names_from_eval_dir(tmp_path):
     """Model names parsed from standard evaluation directory name."""
     eval_dir = tmp_path / "j_claude__p_gpt__a_gemini__t10__r5__12345"
@@ -939,6 +1077,28 @@ def test_score_results_by_risk_model_names_from_eval_dir(tmp_path):
     pd.DataFrame().to_csv(csv_path, index=False)
 
     results = score_results_by_risk(str(csv_path), str(personas))
+
+    assert results["judge_model"] == "claude"
+    assert results["persona_model"] == "gpt"
+    assert results["agent_model"] == "gemini"
+
+
+@pytest.mark.unit
+@patch("judge.score.ensure_results_csv")
+def test_score_results_by_risk_extracts_model_names(
+    mock_ensure_csv, tmp_path, fixtures_dir
+):
+    """Test extraction of model names in risk-level scoring."""
+    eval_dir = tmp_path / "j_claude__p_gpt__a_gemini__t10__r5__12345"
+    eval_dir.mkdir()
+    csv_path = eval_dir / "results.csv"
+    personas_path = fixtures_dir / "personas_with_risk.tsv"
+
+    mock_df = _mock_results_df()
+    mock_ensure_csv.return_value = mock_df
+    mock_df.to_csv(csv_path, index=False)
+
+    results = score_results_by_risk(str(csv_path), str(personas_path))
 
     assert results["judge_model"] == "claude"
     assert results["persona_model"] == "gpt"
