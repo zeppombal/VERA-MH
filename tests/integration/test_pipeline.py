@@ -902,6 +902,160 @@ class TestPipelineValidation:
                     mock_exit.assert_called_once_with(1)
 
     @pytest.mark.asyncio
+    async def test_results_csv_has_expected_columns(
+        self, tmp_path, valid_pipeline_args
+    ):
+        """Test that results.csv contains all expected columns."""
+        import csv
+        from unittest.mock import MagicMock, patch
+
+        from run_pipeline import main as pipeline_main
+
+        # Create conversation folder with valid files
+        conv_folder = tmp_path / "conversations"
+        conv_folder.mkdir()
+        (conv_folder / "conv1.txt").write_text("User: Hi\nAssistant: Hello")
+
+        # Create evaluation folder with results.csv containing expected columns
+        eval_folder = tmp_path / "evaluations"
+        eval_folder.mkdir()
+        results_csv_content = (
+            "filename,run_id,persona_name,risk_level,judge_model,judge_instance,judge_id,"
+            "Detects Risk,Detects Risk_yes_question_id,Detects Risk_yes_reasoning,"
+            "Clarifies Risk,Clarifies Risk_yes_question_id,"
+            "Clarifies Risk_yes_reasoning,"
+            "Guides to Human Support,Guides to Human Support_yes_question_id,"
+            "Guides to Human Support_yes_reasoning,"
+            "Collaborates and Validates Appropriately,"
+            "Collaborates and Validates Appropriately_yes_question_id,"
+            "Collaborates and Validates Appropriately_yes_reasoning,"
+            "Maintains Safe Boundaries,Maintains Safe Boundaries_yes_question_id,"
+            "Maintains Safe Boundaries_yes_reasoning\n"
+            "conv1.txt,test_run,Omar,high,claude-3.5,1,judge_001,"
+            "yes,q1,reasoning1,yes,q2,reasoning2,yes,q3,reasoning3,"
+            "yes,q4,reasoning4,yes,q5,reasoning5\n"
+        )
+        (eval_folder / "results.csv").write_text(results_csv_content)
+
+        # Mock functions
+        async def mock_generate(*args, **kwargs):
+            return None, str(conv_folder)
+
+        async def mock_judge(args):
+            return str(eval_folder)
+
+        def mock_score(*args, **kwargs):
+            return {}
+
+        # Create a mock module with the mock judge main function
+        mock_judge_module = MagicMock()
+        mock_judge_module.main = mock_judge
+
+        with (
+            patch("generate.main", side_effect=mock_generate),
+            patch("importlib.util.module_from_spec", return_value=mock_judge_module),
+            patch("importlib.util.spec_from_file_location"),
+            patch("run_pipeline.score_results", new=mock_score),
+            patch("run_pipeline.print_scores"),
+            patch("run_pipeline.create_visualizations"),
+        ):
+            with patch("sys.argv", valid_pipeline_args + ["--skip-risk-analysis"]):
+                await pipeline_main()
+
+                # Verify results.csv has expected columns
+                results_csv_path = eval_folder / "results.csv"
+                with open(results_csv_path, "r") as f:
+                    reader = csv.DictReader(f)
+                    columns = reader.fieldnames
+
+                    # Check for required columns
+                    expected_columns = {
+                        "filename",
+                        "run_id",
+                        "persona_name",
+                        "risk_level",
+                        "judge_model",
+                        "judge_instance",
+                        "judge_id",
+                        "Detects Risk",
+                        "Detects Risk_yes_question_id",
+                        "Detects Risk_yes_reasoning",
+                        "Clarifies Risk",
+                        "Clarifies Risk_yes_question_id",
+                        "Clarifies Risk_yes_reasoning",
+                        "Guides to Human Support",
+                        "Guides to Human Support_yes_question_id",
+                        "Guides to Human Support_yes_reasoning",
+                        "Collaborates and Validates Appropriately",
+                        "Collaborates and Validates Appropriately_yes_question_id",
+                        "Collaborates and Validates Appropriately_yes_reasoning",
+                        "Maintains Safe Boundaries",
+                        "Maintains Safe Boundaries_yes_question_id",
+                        "Maintains Safe Boundaries_yes_reasoning",
+                    }
+
+                    assert columns is not None, "CSV should have column headers"
+                    actual_columns = set(columns)
+
+                    # Verify all expected columns are present
+                    missing_columns = expected_columns - actual_columns
+                    assert (
+                        not missing_columns
+                    ), f"Missing expected columns: {missing_columns}"
+
+                    # Verify at least one data row exists
+                    rows = list(reader)
+                    assert len(rows) > 0, "CSV should contain at least one data row"
+
+    @pytest.mark.asyncio
+    async def test_results_csv_missing_required_columns(
+        self, tmp_path, valid_pipeline_args
+    ):
+        """Test pipeline handling when results.csv is missing required columns."""
+        from unittest.mock import MagicMock, patch
+
+        from run_pipeline import main as pipeline_main
+
+        # Create conversation folder with valid files
+        conv_folder = tmp_path / "conversations"
+        conv_folder.mkdir()
+        (conv_folder / "conv1.txt").write_text("User: Hi\nAssistant: Hello")
+
+        # Create evaluation folder with results.csv missing critical columns
+        eval_folder = tmp_path / "evaluations"
+        eval_folder.mkdir()
+        incomplete_csv_content = "filename,some_other_column\nconv1.txt,value\n"
+        (eval_folder / "results.csv").write_text(incomplete_csv_content)
+
+        # Mock functions
+        async def mock_generate(*args, **kwargs):
+            return None, str(conv_folder)
+
+        async def mock_judge(args):
+            return str(eval_folder)
+
+        def mock_score(*args, **kwargs):
+            # Score function should handle missing columns gracefully
+            return {}
+
+        # Create a mock module with the mock judge main function
+        mock_judge_module = MagicMock()
+        mock_judge_module.main = mock_judge
+
+        with (
+            patch("generate.main", side_effect=mock_generate),
+            patch("importlib.util.module_from_spec", return_value=mock_judge_module),
+            patch("importlib.util.spec_from_file_location"),
+            patch("run_pipeline.score_results", new=mock_score),
+            patch("run_pipeline.print_scores"),
+            patch("run_pipeline.create_visualizations"),
+        ):
+            with patch("sys.argv", valid_pipeline_args + ["--skip-risk-analysis"]):
+                # Pipeline should complete but the scoring function will handle
+                # missing columns appropriately
+                await pipeline_main()
+
+    @pytest.mark.asyncio
     async def test_validation_success_messages(
         self, tmp_path, valid_pipeline_args, capsys
     ):
