@@ -463,7 +463,8 @@ def build_results_csv_from_tsv_files(evaluations_dir) -> pd.DataFrame:
 
                 # Parse yes_question_id and yes_reasoning from reasoning column
                 # Format: "...Q{question_id}: {reasoning}..."
-                # Extract the first occurrence of Q{id}: pattern
+                # See _add_severity_reason in judge/llm_judge.py for more details
+                # Extract the first occurrence of Q{id}: {reasoning} pattern
                 yes_question_id = ""
                 yes_reasoning = ""
 
