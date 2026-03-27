@@ -3,6 +3,9 @@ __pycache__
 .venv
 conversations*/
 evaluations*/
+# Track publication_data (overrides conversations*/ and evaluations*/ above)
+!publication_data/
+!publication_data/**
 logging/
 logs/
 tmp_tests/
