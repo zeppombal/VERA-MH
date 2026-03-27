@@ -9,6 +9,7 @@ from llm_clients.llm_interface import Role
 from utils.conversation_utils import (
     add_timestamp_to_path,
     build_langchain_messages,
+    build_persona_last_provider_message_prefix,
     ensure_provider_has_last_turn,
     format_conversation_as_string,
     format_conversation_summary,
@@ -244,8 +245,9 @@ class TestBuildLangchainMessages:
             conversation_history=history,
         )
 
+        prefix = build_persona_last_provider_message_prefix()
         assert messages[0].text == multiline_text
-        assert messages[1].text == unicode_text
+        assert messages[1].text == prefix + unicode_text
 
     def test_build_messages_skips_none_response(self):
         """Test that turns with None response are skipped."""
@@ -306,6 +308,7 @@ class TestBuildLangchainMessages:
             conversation_history=history,
         )
 
+        prefix = build_persona_last_provider_message_prefix()
         assert len(messages) == 4  # 4 history messages
         # Persona's own messages should be AIMessage (what "I" said)
         assert isinstance(messages[0], AIMessage)
@@ -316,7 +319,7 @@ class TestBuildLangchainMessages:
         assert isinstance(messages[2], AIMessage)
         assert messages[2].text == "I'm feeling anxious"
         assert isinstance(messages[3], HumanMessage)
-        assert messages[3].text == "Tell me more"
+        assert messages[3].text == prefix + "Tell me more"
 
     def test_build_messages_without_persona_role_keeps_default(self):
         """Test that provider role uses role-based message types correctly."""
@@ -364,6 +367,7 @@ class TestBuildLangchainMessages:
             conversation_history=history,
         )
 
+        prefix = build_persona_last_provider_message_prefix()
         assert len(messages) == 3  # turn 0 + 2 history messages
         # Turn 0 should always be HumanMessage regardless of role
         assert isinstance(messages[0], HumanMessage)
@@ -373,7 +377,7 @@ class TestBuildLangchainMessages:
         assert messages[1].text == "Hello"
         # Turn 2 (provider) should be HumanMessage when persona role
         assert isinstance(messages[2], HumanMessage)
-        assert messages[2].text == "Hi"
+        assert messages[2].text == prefix + "Hi"
 
     def test_build_messages_provider_starts_conversation_for_provider_role(self):
         """Test for when PROVIDER starts, messages build correctly for provider role."""
@@ -686,6 +690,18 @@ class TestFormatConversationAsString:
             "Assistant:"
         )
         assert result == expected
+
+
+class TestPersonaRoleStability:
+    """Last-provider prefix for Role.PERSONA (no second-pass retry on outputs)."""
+
+    def test_provider_role_does_not_augment_last_human(self) -> None:
+        history = [
+            {"turn": 1, "speaker": "persona", "response": "Hi"},
+            {"turn": 2, "speaker": "provider", "response": "Hello"},
+        ]
+        messages = build_langchain_messages(Role.PROVIDER, history)
+        assert messages[-1].text == "Hello"
 
 
 class TestAddTimestampToPath:

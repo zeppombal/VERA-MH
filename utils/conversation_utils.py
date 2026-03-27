@@ -134,19 +134,28 @@ def format_conversation_summary(
 
 def build_persona_role_reminder() -> str:
     """
-    Build a role reminder message for personas to prevent role confusion.
-    This reminder is injected before conversation history to reinforce that
-    the persona should maintain their character as a user in distress, not
-    adopt the chatbot's supportive counselor role.
-    Returns:
-        The role reminder text to inject as a HumanMessage
+    Short reminder that the persona LLM plays the help-seeker, not the counselor.
+
+    Used inside the prefix for the provider's latest message (Role.PERSONA only).
     """
     return (
-        "REMINDER: You are the USER seeking help from the chatbot. "
-        "The conversation below shows YOUR messages (what you said) and "
-        "the CHATBOT's responses (what it said). Continue responding AS "
-        "YOURSELF - the user in distress. Do NOT provide advice, support, "
-        "or counseling. Do NOT copy the chatbot's supportive language."
+        "Reminder: You are portraying the human user seeking help from the chatbot, "
+        "not the counselor or helper. "
+        "Stay consistent with the persona and scenario in your instructions. "
+        "Continue in character: share that person's feelings, questions, and reactions "
+        "in their own words. "
+        "Do not give advice, counseling, or support to the chatbot. "
+        "Do not mirror the chatbot's therapist-like or overly supportive phrasing."
+    )
+
+
+def build_persona_last_provider_message_prefix() -> str:
+    """Prefix for the last provider HumanMessage when the requester is PERSONA."""
+    return (
+        build_persona_role_reminder() + "\n\n"
+        "The chatbot's latest reply follows. "
+        "Read it, then respond as the user would.\n\n"
+        "--- chatbot message ---\n\n"
     )
 
 
@@ -203,8 +212,7 @@ def build_langchain_messages(
                         message = HumanMessage(content=text)
                 except (ValueError, TypeError):
                     raise ValueError(
-                        f"Invalid role value '{turn_speaker}' "
-                        f"for turn {turn_number}"
+                        f"Invalid role value '{turn_speaker}' for turn {turn_number}"
                     )
             else:
                 raise ValueError(f"Speaker is not provided for turn {turn_number}")
@@ -213,6 +221,25 @@ def build_langchain_messages(
             preview = text[:50] + "..." if len(text) > 50 else text
             debug_print(f"  Turn {turn_number} -> {msg_type}: {preview}")
             messages.append(message)
+
+    if role == Role.PERSONA and messages and conversation_history:
+        last_turn: Optional[Dict[str, Any]] = None
+        for turn in conversation_history:
+            if turn.get("turn") is None or turn.get("response") is None:
+                continue
+            last_turn = turn
+        if last_turn and last_turn.get("turn") != 0:
+            speaker = last_turn.get("speaker")
+            if speaker is not None:
+                try:
+                    if Role(speaker) == Role.PROVIDER and isinstance(
+                        messages[-1], HumanMessage
+                    ):
+                        prefix = build_persona_last_provider_message_prefix()
+                        combined = prefix + messages[-1].text
+                        messages[-1] = HumanMessage(content=combined)
+                except (ValueError, TypeError):
+                    raise ValueError(f"Invalid role value '{speaker}' for last turn")
 
     return messages
 

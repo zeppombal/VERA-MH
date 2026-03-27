@@ -160,7 +160,6 @@ class AzureLLM(JudgeLLM):
             messages.append(SystemMessage(content=self.system_prompt))
 
         # Build messages from history
-        # Role reminder is automatically added for personas by build_langchain_messages
         messages.extend(build_langchain_messages(self.role, conversation_history))
 
         # Debug: Print messages being sent to LLM
@@ -169,7 +168,7 @@ class AzureLLM(JudgeLLM):
             msg_type = type(msg).__name__
             preview = msg.text[:100]
             content_preview = preview + "..." if len(msg.text) > 100 else msg.text
-            debug_print(f"  {i+1}. {msg_type}: {content_preview}")
+            debug_print(f"  {i + 1}. {msg_type}: {content_preview}")
 
         try:
             # Debug: Print what we're about to send
@@ -248,9 +247,7 @@ class AzureLLM(JudgeLLM):
                     "with current credentials\n"
                     f"\n  Error details: {error_details}"
                 )
-                debug_print(
-                    f"\n[DEBUG {self.name} - {self.role.value}] " f"{helpful_msg}"
-                )
+                debug_print(f"\n[DEBUG {self.name} - {self.role.value}] {helpful_msg}")
                 return f"Error generating response: {helpful_msg}"
 
             return f"Error generating response: {error_msg}"
