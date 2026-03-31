@@ -4,8 +4,9 @@ import asyncio
 import os
 import time
 import uuid
+from asyncio import Queue
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from llm_clients import LLMFactory
 from llm_clients.llm_interface import LLMGenerationFailed, Role
@@ -50,6 +51,60 @@ class ConversationRunner:
         self.max_total_words = max_total_words
         self.max_personas = max_personas
         self.persona_speaks_first = persona_speaks_first
+
+    def _create_conversation_jobs(
+        self, persona_names: Optional[List[str]] = None
+    ) -> List[Tuple[dict, int, int, int]]:
+        """Create job tuples for all persona/run combinations."""
+        personas = load_prompts_from_csv(persona_names, max_personas=self.max_personas)
+        jobs: List[Tuple[dict, int, int, int]] = []
+        conversation_index = 1
+        for persona in personas:
+            for run in range(1, self.runs_per_prompt + 1):
+                jobs.append(
+                    (
+                        {
+                            "model": self.persona_model_config["model"],
+                            "prompt": persona["prompt"],
+                            "name": persona["Name"],
+                            "run": run,
+                        },
+                        self.max_turns,
+                        conversation_index,
+                        run,
+                    )
+                )
+                conversation_index += 1
+        return jobs
+
+    async def _worker(
+        self,
+        worker_id: int,
+        queue: Queue,
+        results: List[Dict[str, Any]],
+        total_jobs: int,
+    ) -> None:
+        """Worker that processes conversation generation jobs from a queue."""
+        while True:
+            try:
+                job = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+
+            persona_config, max_turns, conversation_index, run_number = job
+            conversation_name = persona_config.get("name", "Unknown")
+            print(
+                f"[Worker {worker_id}] ({len(results) + 1}/{total_jobs}) "
+                f"{conversation_name} (run {run_number})"
+            )
+            result = await self.run_single_conversation(
+                persona_config=persona_config,
+                max_turns=max_turns,
+                conversation_index=conversation_index,
+                run_number=run_number,
+            )
+            results.append(result)
+            queue.task_done()
 
     async def run_single_conversation(
         self,
@@ -222,51 +277,29 @@ class ConversationRunner:
     async def run_conversations(
         self, persona_names: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
-        """Run multiple conversations concurrently."""
-        # Load prompts from CSV based on persona names
-        personas = load_prompts_from_csv(persona_names, max_personas=self.max_personas)
-
-        # Create tasks for all conversations (each prompt run multiple times)
-        tasks = []
-        conversation_index = 1
-
-        for persona in personas:
-            for run in range(1, self.runs_per_prompt + 1):
-                tasks.append(
-                    self.run_single_conversation(
-                        {
-                            "model": self.persona_model_config["model"],
-                            "prompt": persona["prompt"],
-                            "name": persona["Name"],
-                            "run": run,
-                        },
-                        self.max_turns,
-                        conversation_index,
-                        run,
-                    )
-                )
-                conversation_index += 1
-
-        # Run all conversations with concurrency limit
+        """Run multiple conversations concurrently using queue workers."""
+        jobs = self._create_conversation_jobs(persona_names=persona_names)
+        total_jobs = len(jobs)
         start_time = datetime.now()
+        queue: Queue = Queue()
+        for job in jobs:
+            await queue.put(job)
 
-        if self.max_concurrent and len(tasks) > self.max_concurrent:
-            # Use semaphore to limit concurrent conversations
-            semaphore = asyncio.Semaphore(self.max_concurrent)
-
-            async def run_with_limit(task):
-                async with semaphore:
-                    return await task
-
+        num_workers = total_jobs if self.max_concurrent is None else self.max_concurrent
+        if self.max_concurrent is None:
+            print(f"Running {total_jobs} conversations concurrently (no limit)")
+        else:
             print(
-                f"Running {len(tasks)} conversations with max concurrency: "
+                f"Running {total_jobs} conversations with max concurrency: "
                 f"{self.max_concurrent}"
             )
-            results = await asyncio.gather(*[run_with_limit(task) for task in tasks])
-        else:
-            # Run all conversations concurrently (no limit)
-            print(f"Running {len(tasks)} conversations concurrently (no limit)")
-            results = await asyncio.gather(*tasks)
+
+        results: List[Dict[str, Any]] = []
+        workers = [
+            asyncio.create_task(self._worker(i, queue, results, total_jobs))
+            for i in range(num_workers)
+        ]
+        await asyncio.gather(*workers)
 
         end_time = datetime.now()
         total_time = (end_time - start_time).total_seconds()
