@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import os
+import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -10,6 +11,34 @@ from generate_conversations import ConversationRunner
 from llm_clients.llm_interface import DEFAULT_START_PROMPT
 from utils.debug import set_debug
 from utils.utils import parse_key_value_list
+
+
+def _model_to_run_token(model_name: str) -> str:
+    return model_name.replace("-", "_").replace(".", "_")
+
+
+def _parse_run_folder_name(folder_name: str) -> Dict[str, Any]:
+    """
+    Parse a run folder name:
+      p_{persona}__a_{agent}__t{turns}__r{runs}__{timestamp}
+    """
+    pattern = (
+        r"^p_(?P<persona>.+)__a_(?P<agent>.+)__t(?P<turns>\d+)__r(?P<runs>\d+)__"
+        r"(?P<timestamp>\d{8}_\d{6})$"
+    )
+    match = re.match(pattern, folder_name)
+    if not match:
+        raise ValueError(
+            "Resume mode requires --folder-name to be a run folder with format "
+            "'p_{persona}__a_{agent}__t{turns}__r{runs}__{timestamp}'."
+        )
+    return {
+        "persona": match.group("persona"),
+        "agent": match.group("agent"),
+        "turns": int(match.group("turns")),
+        "runs": int(match.group("runs")),
+        "timestamp": match.group("timestamp"),
+    }
 
 
 async def main(
@@ -27,6 +56,7 @@ async def main(
     max_total_words: Optional[int] = None,
     max_personas: Optional[int] = None,
     persona_speaks_first: bool = True,
+    resume: bool = False,
 ) -> tuple[List[Dict[str, Any]], str]:
     """
     Generate conversations and return results.
@@ -73,15 +103,52 @@ async def main(
         print(f"  - Max total words: {max_total_words}")
         print(f"  - Max personas: {max_personas}")
         print(f"  - Persona speaks first: {persona_speaks_first}")
+        print(f"  - Resume: {resume}")
 
     # Generate default folder name if not provided
     if folder_name is None:
         folder_name = "conversations"
 
-    if run_id is None:
+    if resume:
+        if not os.path.isdir(folder_name):
+            raise ValueError(
+                "Resume mode requires --folder-name to point to an existing run folder."
+            )
+        run_folder_name = os.path.basename(os.path.normpath(folder_name))
+        run_meta = _parse_run_folder_name(run_folder_name)
+        expected_persona = _model_to_run_token(persona_model_config["model"])
+        expected_agent = _model_to_run_token(agent_model_config["model"])
+
+        if run_meta["persona"] != expected_persona:
+            raise ValueError(
+                "Resume folder persona model does not match current --user-agent. "
+                f"Expected p_{expected_persona}, got p_{run_meta['persona']}."
+            )
+        if run_meta["agent"] != expected_agent:
+            raise ValueError(
+                "Resume folder provider model does not match current --provider-agent. "
+                f"Expected a_{expected_agent}, got a_{run_meta['agent']}."
+            )
+        if run_meta["turns"] != max_turns:
+            raise ValueError(
+                "Resume folder max turns does not match current --turns. "
+                f"Expected t{max_turns}, got t{run_meta['turns']}."
+            )
+        if run_meta["runs"] != runs_per_prompt:
+            raise ValueError(
+                "Resume folder runs-per-prompt does not match current --runs. "
+                f"Expected r{runs_per_prompt}, got r{run_meta['runs']}."
+            )
+        if run_id is None:
+            run_id = run_folder_name
+        elif run_id != run_folder_name:
+            raise ValueError(
+                "Resume mode requires --run-id to match the run folder name when set."
+            )
+    elif run_id is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        persona_info = persona_model_config["model"].replace("-", "_").replace(".", "_")
-        agent_info = agent_model_config["model"].replace("-", "_").replace(".", "_")
+        persona_info = _model_to_run_token(persona_model_config["model"])
+        agent_info = _model_to_run_token(agent_model_config["model"])
 
         run_id = (
             f"p_{persona_info}__a_{agent_info}__t{max_turns}__"
@@ -103,6 +170,7 @@ async def main(
         max_total_words=max_total_words,
         max_personas=max_personas,
         persona_speaks_first=persona_speaks_first,
+        resume=resume,
     )
 
     # Run conversations
@@ -206,6 +274,15 @@ if __name__ == "__main__":
             "Default is 'conversations'."
         ),
         default="conversations",
+    )
+    parser.add_argument(
+        "--resume",
+        help=(
+            "Resume a previous run from an existing run folder. "
+            "Skips transcripts that already exist for persona/run pairs."
+        ),
+        action="store_true",
+        default=False,
     )
 
     parser.add_argument(
@@ -334,5 +411,6 @@ if __name__ == "__main__":
             max_total_words=args.max_total_words,
             max_personas=args.max_personas,
             persona_speaks_first=not args.provider_speaks_first,
+            resume=args.resume,
         )
     )

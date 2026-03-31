@@ -811,6 +811,117 @@ class TestConversationRunnerMultiple:
         indices = sorted([r["index"] for r in results])
         assert indices == [1, 2, 3, 4]
 
+    async def test_resume_mode_skips_existing_persona_run(
+        self,
+        tmp_path: Path,
+        basic_persona_config: Dict[str, Any],
+        basic_agent_config: Dict[str, Any],
+        mock_llm_factory,
+    ) -> None:
+        """Resume mode skips transcript when persona/run already exists."""
+        conv_folder = tmp_path / "conversations"
+        conv_folder.mkdir(parents=True, exist_ok=True)
+        # Existing transcript for Persona1 run1
+        (conv_folder / "abc123_Persona1_mock-persona-model_run1.txt").write_text(
+            "user: hi\n\nchatbot: hello\n", encoding="utf-8"
+        )
+
+        runner = create_test_runner(
+            basic_persona_config,
+            basic_agent_config,
+            "test_run",
+            max_turns=2,
+            runs_per_prompt=2,
+            folder_name=str(conv_folder),
+            resume=True,
+        )
+        mock_personas = [{"Name": "Persona1", "prompt": "Prompt 1"}]
+
+        with patch("generate_conversations.runner.load_prompts_from_csv") as mock_load:
+            mock_load.return_value = mock_personas
+            with patch(
+                "generate_conversations.runner.setup_conversation_logger"
+            ) as mock_logger:
+                mock_logger.return_value = MagicMock()
+                results = await runner.run_conversations(persona_names=None)
+
+        assert len(results) == 2
+        assert sum(1 for r in results if r.get("skipped")) == 1
+        assert sum(1 for r in results if not r.get("skipped")) == 1
+
+    async def test_non_resume_mode_does_not_skip_existing_persona_run(
+        self,
+        tmp_path: Path,
+        basic_persona_config: Dict[str, Any],
+        basic_agent_config: Dict[str, Any],
+        mock_llm_factory,
+    ) -> None:
+        """Without resume mode, existing files do not suppress new runs."""
+        conv_folder = tmp_path / "conversations"
+        conv_folder.mkdir(parents=True, exist_ok=True)
+        (conv_folder / "abc123_Persona1_mock-persona-model_run1.txt").write_text(
+            "user: hi\n\nchatbot: hello\n", encoding="utf-8"
+        )
+
+        runner = create_test_runner(
+            basic_persona_config,
+            basic_agent_config,
+            "test_run",
+            max_turns=2,
+            runs_per_prompt=2,
+            folder_name=str(conv_folder),
+            resume=False,
+        )
+        mock_personas = [{"Name": "Persona1", "prompt": "Prompt 1"}]
+
+        with patch("generate_conversations.runner.load_prompts_from_csv") as mock_load:
+            mock_load.return_value = mock_personas
+            with patch(
+                "generate_conversations.runner.setup_conversation_logger"
+            ) as mock_logger:
+                mock_logger.return_value = MagicMock()
+                results = await runner.run_conversations(persona_names=None)
+
+        assert len(results) == 2
+        assert all(not r.get("skipped") for r in results)
+
+    async def test_resume_mode_skips_existing_persona_with_underscore_name(
+        self,
+        tmp_path: Path,
+        basic_persona_config: Dict[str, Any],
+        basic_agent_config: Dict[str, Any],
+        mock_llm_factory,
+    ) -> None:
+        """Resume matching handles persona names that include underscores."""
+        conv_folder = tmp_path / "conversations"
+        conv_folder.mkdir(parents=True, exist_ok=True)
+        # Simulates: "Mary Jane" -> "Mary_Jane" and model short like g5.2
+        (conv_folder / "707d63_Mary_Jane_mock-persona-model_run1.txt").write_text(
+            "user: hi\n\nchatbot: hello\n", encoding="utf-8"
+        )
+
+        runner = create_test_runner(
+            basic_persona_config,
+            basic_agent_config,
+            "test_run",
+            max_turns=2,
+            runs_per_prompt=1,
+            folder_name=str(conv_folder),
+            resume=True,
+        )
+        mock_personas = [{"Name": "Mary Jane", "prompt": "Prompt 1"}]
+
+        with patch("generate_conversations.runner.load_prompts_from_csv") as mock_load:
+            mock_load.return_value = mock_personas
+            with patch(
+                "generate_conversations.runner.setup_conversation_logger"
+            ) as mock_logger:
+                mock_logger.return_value = MagicMock()
+                results = await runner.run_conversations(persona_names=None)
+
+        assert len(results) == 1
+        assert results[0].get("skipped") is True
+
     async def test_agent_config_not_mutated_across_concurrent_conversations(
         self,
         tmp_path: Path,

@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import re
 import time
 import uuid
 from datetime import datetime
@@ -36,6 +37,7 @@ class ConversationRunner:
         max_total_words: Optional[int] = None,
         max_personas: Optional[int] = None,
         persona_speaks_first: bool = True,
+        resume: bool = False,
     ):
         self.persona_model_config = persona_model_config
         self.agent_model_config = agent_model_config
@@ -50,6 +52,64 @@ class ConversationRunner:
         self.max_total_words = max_total_words
         self.max_personas = max_personas
         self.persona_speaks_first = persona_speaks_first
+        self.resume = resume
+
+    @staticmethod
+    def _to_persona_safe(persona_name: str) -> str:
+        """Normalize persona names to the on-disk filename format."""
+        return persona_name.replace(" ", "_").replace(".", "")
+
+    @staticmethod
+    def _extract_run_number(filename: str) -> Optional[int]:
+        """
+        Extract run_number from generated transcript filename.
+
+        Expected shape:
+            {tag}_{persona_safe}_{model_short}_run{N}.txt
+        """
+        match = re.match(
+            r"^[^_]+_.+_run(?P<run>\d+)\.txt$",
+            filename,
+        )
+        if not match:
+            return None
+        return int(match.group("run"))
+
+    def _index_existing_conversations(self) -> set[tuple[str, int]]:
+        """
+        Index existing transcript files as (persona_safe, run_number).
+
+        Model segment is intentionally ignored to avoid coupling skip logic to
+        filename model-short formatting.
+        """
+        existing: set[tuple[str, int]] = set()
+        if not os.path.isdir(self.folder_name):
+            return existing
+
+        # Suffix after random hash:
+        # {persona_safe}_{model_segment}_run{N}.txt
+        # We capture persona greedily up to the final `_runN.txt` marker.
+        suffix_pattern = re.compile(r"^(?P<persona>.+)_.+_run(?P<run>\d+)\.txt$")
+        for filename in os.listdir(self.folder_name):
+            if not filename.endswith(".txt"):
+                continue
+            parts = filename.split("_", 1)
+            if len(parts) != 2:
+                continue
+            match = suffix_pattern.match(parts[1])
+            if not match:
+                continue
+            existing.add((match.group("persona"), int(match.group("run"))))
+        return existing
+
+    @staticmethod
+    def _has_existing_transcript(
+        persona_safe: str,
+        run_number: int,
+        existing_keys: set[tuple[str, int]],
+    ) -> bool:
+        """Return True when a transcript exists for this exact persona/run."""
+        return (persona_safe, run_number) in existing_keys
 
     async def run_single_conversation(
         self,
@@ -163,6 +223,7 @@ class ConversationRunner:
                     "early_termination": False,
                     "conversation": [],
                     "skipped": True,
+                    "skip_reason": "error",
                     "error": str(e),
                 }
             else:
@@ -225,13 +286,36 @@ class ConversationRunner:
         """Run multiple conversations concurrently."""
         # Load prompts from CSV based on persona names
         personas = load_prompts_from_csv(persona_names, max_personas=self.max_personas)
+        existing_keys = self._index_existing_conversations() if self.resume else set()
 
         # Create tasks for all conversations (each prompt run multiple times)
         tasks = []
+        skipped_results: List[Dict[str, Any]] = []
         conversation_index = 1
 
         for persona in personas:
             for run in range(1, self.runs_per_prompt + 1):
+                persona_safe = self._to_persona_safe(persona["Name"])
+                if self._has_existing_transcript(persona_safe, run, existing_keys):
+                    skipped_results.append(
+                        {
+                            "index": conversation_index,
+                            "llm1_model": self.persona_model_config["model"],
+                            "llm1_prompt": persona["Name"],
+                            "run_number": run,
+                            "turns": 0,
+                            "filename": None,
+                            "log_file": None,
+                            "duration": 0.0,
+                            "early_termination": False,
+                            "conversation": [],
+                            "skipped": True,
+                            "skip_reason": "existing",
+                            "error": "Transcript already exists in output folder",
+                        }
+                    )
+                    conversation_index += 1
+                    continue
                 tasks.append(
                     self.run_single_conversation(
                         {
@@ -268,15 +352,27 @@ class ConversationRunner:
             print(f"Running {len(tasks)} conversations concurrently (no limit)")
             results = await asyncio.gather(*tasks)
 
+        results = skipped_results + results
+
         end_time = datetime.now()
         total_time = (end_time - start_time).total_seconds()
 
         skipped_n = sum(1 for r in results if r.get("skipped"))
+        skipped_existing_n = sum(
+            1
+            for r in results
+            if r.get("skipped") and r.get("skip_reason") == "existing"
+        )
+        skipped_error_n = sum(
+            1 for r in results if r.get("skipped") and r.get("skip_reason") == "error"
+        )
         print(
             f"\nCompleted {len(results)-skipped_n} / {len(results)} conversations in "
             f"{total_time:.2f} seconds"
         )
-        if skipped_n:
-            print(f"  ({skipped_n} skipped due to errors)")
+        if skipped_existing_n:
+            print(f"  ({skipped_existing_n} skipped: transcript already exists)")
+        if skipped_error_n:
+            print(f"  ({skipped_error_n} skipped due to errors)")
 
         return results
