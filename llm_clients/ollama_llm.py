@@ -131,7 +131,7 @@ class OllamaLLM(LLMInterface):
 
             return response_text
 
-        return await self._run_with_retry(_invoke)
+        return await self._run_with_retry(_invoke, provider="ollama")
 
     def set_system_prompt(self, system_prompt: str) -> None:
         """Set or update the system prompt."""

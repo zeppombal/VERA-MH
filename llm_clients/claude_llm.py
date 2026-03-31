@@ -144,7 +144,7 @@ class ClaudeLLM(JudgeLLM):
 
             return response.text
 
-        return await self._run_with_retry(_invoke)
+        return await self._run_with_retry(_invoke, provider="claude")
 
     async def generate_structured_response(
         self, message: Optional[str], response_model: Type[T]
@@ -185,7 +185,7 @@ class ClaudeLLM(JudgeLLM):
 
             return response  # type: ignore[return-value]
 
-        return await self._run_with_retry(_invoke)
+        return await self._run_with_retry(_invoke, provider="claude")
 
     def set_system_prompt(self, system_prompt: str) -> None:
         """Set or update the system prompt."""

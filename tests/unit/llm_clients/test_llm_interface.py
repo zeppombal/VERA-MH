@@ -61,14 +61,14 @@ class RetryHarness(LLMInterface):
                 raise RuntimeError("transient")
             return "done"
 
-        return await self._run_with_retry(inner)
+        return await self._run_with_retry(inner, provider="harness")
 
     async def always_fail(self) -> None:
         async def inner() -> str:
             self.fail_count += 1
             raise RuntimeError("always")
 
-        await self._run_with_retry(inner)
+        await self._run_with_retry(inner, provider="harness")
 
 
 @pytest.mark.unit
@@ -351,3 +351,53 @@ class TestLLMInterface:
         with pytest.raises(LLMGenerationFailed) as exc:
             await h._run_with_retry(inner)
         assert str(exc.value) == "fatal"
+
+    @pytest.mark.asyncio
+    async def test_run_with_retry_clears_stale_metadata_on_failure(self):
+        h = RetryHarness()
+        h.last_response_metadata = {"provider": "stale", "response_id": "old"}
+
+        with pytest.raises(LLMGenerationFailed):
+            await h.always_fail()
+
+        metadata = h.last_response_metadata
+        assert metadata["provider"] == "harness"
+        assert metadata["error"] == "always"
+        assert metadata["attempt"] == 4
+        assert metadata["max_attempts"] == 4
+        assert metadata["retryable"] is True
+        assert metadata["will_retry"] is False
+        assert metadata.get("response_id") is None
+
+    @pytest.mark.asyncio
+    async def test_run_with_retry_on_error_callback_updates_metadata(self):
+        h = RetryHarness()
+
+        async def inner() -> str:
+            raise RuntimeError("boom")
+
+        def _on_error(
+            err: BaseException,
+            attempt: int,
+            max_attempts: int,
+            retryable: bool,
+            will_retry: bool,
+        ) -> dict[str, object]:
+            return {
+                "provider_error_type": type(err).__name__,
+                "observed_attempt": attempt,
+                "attempts_total": max_attempts,
+                "observed_retryable": retryable,
+                "observed_will_retry": will_retry,
+            }
+
+        with pytest.raises(LLMGenerationFailed):
+            await h._run_with_retry(inner, provider="harness", on_error=_on_error)
+
+        metadata = h.last_response_metadata
+        assert metadata["provider"] == "harness"
+        assert metadata["provider_error_type"] == "RuntimeError"
+        assert metadata["observed_attempt"] == 4
+        assert metadata["attempts_total"] == 4
+        assert metadata["observed_retryable"] is True
+        assert metadata["observed_will_retry"] is False

@@ -171,7 +171,7 @@ class OpenAILLM(JudgeLLM):
 
             return response.text
 
-        return await self._run_with_retry(_invoke)
+        return await self._run_with_retry(_invoke, provider="openai")
 
     async def generate_structured_response(
         self, message: Optional[str], response_model: Type[T]
@@ -212,7 +212,7 @@ class OpenAILLM(JudgeLLM):
 
             return response  # type: ignore[return-value]
 
-        return await self._run_with_retry(_invoke)
+        return await self._run_with_retry(_invoke, provider="openai")
 
     def set_system_prompt(self, system_prompt: str) -> None:
         """Set or update the system prompt."""

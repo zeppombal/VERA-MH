@@ -10,6 +10,9 @@ from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
 R = TypeVar("R")
+RetryOnErrorCallback = Callable[
+    [BaseException, int, int, bool, bool], Optional[Dict[str, Any]]
+]
 
 # Retries after the first attempt (loop range(MAX_LLM_RETRIES + 1) => 4 total attempts).
 MAX_LLM_RETRIES = 3
@@ -105,7 +108,9 @@ class LLMInterface(ABC):
         self,
         get_coro: Callable[[], Awaitable[R]],
         *,
+        provider: Optional[str] = None,
         no_retry_substrings: tuple[str, ...] = (),
+        on_error: Optional[RetryOnErrorCallback] = None,
     ) -> R:
         """Run an async call with retries.
 
@@ -114,22 +119,55 @@ class LLMInterface(ABC):
         can skip the job without crashing the batch. On exhaustion after retries,
         raise LLMGenerationFailed from the last error.
         """
+        max_attempts = MAX_LLM_RETRIES + 1
         merged_no_retry = (*self._no_retry_substrings(), *no_retry_substrings)
         last_exception: Optional[BaseException] = None
-        for attempt in range(MAX_LLM_RETRIES + 1):
+        for attempt in range(max_attempts):
+            attempt_number = attempt + 1
+            # Clear stale metadata so failed calls cannot inherit prior success state.
+            self.last_response_metadata = {}
             try:
                 return await get_coro()
-            except LLMGenerationFailed:
+            except LLMGenerationFailed as e:
+                # If callers already set error metadata in _invoke, preserve it;
+                # otherwise write a standardized failure payload here.
+                if not self._last_response_metadata:
+                    self._set_response_metadata(
+                        provider or "unknown",
+                        error=str(e),
+                        attempt=attempt_number,
+                        max_attempts=max_attempts,
+                        retryable=False,
+                        will_retry=False,
+                    )
                 raise
             except Exception as e:
                 last_exception = e
-                if _no_retry_matches(e, merged_no_retry):
+                retryable = not _no_retry_matches(e, merged_no_retry)
+                will_retry = retryable and attempt < MAX_LLM_RETRIES
+
+                self._set_response_metadata(
+                    provider or "unknown",
+                    error=str(e),
+                    attempt=attempt_number,
+                    max_attempts=max_attempts,
+                    retryable=retryable,
+                    will_retry=will_retry,
+                )
+                if on_error is not None:
+                    extra = on_error(
+                        e, attempt_number, max_attempts, retryable, will_retry
+                    )
+                    if extra:
+                        self._last_response_metadata.update(extra)
+
+                if not retryable:
                     raise LLMGenerationFailed(f"LLM error (non-retryable): {e}") from e
                 if attempt == MAX_LLM_RETRIES:
                     break
         assert last_exception is not None
         raise LLMGenerationFailed(
-            f"LLM call failed after {MAX_LLM_RETRIES + 1} attempts: {last_exception}"
+            f"LLM call failed after {max_attempts} attempts: {last_exception}"
         ) from last_exception
 
     def _set_response_metadata(self, provider: str, **extra: Any) -> None:

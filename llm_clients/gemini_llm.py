@@ -154,7 +154,7 @@ class GeminiLLM(JudgeLLM):
 
             return response.text
 
-        return await self._run_with_retry(_invoke)
+        return await self._run_with_retry(_invoke, provider="gemini")
 
     async def generate_structured_response(
         self, message: Optional[str], response_model: Type[T]
@@ -195,7 +195,7 @@ class GeminiLLM(JudgeLLM):
 
             return response  # type: ignore[return-value]
 
-        return await self._run_with_retry(_invoke)
+        return await self._run_with_retry(_invoke, provider="gemini")
 
     def set_system_prompt(self, system_prompt: str) -> None:
         """Set or update the system prompt."""

@@ -91,7 +91,7 @@ class EndpointLLM(LLMInterface):
                     resp_data, round(time.time() - start_time, 3)
                 )
 
-            return await self._run_with_retry(_start_invoke)
+            return await self._run_with_retry(_start_invoke, provider="endpoint")
         else:
             return await self.generate_response(self.get_initial_prompt_turns())
 
@@ -189,7 +189,7 @@ class EndpointLLM(LLMInterface):
                 resp_data, round(time.time() - start_time, 3)
             )
 
-        return await self._run_with_retry(_invoke)
+        return await self._run_with_retry(_invoke, provider="endpoint")
 
     def set_system_prompt(self, system_prompt: str) -> None:
         """Set or update the system prompt."""
