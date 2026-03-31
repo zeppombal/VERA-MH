@@ -529,7 +529,7 @@ async def judge_conversations(
         )
         print(f"  Wall time: {elapsed_s:.2f} seconds")
         if skipped_n:
-            print(f"  ({skipped_n} skipped after LLM failures)")
+            print(f"  ({skipped_n} skipped due to errors)")
 
     return results, output_folder
 

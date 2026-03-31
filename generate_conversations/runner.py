@@ -277,6 +277,6 @@ class ConversationRunner:
             f"{total_time:.2f} seconds"
         )
         if skipped_n:
-            print(f"  ({skipped_n} skipped after LLM failures)")
+            print(f"  ({skipped_n} skipped due to errors)")
 
         return results
