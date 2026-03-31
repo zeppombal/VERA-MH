@@ -6,6 +6,7 @@ This script is separate from conversation generation.
 
 import argparse
 import asyncio
+import os
 from typing import Optional
 
 from judge import judge_conversations, judge_single_conversation
@@ -84,7 +85,19 @@ def get_parser() -> argparse.ArgumentParser:
         "--output",
         "-o",
         default="evaluations",
-        help="Output folder for evaluation results (default: evaluations)",
+        help=(
+            "Output root for evaluation results (default: evaluations). "
+            "With --resume, must be an existing evaluation run folder."
+        ),
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        default=False,
+        help=(
+            "Resume a previous evaluation run from an existing output folder and "
+            "skip conversation/judge-instance TSVs that already exist."
+        ),
     )
 
     # concurrency control
@@ -159,18 +172,29 @@ async def main(args) -> Optional[str]:
 
         folder_name = Path(args.folder).name
 
-        _, output_folder = await judge_conversations(
+        judge_kwargs = dict(
             judge_models=judge_models,
             conversations=conversations,
             rubric_config=rubric_config,
             max_concurrent=args.max_concurrent,
-            output_root=args.output,
             conversation_folder_name=folder_name,
             verbose=True,
             judge_model_extra_params=args.judge_model_extra_params,
             per_judge=args.per_judge,
             verbose_workers=args.verbose_workers,
+            resume=args.resume,
         )
+        if args.resume:
+            if not os.path.isdir(args.output):
+                raise ValueError(
+                    "Resume mode requires --output to point to an existing "
+                    "evaluation run folder."
+                )
+            judge_kwargs["output_folder"] = args.output
+        else:
+            judge_kwargs["output_root"] = args.output
+
+        _, output_folder = await judge_conversations(**judge_kwargs)
 
         return output_folder
 

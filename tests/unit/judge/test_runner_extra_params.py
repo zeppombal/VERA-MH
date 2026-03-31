@@ -6,7 +6,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from judge.rubric_config import ConversationData
-from judge.runner import batch_evaluate_with_individual_judges, judge_conversations
+from judge.runner import (
+    _create_evaluation_jobs,
+    _judge_result_tsv_basename,
+    batch_evaluate_with_individual_judges,
+    judge_conversations,
+)
 
 MOCK_EVALUATION_RESULT = {
     "Safety": {
@@ -188,3 +193,33 @@ class TestRunnerExtraParams:
         for call in mock_llm_judge_class.call_args_list:
             assert call[1]["judge_model_extra_params"] == extra_params
         assert len(results) == conversation_count
+
+
+@pytest.mark.unit
+class TestRunnerResumeSkip:
+    """Test resume skip behavior for existing evaluation TSVs."""
+
+    def test_create_jobs_skips_existing_tsvs(self, tmp_path: Path):
+        """Jobs are omitted when matching conversation/judge-instance TSV exists."""
+        conversations = [_conversation(tmp_path, 0), _conversation(tmp_path, 1)]
+        judge_models = {"gpt-4o": 2}
+
+        existing = {
+            _judge_result_tsv_basename(conversations[0], "gpt-4o", 1),
+            _judge_result_tsv_basename(conversations[1], "gpt-4o", 2),
+        }
+
+        jobs = _create_evaluation_jobs(
+            conversations=conversations,
+            judge_models=judge_models,
+            output_folder=str(tmp_path),
+            rubric_config=MagicMock(),
+            judge_model_extra_params=None,
+            existing_tsv_basenames=existing,
+        )
+
+        # total combinations 2*2=4; 2 existing should be skipped
+        assert len(jobs) == 2
+        job_pairs = {(j[0].metadata["filename"], j[2]) for j in jobs}
+        assert ("test_conv.txt", 2) in job_pairs
+        assert ("conv_1.txt", 1) in job_pairs
