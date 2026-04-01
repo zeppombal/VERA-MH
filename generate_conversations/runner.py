@@ -231,6 +231,12 @@ class ConversationRunner:
                 end_time = time.time()
                 conversation_time = end_time - start_time
                 print(f"Skipped conversation ({persona_name}, run {run_number}): {e}")
+                logger.error(
+                    "CONVERSATION FAILED | persona=%s run=%s error=%s",
+                    persona_name,
+                    run_number,
+                    str(e),
+                )
                 result = {
                     "index": conversation_index,
                     "llm1_model": model_name,
