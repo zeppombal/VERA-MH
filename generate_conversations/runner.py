@@ -91,20 +91,45 @@ class ConversationRunner:
             except asyncio.QueueEmpty:
                 break
 
-            persona_config, max_turns, conversation_index, run_number = job
-            conversation_name = persona_config.get("name", "Unknown")
-            print(
-                f"[Worker {worker_id}] ({len(results) + 1}/{total_jobs}) "
-                f"{conversation_name} (run {run_number})"
-            )
-            result = await self.run_single_conversation(
-                persona_config=persona_config,
-                max_turns=max_turns,
-                conversation_index=conversation_index,
-                run_number=run_number,
-            )
+            try:
+                persona_config, max_turns, conversation_index, run_number = job
+                conversation_name = persona_config.get("name", "Unknown")
+                print(
+                    f"[Worker {worker_id}] ({len(results) + 1}/{total_jobs}) "
+                    f"{conversation_name} (run {run_number})"
+                )
+                result = await self.run_single_conversation(
+                    persona_config=persona_config,
+                    max_turns=max_turns,
+                    conversation_index=conversation_index,
+                    run_number=run_number,
+                )
+            except Exception as exc:
+                # Don't let one failed job cancel all workers.
+                # Keep result schema stable.
+                result = {
+                    "index": job[2] if len(job) > 2 else -1,
+                    "llm1_model": self.persona_model_config.get("model", "unknown"),
+                    "llm1_prompt": (
+                        job[0].get("name", "Unknown")
+                        if isinstance(job[0], dict)
+                        else "Unknown"
+                    ),
+                    "run_number": job[3] if len(job) > 3 else 0,
+                    "turns": 0,
+                    "filename": None,
+                    "log_file": None,
+                    "duration": 0.0,
+                    "early_termination": False,
+                    "conversation": [],
+                    "skipped": True,
+                    "error": str(exc),
+                }
+                print(f"[Worker {worker_id}] Failed job: {result['error']}")
+            finally:
+                queue.task_done()
+
             results.append(result)
-            queue.task_done()
 
     async def run_single_conversation(
         self,
@@ -286,7 +311,9 @@ class ConversationRunner:
             await queue.put(job)
 
         if self.max_concurrent is not None and self.max_concurrent < 0:
-            raise ValueError("max_concurrent must be None, 0 (no limit), or a positive integer")
+            raise ValueError(
+                "max_concurrent must be None, 0 (no limit), or a positive integer"
+            )
 
         if self.max_concurrent in (None, 0):
             num_workers = total_jobs
@@ -310,7 +337,8 @@ class ConversationRunner:
 
         skipped_n = sum(1 for r in results if r.get("skipped"))
         print(
-            f"\nCompleted {len(results)-skipped_n} / {len(results)} conversations in "
+            f"\nCompleted {len(results)-skipped_n} / {len(results)} "
+            f"conversations in "
             f"{total_time:.2f} seconds"
         )
         if skipped_n:
