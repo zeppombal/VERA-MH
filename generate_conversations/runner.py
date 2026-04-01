@@ -285,10 +285,14 @@ class ConversationRunner:
         for job in jobs:
             await queue.put(job)
 
-        num_workers = total_jobs if self.max_concurrent is None else self.max_concurrent
-        if self.max_concurrent is None:
+        if self.max_concurrent is not None and self.max_concurrent < 0:
+            raise ValueError("max_concurrent must be None, 0 (no limit), or a positive integer")
+
+        if self.max_concurrent in (None, 0):
+            num_workers = total_jobs
             print(f"Running {total_jobs} conversations concurrently (no limit)")
         else:
+            num_workers = self.max_concurrent
             print(
                 f"Running {total_jobs} conversations with max concurrency: "
                 f"{self.max_concurrent}"
