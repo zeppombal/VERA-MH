@@ -401,3 +401,33 @@ class TestLLMInterface:
         assert metadata["attempts_total"] == 4
         assert metadata["observed_retryable"] is True
         assert metadata["observed_will_retry"] is False
+
+    @pytest.mark.asyncio
+    async def test_run_with_retry_waits_between_retryable_attempts(self, monkeypatch):
+        h = RetryHarness()
+        delays = [0.11, 0.22, 0.33]
+        observed_sleep_calls: list[float] = []
+        observed_metadata_delay_values: list[float] = []
+
+        def fake_delay(_: int) -> float:
+            return delays[len(observed_sleep_calls)]
+
+        async def fake_sleep(delay: float) -> None:
+            observed_metadata_delay_values.append(
+                h.last_response_metadata["retry_delay_seconds"]
+            )
+            observed_sleep_calls.append(delay)
+
+        monkeypatch.setattr(
+            "llm_clients.llm_interface._compute_retry_delay_seconds", fake_delay
+        )
+        monkeypatch.setattr("llm_clients.llm_interface.asyncio.sleep", fake_sleep)
+
+        with pytest.raises(LLMGenerationFailed):
+            await h.always_fail()
+
+        assert observed_sleep_calls == delays
+        assert observed_metadata_delay_values == [round(d, 3) for d in delays]
+        metadata = h.last_response_metadata
+        assert metadata["attempt"] == 4
+        assert metadata["will_retry"] is False
