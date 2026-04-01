@@ -221,76 +221,75 @@ class ConversationRunner:
 
         result: Optional[Dict[str, Any]] = None
         try:
-            try:
-                conversation = await simulator.generate_conversation(
-                    max_turns=max_turns,
-                    max_total_words=self.max_total_words,
-                    persona_speaks_first=self.persona_speaks_first,
-                )
-            except LLMGenerationFailed as e:
-                end_time = time.time()
-                conversation_time = end_time - start_time
-                print(f"Skipped conversation ({persona_name}, run {run_number}): {e}")
-                logger.error(
-                    "CONVERSATION FAILED | persona=%s run=%s error=%s",
-                    persona_name,
-                    run_number,
-                    str(e),
-                )
-                result = {
-                    "index": conversation_index,
-                    "llm1_model": model_name,
-                    "llm1_prompt": persona_name,
-                    "run_number": run_number,
-                    "turns": 0,
-                    "filename": None,
-                    "log_file": log_file_path,
-                    "duration": conversation_time,
-                    "early_termination": False,
-                    "conversation": [],
-                    "skipped": True,
-                    "error": str(e),
-                }
-            else:
-                for i, turn in enumerate(conversation, 1):
-                    log_conversation_turn(
-                        logger=logger,
-                        turn_number=i,
-                        speaker=turn.get("speaker", "Unknown"),
-                        input_message=turn.get("input", ""),
-                        response=turn.get("response", ""),
-                        early_termination=turn.get("early_termination", False),
-                        logging=turn.get("logging", {}),
-                    )
-
-                end_time = time.time()
-                conversation_time = end_time - start_time
-                early_termination = any(
-                    turn.get("early_termination", False) for turn in conversation
-                )
-
-                log_conversation_end(
+            conversation = await simulator.generate_conversation(
+                max_turns=max_turns,
+                max_total_words=self.max_total_words,
+                persona_speaks_first=self.persona_speaks_first,
+            )
+        except LLMGenerationFailed as e:
+            end_time = time.time()
+            conversation_time = end_time - start_time
+            print(f"Skipped conversation ({persona_name}, run {run_number}): {e}")
+            logger.error(
+                "CONVERSATION FAILED | persona=%s run=%s error=%s",
+                persona_name,
+                run_number,
+                str(e),
+            )
+            result = {
+                "index": conversation_index,
+                "llm1_model": model_name,
+                "llm1_prompt": persona_name,
+                "run_number": run_number,
+                "turns": 0,
+                "filename": None,
+                "log_file": log_file_path,
+                "duration": conversation_time,
+                "early_termination": False,
+                "conversation": [],
+                "skipped": True,
+                "error": str(e),
+            }
+        else:
+            for i, turn in enumerate(conversation, 1):
+                log_conversation_turn(
                     logger=logger,
-                    total_turns=len(conversation),
-                    early_termination=early_termination,
-                    total_time=conversation_time,
+                    turn_number=i,
+                    speaker=turn.get("speaker", "Unknown"),
+                    input_message=turn.get("input", ""),
+                    response=turn.get("response", ""),
+                    early_termination=turn.get("early_termination", False),
+                    logging=turn.get("logging", {}),
                 )
 
-                simulator.save_conversation(f"{filename_base}.txt", self.folder_name)
+            end_time = time.time()
+            conversation_time = end_time - start_time
+            early_termination = any(
+                turn.get("early_termination", False) for turn in conversation
+            )
 
-                result = {
-                    "index": conversation_index,
-                    "llm1_model": model_name,
-                    "llm1_prompt": persona_name,
-                    "run_number": run_number,
-                    "turns": len(conversation),
-                    "filename": f"{self.folder_name}/{filename_base}.txt",
-                    "log_file": log_file_path,
-                    "duration": conversation_time,
-                    "early_termination": early_termination,
-                    "conversation": conversation,
-                    "skipped": False,
-                }
+            log_conversation_end(
+                logger=logger,
+                total_turns=len(conversation),
+                early_termination=early_termination,
+                total_time=conversation_time,
+            )
+
+            simulator.save_conversation(f"{filename_base}.txt", self.folder_name)
+
+            result = {
+                "index": conversation_index,
+                "llm1_model": model_name,
+                "llm1_prompt": persona_name,
+                "run_number": run_number,
+                "turns": len(conversation),
+                "filename": f"{self.folder_name}/{filename_base}.txt",
+                "log_file": log_file_path,
+                "duration": conversation_time,
+                "early_termination": early_termination,
+                "conversation": conversation,
+                "skipped": False,
+            }
         finally:
             cleanup_logger(logger)
 
