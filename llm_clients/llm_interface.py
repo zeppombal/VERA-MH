@@ -182,6 +182,14 @@ class LLMInterface(ABC):
         """Set or update the system prompt."""
         pass
 
+    def _post_process_response(self, response: str) -> str:
+        """Post-process a raw LLM response before it enters the conversation history.
+
+        No-op by default. Override in subclasses to strip provider-specific
+        artifacts (e.g. trailing metadata tags appended by the backend).
+        """
+        return response
+
     async def cleanup(self) -> None:
         """Clean up any resources used by this LLM instance.
 
