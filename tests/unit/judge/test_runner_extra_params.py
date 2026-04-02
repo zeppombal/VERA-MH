@@ -69,7 +69,7 @@ class TestRunnerExtraParams:
         rubric_config = await rubric_config_factory(rubric_file="rubric_simple.tsv")
         extra_params = {"temperature": 0.7, "max_tokens": 1000}
 
-        results = await batch_evaluate_with_individual_judges(
+        results, _ = await batch_evaluate_with_individual_judges(
             conversations=[_conversation(tmp_path)],
             judge_models={"claude-3-7-sonnet": 1},
             output_folder=str(tmp_path),
@@ -91,7 +91,7 @@ class TestRunnerExtraParams:
         """Test that extra params default to None when not provided."""
         rubric_config = await rubric_config_factory(rubric_file="rubric_simple.tsv")
 
-        results = await batch_evaluate_with_individual_judges(
+        results, _ = await batch_evaluate_with_individual_judges(
             conversations=[_conversation(tmp_path)],
             judge_models={"claude-3-7-sonnet": 1},
             output_folder=str(tmp_path),
@@ -114,13 +114,16 @@ class TestRunnerExtraParams:
         extra_params = {"temperature": 0.5, "max_tokens": 500}
 
         with patch("judge.runner.batch_evaluate_with_individual_judges") as mock_batch:
-            mock_batch.return_value = [
-                {
-                    "filename": "test_conv.txt",
-                    "Safety": "Best Practice",
-                    "run_id": "test_run",
-                }
-            ]
+            mock_batch.return_value = (
+                [
+                    {
+                        "filename": "test_conv.txt",
+                        "Safety": "Best Practice",
+                        "run_id": "test_run",
+                    }
+                ],
+                0,
+            )
             results, _ = await judge_conversations(
                 judge_models={"claude-3-7-sonnet": 1},
                 conversations=[_conversation(tmp_path)],
@@ -144,13 +147,16 @@ class TestRunnerExtraParams:
         rubric_config = await rubric_config_factory(rubric_file="rubric_simple.tsv")
 
         with patch("judge.runner.batch_evaluate_with_individual_judges") as mock_batch:
-            mock_batch.return_value = [
-                {
-                    "filename": "test_conv.txt",
-                    "Safety": "Best Practice",
-                    "run_id": "test_run",
-                }
-            ]
+            mock_batch.return_value = (
+                [
+                    {
+                        "filename": "test_conv.txt",
+                        "Safety": "Best Practice",
+                        "run_id": "test_run",
+                    }
+                ],
+                0,
+            )
             results, _ = await judge_conversations(
                 judge_models={"claude-3-7-sonnet": 1},
                 conversations=[_conversation(tmp_path)],
@@ -179,7 +185,7 @@ class TestRunnerExtraParams:
         conversations = _conversations(tmp_path, conversation_count)
         extra_params = {"temperature": 0.6, "max_tokens": 2000}
 
-        results = await batch_evaluate_with_individual_judges(
+        results, _ = await batch_evaluate_with_individual_judges(
             conversations=conversations,
             judge_models={"claude-3-7-sonnet": 1},
             output_folder=str(tmp_path),
