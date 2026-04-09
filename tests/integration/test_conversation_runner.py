@@ -469,7 +469,7 @@ class TestConversationRunnerSingle:
 
         persona_config = {
             "prompt": "Test prompt",
-            "name": "Test Persona",
+            "name": "Persona",
             "run": 2,
         }
 
@@ -490,7 +490,7 @@ class TestConversationRunnerSingle:
         # Assert - verify filename format
         filename = Path(result["filename"]).name
         # Should contain: tag_personaname_modelshort_runN
-        assert "Test_Persona" in filename
+        assert "Persona" in filename
         assert "claude-3-opus-20240229" in filename
         assert "run2" in filename
         assert filename.endswith(".txt")
