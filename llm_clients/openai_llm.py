@@ -18,10 +18,13 @@ class OpenAILLM(JudgeLLM):
     """OpenAI implementation using LangChain."""
 
     def _no_retry_substrings(self) -> tuple[str, ...]:
+        # https://platform.openai.com/docs/guides/error-codes
         return (
             "insufficient_quota",
             "billing_hard_limit",
             "Your account is not active",
+            "invalid_api_key",
+            "account_deactivated",
         )
 
     def __init__(

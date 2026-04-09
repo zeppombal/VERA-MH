@@ -93,8 +93,12 @@ class OllamaLLM(LLMInterface):
         return await self.generate_response(self.get_initial_prompt_turns())
 
     def _no_retry_substrings(self) -> tuple[str, ...]:
-        """Substrings in str(exception) that disable retry (e.g. quota/billing)."""
-        return ("not found",)
+        # Typical Ollama server errors when model is missing or misconfigured.
+        return (
+            "model not found",
+            "unknown model",
+            " not found",  # e.g. Model 'name:tag' not found
+        )
 
     async def generate_response(
         self,

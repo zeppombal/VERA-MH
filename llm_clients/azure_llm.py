@@ -23,6 +23,18 @@ class AzureLLM(JudgeLLM):
 
     DEFAULT_API_VERSION = "2024-05-01-preview"
 
+    def _no_retry_substrings(self) -> tuple[str, ...]:
+        # Azure OpenAI / Foundry: overlaps OpenAI-style errors plus Azure-specific text.
+        return (
+            "insufficient_quota",
+            "billing_hard_limit",
+            "Your account is not active",
+            "invalid_api_key",
+            "DeploymentNotFound",
+            "ResourceNotFound",
+            "ResponsibleAIPolicyViolation",
+        )
+
     def __init__(
         self,
         name: str,
