@@ -27,6 +27,7 @@ from judge.score_viz import (
     create_visualizations,
 )
 from llm_clients.llm_interface import DEFAULT_START_PROMPT
+from utils.naming import is_generation_run_folder_basename
 from utils.utils import parse_key_value_list
 
 
@@ -50,7 +51,7 @@ def validate_pipeline_resume_args(args: argparse.Namespace) -> None:
             )
             sys.exit(2)
         base = os.path.basename(folder)
-        if not (base.startswith("p_") and "__a_" in base):
+        if not is_generation_run_folder_basename(base):
             print(
                 "error: --resume-generate: --folder-name must be the run folder itself "
                 f"(basename like p_*__a_*__...), not {base!r}",

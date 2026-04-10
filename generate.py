@@ -3,7 +3,6 @@
 import argparse
 import asyncio
 import os
-import re
 import sys
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -11,35 +10,12 @@ from typing import Any, Dict, List, Optional
 from generate_conversations import ConversationRunner
 from llm_clients.llm_interface import DEFAULT_START_PROMPT
 from utils.debug import set_debug
+from utils.naming import (
+    build_generation_run_folder_name,
+    model_token_for_run_folder,
+    parse_generation_run_folder_name,
+)
 from utils.utils import parse_key_value_list
-
-
-def _model_to_run_token(model_name: str) -> str:
-    return model_name.replace("-", "_").replace(".", "_")
-
-
-def _parse_run_folder_name(folder_name: str) -> Dict[str, Any]:
-    """
-    Parse a run folder name:
-      p_{persona}__a_{agent}__t{turns}__r{runs}__{timestamp}
-    """
-    pattern = (
-        r"^p_(?P<persona>.+)__a_(?P<agent>.+)__t(?P<turns>\d+)__r(?P<runs>\d+)__"
-        r"(?P<timestamp>\d{8}_\d{6})$"
-    )
-    match = re.match(pattern, folder_name)
-    if not match:
-        raise ValueError(
-            "Resume mode requires --folder-name to be a run folder with format "
-            "'p_{persona}__a_{agent}__t{turns}__r{runs}__{timestamp}'."
-        )
-    return {
-        "persona": match.group("persona"),
-        "agent": match.group("agent"),
-        "turns": int(match.group("turns")),
-        "runs": int(match.group("runs")),
-        "timestamp": match.group("timestamp"),
-    }
 
 
 async def main(
@@ -116,9 +92,9 @@ async def main(
                 "Resume mode requires --folder-name to point to an existing run folder."
             )
         run_folder_name = os.path.basename(os.path.normpath(folder_name))
-        run_meta = _parse_run_folder_name(run_folder_name)
-        expected_persona = _model_to_run_token(persona_model_config["model"])
-        expected_agent = _model_to_run_token(agent_model_config["model"])
+        run_meta = parse_generation_run_folder_name(run_folder_name)
+        expected_persona = model_token_for_run_folder(persona_model_config["model"])
+        expected_agent = model_token_for_run_folder(agent_model_config["model"])
 
         if run_meta["persona"] != expected_persona:
             raise ValueError(
@@ -148,12 +124,12 @@ async def main(
             )
     elif run_id is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        persona_info = _model_to_run_token(persona_model_config["model"])
-        agent_info = _model_to_run_token(agent_model_config["model"])
-
-        run_id = (
-            f"p_{persona_info}__a_{agent_info}__t{max_turns}__"
-            f"r{runs_per_prompt}__{timestamp}"
+        run_id = build_generation_run_folder_name(
+            persona_model_config["model"],
+            agent_model_config["model"],
+            max_turns,
+            runs_per_prompt,
+            timestamp,
         )
         folder_name = f"{folder_name}/{run_id}"
         # TODO: do we want to give a message if the folder already exists?

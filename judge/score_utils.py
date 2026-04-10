@@ -147,6 +147,8 @@ def parse_evaluation_filename(filename: str) -> Dict[str, Union[str, int]]:
     """
     Parse an evaluation filename to extract components.
 
+    Basenames come from `judge.utils.judge_evaluation_tsv_filename` (see LLMJudge).
+
     Format: {id}_{persona}_{user_model}_{run}_{judge_model}_{iteration}.tsv
     Example: 000682_Alix_gemini-3-pro-preview_run22_gpt-4o_i1.tsv
 

@@ -30,6 +30,15 @@ def parse_judge_models(model_arg):
     return judge_models
 
 
+def build_evaluation_run_folder_path(
+    output_root: str,
+    judge_info: str,
+    timestamp: str,
+    conversation_run_basename: str,
+) -> str:
+    return f"{output_root}/j_{judge_info}_{timestamp}__{conversation_run_basename}"
+
+
 def judge_evaluation_tsv_filename(
     conversation_filename: str,
     judge_model: str,

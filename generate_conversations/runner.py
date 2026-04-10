@@ -3,7 +3,6 @@
 import asyncio
 import logging
 import os
-import re
 import time
 import uuid
 from asyncio import Queue
@@ -18,6 +17,10 @@ from utils.logging_utils import (
     log_conversation_start,
     log_conversation_turn,
     setup_conversation_logger,
+)
+from utils.naming import (
+    TRANSCRIPT_RUN_SUFFIX_RE,
+    persona_token_for_transcript_stem,
 )
 
 from .conversation_simulator import ConversationSimulator
@@ -56,14 +59,6 @@ class ConversationRunner:
         self.persona_speaks_first = persona_speaks_first
         self.resume = resume
 
-    # Suffix after first `_` in `{tag}_{persona_safe}_{model}_run{N}.txt`
-    _RUN_SUFFIX_RE = re.compile(r"_run(?P<run>\d+)\.txt$")
-
-    @staticmethod
-    def _to_persona_safe(persona_name: str) -> str:
-        """Normalize persona names to the on-disk filename format."""
-        return persona_name.replace(" ", "_").replace(".", "")
-
     @staticmethod
     def _resolve_persona_safe_from_stem(
         stem: str, persona_safe_names: AbstractSet[str]
@@ -89,7 +84,7 @@ class ConversationRunner:
         self, suffix: str, persona_safe_names: AbstractSet[str]
     ) -> Optional[tuple[str, int]]:
         """Parse `{persona_safe}_{model}_run{N}.txt` using known persona_safe names."""
-        match = self._RUN_SUFFIX_RE.search(suffix)
+        match = TRANSCRIPT_RUN_SUFFIX_RE.search(suffix)
         if not match:
             return None
         run = int(match.group("run"))
@@ -409,7 +404,9 @@ class ConversationRunner:
     ) -> List[Dict[str, Any]]:
         """Run multiple conversations concurrently using queue workers."""
         personas = load_prompts_from_csv(persona_names, max_personas=self.max_personas)
-        persona_safe_names = {self._to_persona_safe(p["Name"]) for p in personas}
+        persona_safe_names = {
+            persona_token_for_transcript_stem(p["Name"]) for p in personas
+        }
         existing_keys = (
             self._index_existing_conversations(persona_safe_names)
             if self.resume
@@ -423,7 +420,7 @@ class ConversationRunner:
 
         for persona in personas:
             for run in range(1, self.runs_per_prompt + 1):
-                persona_safe = self._to_persona_safe(persona["Name"])
+                persona_safe = persona_token_for_transcript_stem(persona["Name"])
                 if self._has_existing_transcript(persona_safe, run, existing_keys):
                     skipped_results.append(
                         {

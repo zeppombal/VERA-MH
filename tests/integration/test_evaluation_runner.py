@@ -2064,8 +2064,8 @@ class TestRunnerHelperFunctions:
         from judge.runner import (
             _create_evaluation_jobs,
             _index_existing_evaluation_tsv_basenames,
-            _judge_result_tsv_basename,
         )
+        from judge.utils import judge_evaluation_tsv_filename
 
         conversations = [
             ConversationData(
@@ -2088,7 +2088,9 @@ class TestRunnerHelperFunctions:
         )
         assert len(jobs) == 2
 
-        existing_name = _judge_result_tsv_basename(conversations[0], "gpt-4o", 1)
+        existing_name = judge_evaluation_tsv_filename(
+            conversations[0].metadata["filename"], "gpt-4o", 1
+        )
         (out / existing_name).write_text(
             "Dimension\tScore\tReasoning\n", encoding="utf-8"
         )

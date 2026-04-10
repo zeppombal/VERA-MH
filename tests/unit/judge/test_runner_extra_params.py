@@ -8,10 +8,10 @@ import pytest
 from judge.rubric_config import ConversationData
 from judge.runner import (
     _create_evaluation_jobs,
-    _judge_result_tsv_basename,
     batch_evaluate_with_individual_judges,
     judge_conversations,
 )
+from judge.utils import judge_evaluation_tsv_filename
 
 MOCK_EVALUATION_RESULT = {
     "Safety": {
@@ -205,8 +205,12 @@ class TestRunnerResumeSkip:
         judge_models = {"gpt-4o": 2}
 
         existing = {
-            _judge_result_tsv_basename(conversations[0], "gpt-4o", 1),
-            _judge_result_tsv_basename(conversations[1], "gpt-4o", 2),
+            judge_evaluation_tsv_filename(
+                conversations[0].metadata["filename"], "gpt-4o", 1
+            ),
+            judge_evaluation_tsv_filename(
+                conversations[1].metadata["filename"], "gpt-4o", 2
+            ),
         }
 
         jobs = _create_evaluation_jobs(

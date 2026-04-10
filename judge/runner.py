@@ -7,13 +7,13 @@ import asyncio
 import os
 from asyncio import Queue
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 import pandas as pd
 
 from .llm_judge import LLMJudge
 from .rubric_config import ConversationData, RubricConfig
+from .utils import build_evaluation_run_folder_path, judge_evaluation_tsv_filename
 
 # In case this needs to be synced in the meta prompt for the judge
 EVALUATION_SEPARATOR = ":"
@@ -130,8 +130,10 @@ def _create_evaluation_jobs(
         for judge_model, num_instances in judge_models.items():
             for instance in range(1, num_instances + 1):
                 if existing_tsv_basenames is not None:
-                    basename = _judge_result_tsv_basename(
-                        conversation, judge_model, instance
+                    basename = judge_evaluation_tsv_filename(
+                        conversation.metadata.get("filename", "unknown.txt"),
+                        judge_model,
+                        instance,
                     )
                     if basename in existing_tsv_basenames:
                         continue
@@ -148,16 +150,6 @@ def _create_evaluation_jobs(
                     )
                 )
     return jobs
-
-
-def _judge_result_tsv_basename(
-    conversation: ConversationData, judge_model: str, judge_instance: int
-) -> str:
-    """Basename of the evaluation TSV (must match LLMJudge._save_results)."""
-    conversation_name = Path(conversation.metadata.get("filename", "unknown.txt")).stem
-    judge_suffix = judge_model.replace("/", "_").replace(":", "_")
-    judge_suffix += f"_i{judge_instance}"
-    return f"{conversation_name}_{judge_suffix}.tsv"
 
 
 def _index_existing_evaluation_tsv_basenames(output_folder: str) -> set[str]:
@@ -510,7 +502,9 @@ async def judge_conversations(
                     judge_info += f"_{k}{v}"
 
         folder_name = conversation_folder_name or "conversations"
-        output_folder = f"{output_root}/j_{judge_info}_{timestamp}__{folder_name}"
+        output_folder = build_evaluation_run_folder_path(
+            output_root, judge_info, timestamp, folder_name
+        )
 
     os.makedirs(output_folder, exist_ok=True)
 
