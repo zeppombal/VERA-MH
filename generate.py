@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import os
 import re
+import sys
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -414,3 +415,5 @@ if __name__ == "__main__":
             resume=args.resume,
         )
     )
+    if results and all(r.get("skipped") for r in results):
+        sys.exit(1)

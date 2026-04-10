@@ -30,6 +30,61 @@ from llm_clients.llm_interface import DEFAULT_START_PROMPT
 from utils.utils import parse_key_value_list
 
 
+def validate_pipeline_resume_args(args: argparse.Namespace) -> None:
+    """Exit with an error if resume flags are set without valid paths."""
+    if args.resume_generate:
+        if not args.folder_name:
+            print(
+                "error: --resume-generate requires --folder-name "
+                "set to an existing generation run directory "
+                "(p_*__a_*__t*__r*__*).",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        folder = os.path.normpath(args.folder_name)
+        if not os.path.isdir(folder):
+            print(
+                "error: --resume-generate: --folder-name must exist and be a "
+                f"directory: {folder!r}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        base = os.path.basename(folder)
+        if not (base.startswith("p_") and "__a_" in base):
+            print(
+                "error: --resume-generate: --folder-name must be the run folder itself "
+                f"(basename like p_*__a_*__...), not {base!r}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+
+    if args.resume_judge:
+        out = os.path.normpath(args.judge_output)
+        if not os.path.isdir(out):
+            print(
+                "error: --resume-judge: --judge-output must be an existing directory: "
+                f"{out!r}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        base = os.path.basename(out)
+        if base == "evaluations":
+            print(
+                "error: --resume-judge: --judge-output must be the full path to "
+                "an evaluation run folder (j_*__*), not the parent evaluations/ "
+                "directory.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        if not (base.startswith("j_") and "__" in base):
+            print(
+                "error: --resume-judge: --judge-output must be an evaluation run "
+                f"folder (basename like j_*__*), got {base!r}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+
+
 def parse_arguments():
     """
     Parse command line arguments and separate them into three groups:
@@ -157,6 +212,22 @@ Example:
     parser.add_argument(
         "--debug", action="store_true", help="Enable debug logging for generation"
     )
+    parser.add_argument(
+        "--resume-generate",
+        action="store_true",
+        help=(
+            "Continue generation in an existing run folder: required --folder-name "
+            "must be that directory (see generate.py resume validation)."
+        ),
+    )
+    parser.add_argument(
+        "--resume-judge",
+        action="store_true",
+        help=(
+            "Continue judging in an existing evaluation run folder: required "
+            "--judge-output must be that full path (j_*__*), not evaluations/ alone."
+        ),
+    )
 
     # Optional arguments for judge
     parser.add_argument(
@@ -191,7 +262,11 @@ Example:
     parser.add_argument(
         "--judge-output",
         default="evaluations",
-        help="Output folder for evaluation results (default: evaluations)",
+        help=(
+            "Without --resume-judge: parent directory for a new j_*__* folder "
+            "(default: evaluations). With --resume-judge: full path to that existing "
+            "folder."
+        ),
     )
 
     # Optional arguments for scoring
@@ -210,13 +285,13 @@ Example:
 async def main():
     """Main entry point for the pipeline runner."""
 
+    args = parse_arguments()
+    validate_pipeline_resume_args(args)
+
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     print("VERA-MH Pipeline: Generation → Evaluation → Scoring")
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     print("")
-
-    # Parse command line arguments
-    args = parse_arguments()
 
     # Import generate and judge main functions
     # We import here to avoid circular dependencies and to allow --debug flag to be set
@@ -282,6 +357,7 @@ async def main():
         max_total_words=args.max_total_words,
         max_personas=args.max_personas,
         persona_speaks_first=not args.provider_speaks_first,
+        resume=args.resume_generate,
     )
 
     print("")
@@ -354,6 +430,7 @@ async def main():
         max_concurrent=args.judge_max_concurrent,
         per_judge=args.judge_per_judge,
         verbose_workers=args.judge_verbose_workers,
+        resume=args.resume_judge,
     )
 
     # Call judge.py's main function directly

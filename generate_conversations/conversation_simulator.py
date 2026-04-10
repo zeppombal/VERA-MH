@@ -78,6 +78,8 @@ class ConversationSimulator:
                     conversation_history=history_dicts
                 )
 
+            response = current_speaker._post_process_response(response)
+
             total_words += len(response.split())
 
             # Create LangChain message based on speaker for overall conversation storage

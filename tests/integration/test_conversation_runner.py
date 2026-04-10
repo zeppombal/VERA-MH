@@ -208,7 +208,6 @@ class TestConversationRunnerInit:
             folder_name=str(tmp_path / "conversations"),
         )
         persona_config = {
-            "model": "mock-persona-model",
             "prompt": "Test persona prompt",
             "name": "TestPersona",
             "run": 1,
@@ -258,7 +257,6 @@ class TestConversationRunnerInit:
             folder_name=str(tmp_path / "conversations"),
         )
         persona_config = {
-            "model": "mock-persona-model",
             "prompt": "Test persona prompt",
             "name": "TestPersona",
             "run": 1,
@@ -306,7 +304,6 @@ class TestConversationRunnerSingle:
         )
 
         persona_config = {
-            "model": "mock-persona-model",
             "prompt": "Test persona prompt",
             "name": "TestPersona",
             "run": 1,
@@ -365,7 +362,6 @@ class TestConversationRunnerSingle:
         )
 
         persona_config = {
-            "model": "mock-persona-model",
             "prompt": "Test persona prompt",
             "name": "TestPersona",
             "run": 1,
@@ -410,7 +406,6 @@ class TestConversationRunnerSingle:
         )
 
         persona_config = {
-            "model": "mock-persona-model",
             "prompt": "Test persona prompt",
             "name": "TestPersona",
             "run": 1,
@@ -461,17 +456,20 @@ class TestConversationRunnerSingle:
         """Test that filename follows correct naming convention."""
         # Arrange
         conv_folder = tmp_path / "conversations"
+        persona_model_config = {
+            **basic_persona_config,
+            "model": "claude-3-opus-20240229",
+        }
         runner = ConversationRunner(
-            persona_model_config=basic_persona_config,
+            persona_model_config=persona_model_config,
             agent_model_config=basic_agent_config,
             run_id="test_run",
             folder_name=str(conv_folder),
         )
 
         persona_config = {
-            "model": "claude-3-opus-20240229",
             "prompt": "Test prompt",
-            "name": "Test Persona",
+            "name": "Persona",
             "run": 2,
         }
 
@@ -492,8 +490,8 @@ class TestConversationRunnerSingle:
         # Assert - verify filename format
         filename = Path(result["filename"]).name
         # Should contain: tag_personaname_modelshort_runN
-        assert "Test_Persona" in filename
-        assert "c3-opus-20240229" in filename
+        assert "Persona" in filename
+        assert "claude-3-opus-20240229" in filename
         assert "run2" in filename
         assert filename.endswith(".txt")
 
@@ -514,7 +512,6 @@ class TestConversationRunnerSingle:
         )
 
         persona_config = {
-            "model": "mock-persona",
             "prompt": "Test prompt",
             "name": "TestPersona",
             "run": 1,
@@ -581,7 +578,6 @@ class TestConversationRunnerSingle:
         )
 
         persona_config = {
-            "model": "mock-persona",
             "prompt": "Test prompt",
             "name": "TestPersona",
             "run": 1,
@@ -1051,7 +1047,6 @@ class TestConversationRunnerFileOperations:
         )
 
         persona_config = {
-            "model": "mock-persona",
             "prompt": "Test prompt",
             "name": "TestPersona",
             "run": 1,
@@ -1173,7 +1168,6 @@ class TestConversationRunnerErrorHandling:
         )
 
         persona_config = {
-            "model": "mock-persona",
             "prompt": "Test prompt",
             "name": "TestPersona",
             "run": 1,
@@ -1271,7 +1265,6 @@ class TestConversationRunnerErrorHandling:
         )
 
         persona_config = {
-            "model": "mock-persona",
             "prompt": "Test prompt",
             "name": "TestPersona",
             "run": 1,
@@ -1319,7 +1312,6 @@ class TestConversationRunnerPerformance:
         )
 
         persona_config = {
-            "model": "mock-persona",
             "prompt": "Test prompt",
             "name": "TestPersona",
             "run": 1,

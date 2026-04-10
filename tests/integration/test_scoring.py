@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import subprocess
 import tempfile
 import time
@@ -125,7 +126,8 @@ class TestVERAMHPipeline:
                 # "✅ Generated 2 conversations → /path/to/folder/"
                 parts = line.split(" → ")
                 if len(parts) > 1:
-                    folder_path = parts[-1].rstrip("/")
+                    tail = re.sub(r"\s+\(\d+ skipped\)\s*$", "", parts[-1].strip())
+                    folder_path = tail.rstrip("/")
                     break
 
         if not folder_path:

@@ -29,16 +29,18 @@ class LLMGenerationFailed(Exception):
     """Raised when an LLM call fails after all retry attempts are exhausted."""
 
 
-def _no_retry_matches(err: BaseException, substrings: tuple[str, ...]) -> bool:
-    err_str = str(err)
-    return any(sub in err_str for sub in substrings)
-
-
 def _compute_retry_delay_seconds(attempt_number: int) -> float:
     """Compute full-jitter exponential backoff delay for next retry."""
     raw_delay = DEFAULT_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt_number - 1))
     capped_delay = min(raw_delay, DEFAULT_RETRY_MAX_DELAY_SECONDS)
     return random.uniform(0.0, capped_delay)
+
+
+def _error_matches_no_retry_substrings(
+    err: BaseException, substrings: tuple[str, ...]
+) -> bool:
+    err_str = str(err)
+    return any(sub in err_str for sub in substrings)
 
 
 class Role(Enum):
@@ -115,7 +117,10 @@ class LLMInterface(ABC):
             self.conversation_id = cid
 
     def _no_retry_substrings(self) -> tuple[str, ...]:
-        """Substrings in str(exception) that disable retry (e.g. quota/billing)."""
+        """Substrings checked against str(exception); if any match, do not retry.
+
+        Override on concrete LLMs with provider-specific quota/billing/auth phrases.
+        """
         return ()
 
     async def _run_with_retry(
@@ -157,7 +162,7 @@ class LLMInterface(ABC):
                 raise
             except Exception as e:
                 last_exception = e
-                retryable = not _no_retry_matches(e, merged_no_retry)
+                retryable = not _error_matches_no_retry_substrings(e, merged_no_retry)
                 will_retry = retryable and attempt < MAX_LLM_RETRIES
 
                 self._set_response_metadata(
@@ -287,6 +292,14 @@ class LLMInterface(ABC):
     def set_system_prompt(self, system_prompt: str) -> None:
         """Set or update the system prompt."""
         pass
+
+    def _post_process_response(self, response: str) -> str:
+        """Post-process a raw LLM response before it enters the conversation history.
+
+        No-op by default. Override in subclasses to strip provider-specific
+        artifacts (e.g. trailing metadata tags appended by the backend).
+        """
+        return response
 
     async def cleanup(self) -> None:
         """Clean up any resources used by this LLM instance.

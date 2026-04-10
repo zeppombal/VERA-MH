@@ -17,6 +17,16 @@ T = TypeVar("T", bound=BaseModel)
 class GeminiLLM(JudgeLLM):
     """Gemini implementation using LangChain."""
 
+    def _no_retry_substrings(self) -> tuple[str, ...]:
+        # Google AI / Gemini API (ai.google.dev); LangChain may wrap HTTP/GRPC text.
+        return (
+            "API_KEY_INVALID",
+            "API key not valid",
+            "PERMISSION_DENIED",
+            "BILLING_NOT_ENABLED",
+            "billing has not been enabled",
+        )
+
     def __init__(
         self,
         name: str,

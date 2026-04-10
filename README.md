@@ -70,6 +70,10 @@ The pipeline script:
 - Automatically runs `judge/score.py` on the evaluation results
 - Displays a summary with all output locations
 
+Resume (optional, independent flags):
+- **`--resume-generate`** — Set **`--folder-name`** to an existing generation run directory (`p_*__a_*__t*__r*__*`). Required paths are validated before generation starts.
+- **`--resume-judge`** — Set **`--judge-output`** to the full path of an existing evaluation run directory (`j_*__*`), not the parent `evaluations/` folder alone. Required paths are validated before judging starts.
+
 For help and all available options:
 ```bash
 python3 run_pipeline.py --help

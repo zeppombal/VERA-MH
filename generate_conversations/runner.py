@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import asyncio
+import logging
 import os
 import re
 import time
@@ -144,7 +145,6 @@ class ConversationRunner:
                 jobs.append(
                     (
                         {
-                            "model": self.persona_model_config["model"],
                             "prompt": persona["prompt"],
                             "name": persona["Name"],
                             "run": run,
@@ -225,7 +225,8 @@ class ConversationRunner:
         writes transcript to self.folder_name, then cleans up logger and LLMs.
 
         Args:
-            persona_config (dict): Must have "model", "prompt", "name".
+            persona_config (dict): Must have "prompt" and "name". Persona LLM
+                identity comes from ``self.persona_model_config`` (including ``model``).
             max_turns (int): Max conversation turns for a conversation.
             conversation_index (int): Index in the batch of conversations.
             run_number (int): Run index for this prompt (e.g. 1 of runs_per_prompt).
@@ -235,87 +236,141 @@ class ConversationRunner:
             Dict[str, Any]: index, llm1_model, llm1_prompt, run_number, turns,
             filename, log_file, duration, early_termination, conversation.
         """
-        model_name = persona_config["model"]
-        system_prompt = persona_config["prompt"]  # This is now the full persona prompt
+        model_name = self.persona_model_config["model"]
+        system_prompt = persona_config["prompt"]
         persona_name = persona_config["name"]
 
         # Generate filename base using persona name, model, and run number
         tag = uuid.uuid4().hex[:6]
-        # TODO: should this be inside the LLM class?
-        model_short = (
-            model_name.replace("claude-3-", "c3-")
-            .replace("gpt-", "g")
-            .replace("claude-sonnet-4-", "cs4-")
-        )
-        persona_safe = persona_name.replace(" ", "_").replace(".", "")
-        filename_base = f"{tag}_{persona_safe}_{model_short}_run{run_number}"
+        filename_base = f"{tag}_{persona_name}_{model_name}_run{run_number}"
         os.makedirs(f"{self.folder_name}", exist_ok=True)
         log_file_path = os.path.join("logging", self.run_id, f"{filename_base}.log")
 
-        # Setup logging
-        logger = setup_conversation_logger(filename_base, run_id=self.run_id)
+        logger: Optional[logging.Logger] = None
+        persona: Optional[Any] = None
+        agent: Optional[Any] = None
         start_time = time.time()
-
-        # Create persona instance
-        persona = LLMFactory.create_llm(
-            model_name=model_name,
-            name=f"{model_short} {persona_name}",
-            system_prompt=system_prompt,
-            role=Role.PERSONA,
-            **self.persona_model_config,
-        )
-
-        # Create new agent instance to reset conversation_id and metadata.
-        # Exclude selected kwargs to avoid duplicate args expected in create_llm.
-        agent_kwargs = {
-            k: v
-            for k, v in self.agent_model_config.items()
-            if k not in ("model", "name", "system_prompt")
-        }
-        agent = LLMFactory.create_llm(
-            model_name=self.agent_model_config["model"],
-            name=self.agent_model_config.get("name", "Provider"),
-            system_prompt=self.agent_model_config.get(
-                "system_prompt", "You are a helpful AI assistant."
-            ),
-            role=Role.PROVIDER,
-            **agent_kwargs,
-        )
-
-        # Log conversation start
-        log_conversation_start(
-            logger=logger,
-            llm1_model_str=model_name,
-            llm1_prompt=persona_name,
-            llm2_name=agent.name,
-            llm2_model_str=getattr(agent, "model_name", "unknown"),
-            max_turns=max_turns,
-            persona_speaks_first=self.persona_speaks_first,
-            llm1_model=persona,
-            llm2_model=agent,
-        )
-
-        # Create conversation simulator and run conversation
-        simulator = ConversationSimulator(persona, agent)
-        # Run the conversation - let first speaker start naturally with None
-
         result: Optional[Dict[str, Any]] = None
+
         try:
-            conversation = await simulator.generate_conversation(
+            logger = setup_conversation_logger(filename_base, run_id=self.run_id)
+
+            persona = LLMFactory.create_llm(
+                model_name=model_name,
+                name=f"{model_name} {persona_name}",
+                system_prompt=system_prompt,
+                role=Role.PERSONA,
+                **self.persona_model_config,
+            )
+
+            agent_kwargs = {
+                k: v
+                for k, v in self.agent_model_config.items()
+                if k not in ("model", "name", "system_prompt")
+            }
+            agent = LLMFactory.create_llm(
+                model_name=self.agent_model_config["model"],
+                name=self.agent_model_config.get("name", "Provider"),
+                system_prompt=self.agent_model_config.get(
+                    "system_prompt", "You are a helpful AI assistant."
+                ),
+                role=Role.PROVIDER,
+                **agent_kwargs,
+            )
+
+            log_conversation_start(
+                logger=logger,
+                llm1_model_str=model_name,
+                llm1_prompt=persona_name,
+                llm2_name=agent.name,
+                llm2_model_str=getattr(agent, "model_name", "unknown"),
                 max_turns=max_turns,
-                max_total_words=self.max_total_words,
                 persona_speaks_first=self.persona_speaks_first,
+                llm1_model=persona,
+                llm2_model=agent,
             )
-        except LLMGenerationFailed as e:
+
+            simulator = ConversationSimulator(persona, agent)
+
+            try:
+                conversation = await simulator.generate_conversation(
+                    max_turns=max_turns,
+                    max_total_words=self.max_total_words,
+                    persona_speaks_first=self.persona_speaks_first,
+                )
+            except LLMGenerationFailed as e:
+                end_time = time.time()
+                conversation_time = end_time - start_time
+                print(f"Skipped conversation ({persona_name}, run {run_number}): {e}")
+                logger.error(
+                    "CONVERSATION FAILED | persona=%s run=%s error=%s",
+                    persona_name,
+                    run_number,
+                    str(e),
+                )
+                result = {
+                    "index": conversation_index,
+                    "llm1_model": model_name,
+                    "llm1_prompt": persona_name,
+                    "run_number": run_number,
+                    "turns": 0,
+                    "filename": None,
+                    "log_file": log_file_path,
+                    "duration": conversation_time,
+                    "early_termination": False,
+                    "conversation": [],
+                    "skipped": True,
+                    "error": str(e),
+                }
+            else:
+                for i, turn in enumerate(conversation, 1):
+                    log_conversation_turn(
+                        logger=logger,
+                        turn_number=i,
+                        speaker=turn.get("speaker", "Unknown"),
+                        input_message=turn.get("input", ""),
+                        response=turn.get("response", ""),
+                        early_termination=turn.get("early_termination", False),
+                        logging=turn.get("logging", {}),
+                    )
+
+                end_time = time.time()
+                conversation_time = end_time - start_time
+                early_termination = any(
+                    turn.get("early_termination", False) for turn in conversation
+                )
+
+                log_conversation_end(
+                    logger=logger,
+                    total_turns=len(conversation),
+                    early_termination=early_termination,
+                    total_time=conversation_time,
+                )
+
+                simulator.save_conversation(f"{filename_base}.txt", self.folder_name)
+
+                result = {
+                    "index": conversation_index,
+                    "llm1_model": model_name,
+                    "llm1_prompt": persona_name,
+                    "run_number": run_number,
+                    "turns": len(conversation),
+                    "filename": f"{self.folder_name}/{filename_base}.txt",
+                    "log_file": log_file_path,
+                    "duration": conversation_time,
+                    "early_termination": early_termination,
+                    "conversation": conversation,
+                    "skipped": False,
+                }
+        except Exception as exc:
             end_time = time.time()
-            conversation_time = end_time - start_time
-            print(f"Skipped conversation ({persona_name}, run {run_number}): {e}")
-            logger.error(
-                "CONVERSATION FAILED | persona=%s run=%s error=%s",
-                persona_name,
-                run_number,
-                str(e),
-            )
+            if logger is not None:
+                logger.error(
+                    "RUN FAILED | persona=%s run=%s error=%s",
+                    persona_name,
+                    run_number,
+                    str(exc),
+                )
             result = {
                 "index": conversation_index,
                 "llm1_model": model_name,
@@ -324,65 +379,26 @@ class ConversationRunner:
                 "turns": 0,
                 "filename": None,
                 "log_file": log_file_path,
-                "duration": conversation_time,
+                "duration": end_time - start_time,
                 "early_termination": False,
                 "conversation": [],
                 "skipped": True,
                 "skip_reason": "error",
-                "error": str(e),
+                "error": str(exc),
             }
-        else:
-            for i, turn in enumerate(conversation, 1):
-                log_conversation_turn(
-                    logger=logger,
-                    turn_number=i,
-                    speaker=turn.get("speaker", "Unknown"),
-                    input_message=turn.get("input", ""),
-                    response=turn.get("response", ""),
-                    early_termination=turn.get("early_termination", False),
-                    logging=turn.get("logging", {}),
-                )
-
-            end_time = time.time()
-            conversation_time = end_time - start_time
-            early_termination = any(
-                turn.get("early_termination", False) for turn in conversation
-            )
-
-            log_conversation_end(
-                logger=logger,
-                total_turns=len(conversation),
-                early_termination=early_termination,
-                total_time=conversation_time,
-            )
-
-            simulator.save_conversation(f"{filename_base}.txt", self.folder_name)
-
-            result = {
-                "index": conversation_index,
-                "llm1_model": model_name,
-                "llm1_prompt": persona_name,
-                "run_number": run_number,
-                "turns": len(conversation),
-                "filename": f"{self.folder_name}/{filename_base}.txt",
-                "log_file": log_file_path,
-                "duration": conversation_time,
-                "early_termination": early_termination,
-                "conversation": conversation,
-                "skipped": False,
-            }
+            print(f"Skipped conversation ({persona_name}, run {run_number}): {exc}")
         finally:
-            cleanup_logger(logger)
+            if logger is not None:
+                cleanup_logger(logger)
 
-            # Cleanup LLM resources (e.g., close HTTP sessions for Azure)
-            # Always cleanup, even if conversation failed
             for llm in (persona, agent):
-                try:
-                    await llm.cleanup()
-                except Exception as e:
-                    # Log but don't fail if cleanup fails
-                    print(f"Warning: Failed to cleanup LLM: {e}")
+                if llm is not None:
+                    try:
+                        await llm.cleanup()
+                    except Exception as e:
+                        print(f"Warning: Failed to cleanup LLM: {e}")
 
+        assert result is not None
         return result
 
     async def run_conversations(

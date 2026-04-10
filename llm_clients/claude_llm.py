@@ -17,6 +17,16 @@ T = TypeVar("T", bound=BaseModel)
 class ClaudeLLM(JudgeLLM):
     """Claude implementation using LangChain."""
 
+    def _no_retry_substrings(self) -> tuple[str, ...]:
+        # Anthropic API / Messages API (see https://docs.anthropic.com/en/api/errors)
+        return (
+            "credit balance is too low",
+            "insufficient_quota",
+            "invalid x-api-key",
+            "invalid_api_key",
+            "authentication_error",
+        )
+
     def __init__(
         self,
         name: str,
