@@ -20,18 +20,19 @@ def ensure_provider_has_last_turn(max_turns: int, persona_speaks_first: bool) ->
     """
     if persona_speaks_first and max_turns % 2 != 0:
         debug_print(
-            "Adjusted max_turns %s -> %s so provider has last turn "
-            "with persona_speaks_first=True.",
-            max_turns,
-            max_turns + 1,
+            (
+                f"Adjusted max_turns {max_turns} -> {max_turns + 1}"
+                f"so provider has last turn"
+            )
         )
         return max_turns + 1
     if not persona_speaks_first and max_turns % 2 == 0:
         debug_print(
-            "Adjusted max_turns %s -> %s so provider has last turn "
-            "(persona_speaks_first=False).",
-            max_turns,
-            max_turns + 1,
+            (
+                f"Adjusted max_turns{max_turns} -> {max_turns + 1}  "
+                f"so provider has last turn "
+                f"(persona_speaks_first={persona_speaks_first}).",
+            )
         )
         return max_turns + 1
     return max_turns
