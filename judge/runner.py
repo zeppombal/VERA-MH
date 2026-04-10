@@ -129,6 +129,8 @@ def _create_evaluation_jobs(
     for conversation in conversations:
         for judge_model, num_instances in judge_models.items():
             for instance in range(1, num_instances + 1):
+                # With --resume, each completed job leaves a deterministic .tsv in the
+                # output folder; skip those so we only enqueue missing work.
                 if existing_tsv_basenames is not None:
                     basename = judge_evaluation_tsv_filename(
                         conversation.metadata.get("filename", "unknown.txt"),

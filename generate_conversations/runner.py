@@ -80,10 +80,19 @@ class ConversationRunner:
             return None
         return max(candidates, key=len)
 
-    def _parse_transcript_suffix_for_resume(
-        self, suffix: str, persona_safe_names: AbstractSet[str]
+    def _parse_transcript_filename_for_resume(
+        self, filename: str, persona_safe_names: AbstractSet[str]
     ) -> Optional[tuple[str, int]]:
-        """Parse `{persona_safe}_{model}_run{N}.txt` using known persona_safe names."""
+        """
+        Parse transcript basename `{tag}_{persona_safe}_{model}_run{N}.txt` using known
+        persona_safe names (tag is discarded).
+        """
+        if not filename.endswith(".txt"):
+            return None
+        parts = filename.split("_", 1)
+        if len(parts) != 2:
+            return None
+        suffix = parts[1]
         match = TRANSCRIPT_RUN_SUFFIX_RE.search(suffix)
         if not match:
             return None
@@ -94,33 +103,29 @@ class ConversationRunner:
             return None
         return (persona_safe, run)
 
-    def _index_existing_conversations(
+    def _list_existing_conversations(
         self, persona_safe_names: AbstractSet[str]
-    ) -> set[tuple[str, int]]:
+    ) -> list[tuple[str, int]]:
         """
-        Index existing transcript files as (persona_safe, run_number).
+        List (persona_safe, run_number) for each matching transcript file (duplicates
+        possible if several files parse to the same pair).
 
         Parses `_runN.txt` first, then resolves persona_safe via longest-prefix match
         against persona_safe_names so model segments with underscores do not corrupt
         the persona key.
         """
-        existing: set[tuple[str, int]] = set()
+        out: list[tuple[str, int]] = []
         if not os.path.isdir(self.folder_name):
-            return existing
+            return out
 
         for filename in os.listdir(self.folder_name):
-            if not filename.endswith(".txt"):
-                continue
-            parts = filename.split("_", 1)
-            if len(parts) != 2:
-                continue
-            parsed = self._parse_transcript_suffix_for_resume(
-                parts[1], persona_safe_names
+            parsed = self._parse_transcript_filename_for_resume(
+                filename, persona_safe_names
             )
             if parsed is None:
                 continue
-            existing.add(parsed)
-        return existing
+            out.append(parsed)
+        return out
 
     @staticmethod
     def _has_existing_transcript(
@@ -408,7 +413,7 @@ class ConversationRunner:
             persona_token_for_transcript_stem(p["Name"]) for p in personas
         }
         existing_keys = (
-            self._index_existing_conversations(persona_safe_names)
+            set(self._list_existing_conversations(persona_safe_names))
             if self.resume
             else set()
         )

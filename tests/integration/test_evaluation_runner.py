@@ -1847,6 +1847,7 @@ class TestErrorHandlingAndCoverage:
                 save_aggregated_results=True,
             )
 
+            # should handle empty results without crashing
             assert results == []
             assert not (Path(output_folder) / "results.csv").exists()
 
