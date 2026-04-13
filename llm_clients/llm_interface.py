@@ -19,28 +19,9 @@ RetryOnErrorCallback = Callable[
     [BaseException, int, int, bool, bool], Optional[Dict[str, Any]]
 ]
 
-# Retries after the first attempt (loop range(MAX_LLM_RETRIES + 1) => 4 total attempts).
-MAX_LLM_RETRIES = 3
-DEFAULT_RETRY_BASE_DELAY_SECONDS = 0.75
-DEFAULT_RETRY_MAX_DELAY_SECONDS = 8.0
-
 
 class LLMGenerationFailed(Exception):
     """Raised when an LLM call fails after all retry attempts are exhausted."""
-
-
-def _compute_retry_delay_seconds(attempt_number: int) -> float:
-    """Compute full-jitter exponential backoff delay for next retry."""
-    raw_delay = DEFAULT_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt_number - 1))
-    capped_delay = min(raw_delay, DEFAULT_RETRY_MAX_DELAY_SECONDS)
-    return random.uniform(0.0, capped_delay)
-
-
-def _error_matches_no_retry_substrings(
-    err: BaseException, substrings: tuple[str, ...]
-) -> bool:
-    err_str = str(err)
-    return any(sub in err_str for sub in substrings)
 
 
 class Role(Enum):
@@ -74,6 +55,10 @@ class LLMInterface(ABC):
         system_prompt: Optional[str] = None,
         first_message: Optional[str] = None,
         start_prompt: Optional[str] = None,
+        *,
+        max_llm_retries: int = 3,
+        retry_base_delay_seconds: float = 0.75,
+        retry_max_delay_seconds: float = 8.0,
     ):
         self.name = name
         self.role = role
@@ -82,6 +67,10 @@ class LLMInterface(ABC):
         self.start_prompt = (
             start_prompt if start_prompt is not None else DEFAULT_START_PROMPT
         )
+        # Retries after the first attempt (max_llm_retries=3 => 4 total attempts).
+        self.max_llm_retries = max_llm_retries
+        self.retry_base_delay_seconds = retry_base_delay_seconds
+        self.retry_max_delay_seconds = retry_max_delay_seconds
         self._last_response_metadata: Dict[str, Any] = {}
         self.conversation_id = self.create_conversation_id()
 
@@ -123,6 +112,25 @@ class LLMInterface(ABC):
         """
         return ()
 
+    @staticmethod
+    def _error_matches_no_retry_substrings(
+        err: BaseException, substrings: tuple[str, ...]
+    ) -> bool:
+        """Return True if ``str(err)`` contains any entry in ``substrings``.
+
+        Used by :meth:`_run_with_retry` to classify errors as non-retryable when
+        the merged no-retry list (instance override plus per-call) matches part
+        of the exception message (e.g. quota or billing strings).
+        """
+        err_str = str(err)
+        return any(sub in err_str for sub in substrings)
+
+    def _compute_retry_delay_seconds(self, attempt_number: int) -> float:
+        """Compute full-jitter exponential backoff delay for next retry."""
+        raw_delay = self.retry_base_delay_seconds * (2 ** (attempt_number - 1))
+        capped_delay = min(raw_delay, self.retry_max_delay_seconds)
+        return random.uniform(0.0, capped_delay)
+
     async def _run_with_retry(
         self,
         get_coro: Callable[[], Awaitable[R]],
@@ -138,7 +146,7 @@ class LLMInterface(ABC):
         can skip the job without crashing the batch. On exhaustion after retries,
         raise LLMGenerationFailed from the last error.
         """
-        max_attempts = MAX_LLM_RETRIES + 1
+        max_attempts = self.max_llm_retries + 1
         merged_no_retry = (*self._no_retry_substrings(), *no_retry_substrings)
         last_exception: Optional[BaseException] = None
         for attempt in range(max_attempts):
@@ -162,8 +170,10 @@ class LLMInterface(ABC):
                 raise
             except Exception as e:
                 last_exception = e
-                retryable = not _error_matches_no_retry_substrings(e, merged_no_retry)
-                will_retry = retryable and attempt < MAX_LLM_RETRIES
+                retryable = not self._error_matches_no_retry_substrings(
+                    e, merged_no_retry
+                )
+                will_retry = retryable and attempt < self.max_llm_retries
 
                 self._set_response_metadata(
                     provider or "unknown",
@@ -182,9 +192,9 @@ class LLMInterface(ABC):
 
                 if not retryable:
                     raise LLMGenerationFailed(f"LLM error (non-retryable): {e}") from e
-                if attempt == MAX_LLM_RETRIES:
+                if attempt == self.max_llm_retries:
                     break
-                retry_delay_seconds = _compute_retry_delay_seconds(attempt_number)
+                retry_delay_seconds = self._compute_retry_delay_seconds(attempt_number)
                 self._last_response_metadata["retry_delay_seconds"] = round(
                     retry_delay_seconds, 3
                 )

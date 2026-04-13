@@ -24,11 +24,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from llm_clients import Role
-from llm_clients.llm_interface import (
-    MAX_LLM_RETRIES,
-    LLMGenerationFailed,
-    LLMInterface,
-)
+from llm_clients.llm_interface import LLMGenerationFailed, LLMInterface
 
 # ============================================================================
 # Metadata Assertions
@@ -218,9 +214,9 @@ def assert_error_response(response: str, expected_error_substring: str) -> None:
     ), f"Expected error to contain '{expected_error_substring}', got: {response}"
 
 
-def expected_retry_call_count() -> int:
+def expected_retry_call_count(max_retries: int = 3) -> int:
     """Number of LLM attempts after retries are exhausted (inclusive of first)."""
-    return MAX_LLM_RETRIES + 1
+    return max_retries + 1
 
 
 def assert_llm_generation_failed(

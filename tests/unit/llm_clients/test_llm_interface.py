@@ -5,11 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from llm_clients import Role
-from llm_clients.llm_interface import (
-    LLMGenerationFailed,
-    LLMInterface,
-    _error_matches_no_retry_substrings,
-)
+from llm_clients.llm_interface import LLMGenerationFailed, LLMInterface
 
 
 class ConcreteLLM(LLMInterface):
@@ -81,30 +77,34 @@ class TestErrorMatchesNoRetrySubstrings:
 
     def test_true_when_single_substring_present(self):
         err = RuntimeError("Error 429: insufficient_quota")
-        assert _error_matches_no_retry_substrings(err, ("insufficient_quota",))
+        assert LLMInterface._error_matches_no_retry_substrings(
+            err, ("insufficient_quota",)
+        )
 
     def test_true_when_second_of_multiple_substrings_matches(self):
         err = ValueError("Your credit balance is too low")
-        assert _error_matches_no_retry_substrings(
+        assert LLMInterface._error_matches_no_retry_substrings(
             err, ("insufficient_quota", "credit balance is too low")
         )
 
     def test_false_when_no_substring_matches(self):
         err = RuntimeError("timeout connecting to host")
-        assert not _error_matches_no_retry_substrings(
+        assert not LLMInterface._error_matches_no_retry_substrings(
             err, ("insufficient_quota", "invalid_api_key")
         )
 
     def test_false_when_substrings_tuple_empty(self):
         err = RuntimeError("insufficient_quota")
-        assert not _error_matches_no_retry_substrings(err, ())
+        assert not LLMInterface._error_matches_no_retry_substrings(err, ())
 
     def test_uses_str_of_exception(self):
         class CustomErr(Exception):
             def __str__(self):
                 return "billing_hard_limit exceeded"
 
-        assert _error_matches_no_retry_substrings(CustomErr(), ("billing_hard_limit",))
+        assert LLMInterface._error_matches_no_retry_substrings(
+            CustomErr(), ("billing_hard_limit",)
+        )
 
 
 @pytest.mark.unit
@@ -445,7 +445,7 @@ class TestLLMInterface:
         observed_sleep_calls: list[float] = []
         observed_metadata_delay_values: list[float] = []
 
-        def fake_delay(_: int) -> float:
+        def fake_compute(self, _attempt_number: int) -> float:
             return delays[len(observed_sleep_calls)]
 
         async def fake_sleep(delay: float) -> None:
@@ -454,9 +454,7 @@ class TestLLMInterface:
             )
             observed_sleep_calls.append(delay)
 
-        monkeypatch.setattr(
-            "llm_clients.llm_interface._compute_retry_delay_seconds", fake_delay
-        )
+        monkeypatch.setattr(LLMInterface, "_compute_retry_delay_seconds", fake_compute)
         monkeypatch.setattr("llm_clients.llm_interface.asyncio.sleep", fake_sleep)
 
         with pytest.raises(LLMGenerationFailed):
