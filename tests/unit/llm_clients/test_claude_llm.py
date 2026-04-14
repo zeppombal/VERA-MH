@@ -156,6 +156,80 @@ class TestClaudeLLM(TestJudgeLLMBase):
     @pytest.mark.asyncio
     @patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key")
     @patch("llm_clients.claude_llm.ChatAnthropic")
+    async def test_generate_response_propagates_cache_usage_tokens(
+        self, mock_chat_anthropic, mock_response_factory, mock_system_message
+    ):
+        """Copy cache_creation_input_tokens and cache_read_input_tokens into usage."""
+        mock_response = mock_response_factory(
+            text="Cached context response",
+            response_id="msg_cache",
+            provider="claude",
+            metadata={
+                "model": "claude-sonnet-4-5-20250929",
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 20,
+                    "cache_creation_input_tokens": 100,
+                    "cache_read_input_tokens": 200,
+                },
+                "stop_reason": "end_turn",
+            },
+        )
+
+        mock_llm = MagicMock()
+        mock_llm.model = "claude-sonnet-4-5-20250929"
+        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+        mock_chat_anthropic.return_value = mock_llm
+
+        llm = ClaudeLLM(
+            name="TestClaude",
+            role=Role.PERSONA,
+            system_prompt="You are a helpful assistant.",
+        )
+        await llm.generate_response(conversation_history=mock_system_message)
+
+        usage = llm.last_response_metadata["usage"]
+        assert usage["cache_creation_input_tokens"] == 100
+        assert usage["cache_read_input_tokens"] == 200
+        assert usage["total_tokens"] == 30
+
+    @pytest.mark.asyncio
+    @patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key")
+    @patch("llm_clients.claude_llm.ChatAnthropic")
+    async def test_generate_response_omits_none_cache_usage_keys(
+        self, mock_chat_anthropic, mock_response_factory, mock_system_message
+    ):
+        """None cache token values are not copied into last_response_metadata usage."""
+        mock_response = mock_response_factory(
+            text="Response",
+            response_id="msg_cache_none",
+            provider="claude",
+            metadata={
+                "model": "claude-sonnet-4-5-20250929",
+                "usage": {
+                    "input_tokens": 5,
+                    "output_tokens": 5,
+                    "cache_creation_input_tokens": None,
+                    "cache_read_input_tokens": None,
+                },
+            },
+        )
+
+        mock_llm = MagicMock()
+        mock_llm.model = "claude-sonnet-4-5-20250929"
+        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+        mock_chat_anthropic.return_value = mock_llm
+
+        llm = ClaudeLLM(name="TestClaude", role=Role.PERSONA)
+        await llm.generate_response(conversation_history=mock_system_message)
+
+        usage = llm.last_response_metadata["usage"]
+        assert "cache_creation_input_tokens" not in usage
+        assert "cache_read_input_tokens" not in usage
+
+    @pytest.mark.asyncio
+    @patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key")
+    @patch("llm_clients.claude_llm.ChatAnthropic")
     async def test_generate_response_without_system_prompt(
         self, mock_chat_anthropic, mock_response_factory, mock_system_message
     ):
