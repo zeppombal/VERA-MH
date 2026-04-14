@@ -7,7 +7,7 @@ import time
 import uuid
 from asyncio import Queue
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import AbstractSet, Any, Dict, List, Optional, Tuple
 
 from llm_clients import LLMFactory
 from llm_clients.llm_interface import LLMGenerationFailed, Role
@@ -17,6 +17,10 @@ from utils.logging_utils import (
     log_conversation_start,
     log_conversation_turn,
     setup_conversation_logger,
+)
+from utils.naming import (
+    TRANSCRIPT_RUN_SUFFIX_RE,
+    persona_token_for_transcript_stem,
 )
 
 from .conversation_simulator import ConversationSimulator
@@ -38,6 +42,7 @@ class ConversationRunner:
         max_total_words: Optional[int] = None,
         max_personas: Optional[int] = None,
         persona_speaks_first: bool = True,
+        resume: bool = False,
     ):
         self.persona_model_config = persona_model_config
         self.agent_model_config = agent_model_config
@@ -52,6 +57,84 @@ class ConversationRunner:
         self.max_total_words = max_total_words
         self.max_personas = max_personas
         self.persona_speaks_first = persona_speaks_first
+        self.resume = resume
+
+    @staticmethod
+    def _resolve_persona_safe_from_stem(
+        stem: str, persona_safe_names: AbstractSet[str]
+    ) -> Optional[str]:
+        """
+        Pick the longest persona_safe in persona_safe_names that matches this stem.
+
+        Transcript stem (after tag_) is {persona_safe}_{model_name}; model_name may
+        contain underscores, so we match known persona_safe names instead of splitting
+        on underscores.
+
+        Example: stem ``Anna_gemini-2.5-flash`` with ``{"Ann", "Anna"}`` in the set
+        matches both prefixes; returns ``Anna`` (longest).
+        """
+        candidates = [
+            p for p in persona_safe_names if stem == p or stem.startswith(f"{p}_")
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=len)
+
+    def _parse_transcript_filename_for_resume(
+        self, filename: str, persona_safe_names: AbstractSet[str]
+    ) -> Optional[tuple[str, int]]:
+        """
+        Parse transcript basename `{tag}_{persona_safe}_{model}_run{N}.txt` using known
+        persona_safe names (tag is discarded).
+        """
+        if not filename.endswith(".txt"):
+            return None
+        parts = filename.split("_", 1)
+        if len(parts) != 2:
+            return None
+        suffix = parts[1]
+        match = TRANSCRIPT_RUN_SUFFIX_RE.search(suffix)
+        if not match:
+            return None
+        run = int(match.group("run"))
+        stem = suffix[: match.start()]
+        persona_safe = self._resolve_persona_safe_from_stem(stem, persona_safe_names)
+        if persona_safe is None:
+            return None
+        return (persona_safe, run)
+
+    def _list_existing_conversations(
+        self, persona_safe_names: AbstractSet[str]
+    ) -> list[tuple[str, int]]:
+        """
+        List (persona_safe, run_number) for each matching transcript file (duplicates
+        possible if several files parse to the same pair).
+
+        Parses `_runN.txt` first, then resolves persona_safe via longest-prefix match
+        against persona_safe_names so model segments with underscores do not corrupt
+        the persona key.
+        """
+        out: list[tuple[str, int]] = []
+        if not os.path.isdir(self.folder_name):
+            return out
+
+        for filename in os.listdir(self.folder_name):
+            parsed = self._parse_transcript_filename_for_resume(
+                filename, persona_safe_names
+            )
+            if parsed is None:
+                continue
+            out.append(parsed)
+        return out
+
+    @staticmethod
+    def _has_existing_transcript(
+        persona_safe: str,
+        run_number: int,
+        existing_keys: set[tuple[str, int]],
+    ) -> bool:
+        """Return True when a transcript exists for this exact persona/run."""
+        return (persona_safe, run_number) in existing_keys
 
     def _create_conversation_jobs(
         self, persona_names: Optional[List[str]] = None
@@ -303,6 +386,7 @@ class ConversationRunner:
                 "early_termination": False,
                 "conversation": [],
                 "skipped": True,
+                "skip_reason": "error",
                 "error": str(exc),
             }
             print(f"Skipped conversation ({persona_name}, run {run_number}): {exc}")
@@ -324,7 +408,59 @@ class ConversationRunner:
         self, persona_names: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
         """Run multiple conversations concurrently using queue workers."""
-        jobs = self._create_conversation_jobs(persona_names=persona_names)
+        personas = load_prompts_from_csv(persona_names, max_personas=self.max_personas)
+        persona_safe_names = {
+            persona_token_for_transcript_stem(p["Name"]) for p in personas
+        }
+        existing_keys = (
+            set(self._list_existing_conversations(persona_safe_names))
+            if self.resume
+            else set()
+        )
+
+        # Create jobs for all conversations (each prompt run multiple times)
+        jobs: List[Tuple[dict, int, int, int]] = []
+        skipped_results: List[Dict[str, Any]] = []
+        conversation_index = 1
+
+        for persona in personas:
+            for run in range(1, self.runs_per_prompt + 1):
+                persona_safe = persona_token_for_transcript_stem(persona["Name"])
+                if self._has_existing_transcript(persona_safe, run, existing_keys):
+                    skipped_results.append(
+                        {
+                            "index": conversation_index,
+                            "llm1_model": self.persona_model_config["model"],
+                            "llm1_prompt": persona["Name"],
+                            "run_number": run,
+                            "turns": 0,
+                            "filename": None,
+                            "log_file": None,
+                            "duration": 0.0,
+                            "early_termination": False,
+                            "conversation": [],
+                            "skipped": True,
+                            "skip_reason": "existing",
+                            "error": "Transcript already exists in output folder",
+                        }
+                    )
+                    conversation_index += 1
+                    continue
+                jobs.append(
+                    (
+                        {
+                            "model": self.persona_model_config["model"],
+                            "prompt": persona["prompt"],
+                            "name": persona["Name"],
+                            "run": run,
+                        },
+                        self.max_turns,
+                        conversation_index,
+                        run,
+                    )
+                )
+                conversation_index += 1
+
         total_jobs = len(jobs)
         start_time = datetime.now()
         queue: Queue = Queue()
@@ -353,16 +489,28 @@ class ConversationRunner:
         ]
         await asyncio.gather(*workers)
 
+        results = skipped_results + results
+
         end_time = datetime.now()
         total_time = (end_time - start_time).total_seconds()
 
         skipped_n = sum(1 for r in results if r.get("skipped"))
+        skipped_existing_n = sum(
+            1
+            for r in results
+            if r.get("skipped") and r.get("skip_reason") == "existing"
+        )
+        skipped_error_n = sum(
+            1 for r in results if r.get("skipped") and r.get("skip_reason") == "error"
+        )
         print(
             f"\nCompleted {len(results) - skipped_n} / {len(results)} "
             f"conversations in "
             f"{total_time:.2f} seconds"
         )
-        if skipped_n:
-            print(f"  ({skipped_n} skipped due to errors)")
+        if skipped_existing_n:
+            print(f"  ({skipped_existing_n} skipped: transcript already exists)")
+        if skipped_error_n:
+            print(f"  ({skipped_error_n} skipped due to errors)")
 
         return results

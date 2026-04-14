@@ -147,6 +147,8 @@ def parse_evaluation_filename(filename: str) -> Dict[str, Union[str, int]]:
     """
     Parse an evaluation filename to extract components.
 
+    Basenames come from `judge.utils.judge_evaluation_tsv_filename` (see LLMJudge).
+
     Format: {id}_{persona}_{user_model}_{run}_{judge_model}_{iteration}.tsv
     Example: 000682_Alix_gemini-3-pro-preview_run22_gpt-4o_i1.tsv
 
@@ -633,13 +635,14 @@ def has_dimension_data(df: pd.DataFrame) -> bool:
     return any(dim in df.columns and df[dim].notna().any() for dim in DIMENSIONS)
 
 
-def ensure_results_csv(eval_path) -> pd.DataFrame:
+def ensure_results_csv(eval_path, *, force: bool = False) -> pd.DataFrame:
     """
     Ensure results.csv exists and is valid, regenerating from TSV files if needed.
     Preserves existing columns (like question_id and reasoning) when rebuilding.
 
     Args:
         eval_path: Path to evaluation directory (can be str or Path)
+        force: If True, always rebuild from TSV files (overwrites results.csv).
 
     Returns:
         DataFrame with evaluation results
@@ -649,7 +652,7 @@ def ensure_results_csv(eval_path) -> pd.DataFrame:
     eval_path = Path(eval_path)
     results_csv_path = eval_path / "results.csv"
 
-    if results_csv_path.exists():
+    if not force and results_csv_path.exists():
         try:
             df = pd.read_csv(results_csv_path)
             # Check if it has dimension columns with data

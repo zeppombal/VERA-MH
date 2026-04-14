@@ -40,6 +40,8 @@ def pipeline_args():
         judge_verbose_workers=False,
         rubrics=["data/rubric.tsv"],
         judge_output="evaluations",
+        resume_generate=False,
+        resume_judge=False,
         skip_risk_analysis=False,
         personas_tsv="data/personas.tsv",
     )
@@ -320,6 +322,7 @@ class TestPipelineConfiguration:
             max_concurrent=pipeline_args.judge_max_concurrent,
             per_judge=pipeline_args.judge_per_judge,
             verbose_workers=pipeline_args.judge_verbose_workers,
+            resume=pipeline_args.resume_judge,
         )
 
         # Verify structure
@@ -329,6 +332,7 @@ class TestPipelineConfiguration:
         assert judge_args.rubrics == pipeline_args.rubrics
         assert judge_args.judge_model == ["claude-sonnet-4-5-20250929"]
         assert judge_args.output == pipeline_args.judge_output
+        assert judge_args.resume is False
 
     def test_empty_extra_params_dont_pollute_config(self):
         """Test that empty extra params don't add unwanted keys."""
@@ -1111,3 +1115,342 @@ class TestPipelineValidation:
                     "✓ Validated: results.csv exists with evaluation data"
                     in captured.out
                 )
+
+
+@pytest.mark.integration
+class TestPipelineResumeParsing:
+    """CLI parsing for --resume-generate / --resume-judge."""
+
+    def test_parse_resume_flags_default_false(self):
+        from run_pipeline import parse_arguments
+
+        test_args = [
+            "--user-agent",
+            "m",
+            "--provider-agent",
+            "m",
+            "--runs",
+            "1",
+            "--turns",
+            "1",
+            "--judge-model",
+            "m",
+        ]
+        with patch("sys.argv", ["run_pipeline.py"] + test_args):
+            args = parse_arguments()
+            assert args.resume_generate is False
+            assert args.resume_judge is False
+
+    def test_parse_resume_flags_can_be_true(self):
+        from run_pipeline import parse_arguments
+
+        test_args = [
+            "--user-agent",
+            "m",
+            "--provider-agent",
+            "m",
+            "--runs",
+            "1",
+            "--turns",
+            "1",
+            "--judge-model",
+            "m",
+            "--resume-generate",
+            "--resume-judge",
+        ]
+        with patch("sys.argv", ["run_pipeline.py"] + test_args):
+            args = parse_arguments()
+            assert args.resume_generate is True
+            assert args.resume_judge is True
+
+
+@pytest.mark.integration
+class TestPipelineResumeValidation:
+    """validate_pipeline_resume_args() path checks."""
+
+    def test_resume_generate_requires_folder_name(self):
+        from run_pipeline import validate_pipeline_resume_args
+
+        args = argparse.Namespace(
+            resume_generate=True,
+            resume_judge=False,
+            folder_name=None,
+            judge_output="evaluations",
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            validate_pipeline_resume_args(args)
+        assert exc_info.value.code == 2
+
+    def test_resume_generate_requires_existing_directory(self, tmp_path):
+        from run_pipeline import validate_pipeline_resume_args
+
+        missing = tmp_path / "p_x__a_y__t1__r1__nope"
+        args = argparse.Namespace(
+            resume_generate=True,
+            resume_judge=False,
+            folder_name=str(missing),
+            judge_output="evaluations",
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            validate_pipeline_resume_args(args)
+        assert exc_info.value.code == 2
+
+    def test_resume_generate_requires_run_folder_basename(self, tmp_path):
+        from run_pipeline import validate_pipeline_resume_args
+
+        bad = tmp_path / "conversations"
+        bad.mkdir()
+        args = argparse.Namespace(
+            resume_generate=True,
+            resume_judge=False,
+            folder_name=str(bad),
+            judge_output="evaluations",
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            validate_pipeline_resume_args(args)
+        assert exc_info.value.code == 2
+
+    def test_resume_generate_accepts_valid_run_folder(self, tmp_path):
+        from run_pipeline import validate_pipeline_resume_args
+
+        run_dir = tmp_path / "p_persona__a_agent__t4__r1__20260101_120000"
+        run_dir.mkdir()
+        args = argparse.Namespace(
+            resume_generate=True,
+            resume_judge=False,
+            folder_name=str(run_dir),
+            judge_output="evaluations",
+        )
+        validate_pipeline_resume_args(args)
+
+    def test_resume_judge_requires_existing_directory(self, tmp_path):
+        from run_pipeline import validate_pipeline_resume_args
+
+        missing = tmp_path / "j_missing__run__"
+        args = argparse.Namespace(
+            resume_generate=False,
+            resume_judge=True,
+            folder_name=None,
+            judge_output=str(missing),
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            validate_pipeline_resume_args(args)
+        assert exc_info.value.code == 2
+
+    def test_resume_judge_rejects_parent_evaluations_directory(self, tmp_path):
+        from run_pipeline import validate_pipeline_resume_args
+
+        parent = tmp_path / "evaluations"
+        parent.mkdir()
+        args = argparse.Namespace(
+            resume_generate=False,
+            resume_judge=True,
+            folder_name=None,
+            judge_output=str(parent),
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            validate_pipeline_resume_args(args)
+        assert exc_info.value.code == 2
+
+    def test_resume_judge_requires_j_evaluation_folder_basename(self, tmp_path):
+        from run_pipeline import validate_pipeline_resume_args
+
+        wrong = tmp_path / "some_output_dir"
+        wrong.mkdir()
+        args = argparse.Namespace(
+            resume_generate=False,
+            resume_judge=True,
+            folder_name=None,
+            judge_output=str(wrong),
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            validate_pipeline_resume_args(args)
+        assert exc_info.value.code == 2
+
+    def test_resume_judge_accepts_valid_evaluation_folder(self, tmp_path):
+        from run_pipeline import validate_pipeline_resume_args
+
+        eval_dir = tmp_path / "j_gpt4o__p_run__20260101_120000"
+        eval_dir.mkdir()
+        args = argparse.Namespace(
+            resume_generate=False,
+            resume_judge=True,
+            folder_name=None,
+            judge_output=str(eval_dir),
+        )
+        validate_pipeline_resume_args(args)
+
+
+@pytest.mark.integration
+class TestPipelineResumeWiring:
+    """main() passes resume flags to generate and judge."""
+
+    @pytest.mark.asyncio
+    async def test_generate_and_judge_receive_resume_false_by_default(
+        self, tmp_path, valid_pipeline_args
+    ):
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from run_pipeline import main as pipeline_main
+
+        conv_folder = tmp_path / "conversations"
+        conv_folder.mkdir()
+        (conv_folder / "c.txt").write_text("User: hi\nAssistant: hey")
+
+        eval_folder = tmp_path / "evaluations"
+        eval_folder.mkdir()
+        (eval_folder / "results.csv").write_text("filename,x\nc.txt,y\n")
+
+        gen_mock = AsyncMock(return_value=(None, str(conv_folder)))
+        judge_mock = AsyncMock(return_value=str(eval_folder))
+
+        mock_judge_module = MagicMock()
+        mock_judge_module.main = judge_mock
+
+        with (
+            patch("generate.main", side_effect=gen_mock),
+            patch("importlib.util.module_from_spec", return_value=mock_judge_module),
+            patch("importlib.util.spec_from_file_location"),
+            patch("run_pipeline.score_results", return_value={}),
+            patch("run_pipeline.print_scores"),
+            patch("run_pipeline.create_visualizations"),
+            patch("sys.argv", valid_pipeline_args + ["--skip-risk-analysis"]),
+        ):
+            await pipeline_main()
+
+        gen_kw = gen_mock.await_args.kwargs
+        assert gen_kw["resume"] is False
+        judge_kw = judge_mock.await_args.args[0]
+        assert judge_kw.resume is False
+
+    @pytest.mark.asyncio
+    async def test_generate_receives_resume_true_with_resume_generate(
+        self, tmp_path, valid_pipeline_args
+    ):
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from run_pipeline import main as pipeline_main
+
+        run_dir = tmp_path / "p_u__a_p__t1__r1__20260101_120000"
+        run_dir.mkdir()
+        (run_dir / "c.txt").write_text("User: hi\nAssistant: hey")
+
+        eval_folder = tmp_path / "j_j__r__20260101_120000"
+        eval_folder.mkdir()
+        (eval_folder / "results.csv").write_text("filename,x\nc.txt,y\n")
+
+        gen_mock = AsyncMock(return_value=(None, str(run_dir)))
+        judge_mock = AsyncMock(return_value=str(eval_folder))
+
+        mock_judge_module = MagicMock()
+        mock_judge_module.main = judge_mock
+
+        argv = valid_pipeline_args + [
+            "--resume-generate",
+            "--folder-name",
+            str(run_dir),
+            "--skip-risk-analysis",
+        ]
+
+        with (
+            patch("generate.main", side_effect=gen_mock),
+            patch("importlib.util.module_from_spec", return_value=mock_judge_module),
+            patch("importlib.util.spec_from_file_location"),
+            patch("run_pipeline.score_results", return_value={}),
+            patch("run_pipeline.print_scores"),
+            patch("run_pipeline.create_visualizations"),
+            patch("sys.argv", argv),
+        ):
+            await pipeline_main()
+
+        assert gen_mock.await_args.kwargs["resume"] is True
+        assert judge_mock.await_args.args[0].resume is False
+
+    @pytest.mark.asyncio
+    async def test_judge_receives_resume_true_with_resume_judge(
+        self, tmp_path, valid_pipeline_args
+    ):
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from run_pipeline import main as pipeline_main
+
+        conv_folder = tmp_path / "p_x__a_y__t1__r1__ts"
+        conv_folder.mkdir()
+        (conv_folder / "c.txt").write_text("User: hi\nAssistant: hey")
+
+        eval_folder = tmp_path / "j_model__convfolder__ts"
+        eval_folder.mkdir()
+        (eval_folder / "results.csv").write_text("filename,x\nc.txt,y\n")
+
+        gen_mock = AsyncMock(return_value=(None, str(conv_folder)))
+        judge_mock = AsyncMock(return_value=str(eval_folder))
+
+        mock_judge_module = MagicMock()
+        mock_judge_module.main = judge_mock
+
+        argv = valid_pipeline_args + [
+            "--resume-judge",
+            "--judge-output",
+            str(eval_folder),
+            "--skip-risk-analysis",
+        ]
+
+        with (
+            patch("generate.main", side_effect=gen_mock),
+            patch("importlib.util.module_from_spec", return_value=mock_judge_module),
+            patch("importlib.util.spec_from_file_location"),
+            patch("run_pipeline.score_results", return_value={}),
+            patch("run_pipeline.print_scores"),
+            patch("run_pipeline.create_visualizations"),
+            patch("sys.argv", argv),
+        ):
+            await pipeline_main()
+
+        assert gen_mock.await_args.kwargs["resume"] is False
+        assert judge_mock.await_args.args[0].resume is True
+
+    @pytest.mark.asyncio
+    async def test_both_resume_flags_wired_independently(
+        self, tmp_path, valid_pipeline_args
+    ):
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from run_pipeline import main as pipeline_main
+
+        run_dir = tmp_path / "p_u__a_p__t1__r1__20260101_120000"
+        run_dir.mkdir()
+        (run_dir / "c.txt").write_text("User: hi\nAssistant: hey")
+
+        eval_folder = tmp_path / "j_j__r__20260101_120000"
+        eval_folder.mkdir()
+        (eval_folder / "results.csv").write_text("filename,x\nc.txt,y\n")
+
+        gen_mock = AsyncMock(return_value=(None, str(run_dir)))
+        judge_mock = AsyncMock(return_value=str(eval_folder))
+
+        mock_judge_module = MagicMock()
+        mock_judge_module.main = judge_mock
+
+        argv = valid_pipeline_args + [
+            "--resume-generate",
+            "--folder-name",
+            str(run_dir),
+            "--resume-judge",
+            "--judge-output",
+            str(eval_folder),
+            "--skip-risk-analysis",
+        ]
+
+        with (
+            patch("generate.main", side_effect=gen_mock),
+            patch("importlib.util.module_from_spec", return_value=mock_judge_module),
+            patch("importlib.util.spec_from_file_location"),
+            patch("run_pipeline.score_results", return_value={}),
+            patch("run_pipeline.print_scores"),
+            patch("run_pipeline.create_visualizations"),
+            patch("sys.argv", argv),
+        ):
+            await pipeline_main()
+
+        assert gen_mock.await_args.kwargs["resume"] is True
+        assert judge_mock.await_args.args[0].resume is True

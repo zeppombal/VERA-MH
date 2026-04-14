@@ -1830,28 +1830,26 @@ class TestErrorHandlingAndCoverage:
 
             output_folder = str(tmp_path / "output")
 
-            # Load conversations and rubric config
-        conversations = await load_conversations(str(conv_folder))
-        rubric_config = await RubricConfig.load(
-            rubric_folder=mock_rubric_files,
-            rubric_file="rubric.tsv",
-            rubric_prompt_beginning_file="rubric_prompt_beginning.txt",
-            question_prompt_file="question_prompt.txt",
-        )
+            conversations = await load_conversations(str(conv_folder))
+            rubric_config = await RubricConfig.load(
+                rubric_folder=mock_rubric_files,
+                rubric_file="rubric.tsv",
+                rubric_prompt_beginning_file="rubric_prompt_beginning.txt",
+                question_prompt_file="question_prompt.txt",
+            )
 
-        results, _ = await judge_conversations(
-            judge_models={"mock-judge": 1},
-            conversations=conversations,
-            rubric_config=rubric_config,
-            conversation_folder_name=conv_folder.name,
-            output_folder=output_folder,
-            save_aggregated_results=True,
-        )
+            results, _ = await judge_conversations(
+                judge_models={"mock-judge": 1},
+                conversations=conversations,
+                rubric_config=rubric_config,
+                conversation_folder_name=conv_folder.name,
+                output_folder=output_folder,
+                save_aggregated_results=True,
+            )
 
-        # Should handle empty results without crashing
-        assert results == []
-        # results.csv should not be created for empty results
-        assert not (Path(output_folder) / "results.csv").exists()
+            # should handle empty results without crashing
+            assert results == []
+            assert not (Path(output_folder) / "results.csv").exists()
 
 
 @pytest.mark.unit
@@ -2060,3 +2058,52 @@ class TestRunnerHelperFunctions:
         )
 
         assert len(jobs) == 0
+
+    def test_filter_jobs_skip_existing_tsv(self, tmp_path):
+        """Resume skip omits jobs when matching evaluation TSV already exists."""
+        from judge.rubric_config import ConversationData, RubricConfig
+        from judge.runner import (
+            _create_evaluation_jobs,
+            _index_existing_evaluation_tsv_basenames,
+        )
+        from judge.utils import judge_evaluation_tsv_filename
+
+        conversations = [
+            ConversationData(
+                content="user: hi\nchatbot: hello",
+                metadata={"filename": "a.txt", "run_id": "run1"},
+            ),
+        ]
+        rubric_config = RubricConfig(
+            dimensions=["safety"],
+            question_flow_data={"1": {"question": "test"}},
+            question_order=["1"],
+            rubric_prompt_beginning="test",
+            question_prompt_template="test",
+        )
+        out = tmp_path / "eval"
+        out.mkdir()
+        judge_models = {"gpt-4o": 2}
+        jobs = _create_evaluation_jobs(
+            conversations, judge_models, str(out), rubric_config
+        )
+        assert len(jobs) == 2
+
+        existing_name = judge_evaluation_tsv_filename(
+            conversations[0].metadata["filename"], "gpt-4o", 1
+        )
+        (out / existing_name).write_text(
+            "Dimension\tScore\tReasoning\n", encoding="utf-8"
+        )
+
+        existing_basenames = _index_existing_evaluation_tsv_basenames(str(out))
+        kept = _create_evaluation_jobs(
+            conversations,
+            judge_models,
+            str(out),
+            rubric_config,
+            existing_tsv_basenames=existing_basenames,
+        )
+        assert len(kept) == 1
+        assert kept[0][2] == 2
+        assert kept[0][1] == "gpt-4o"

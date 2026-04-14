@@ -30,6 +30,33 @@ def parse_judge_models(model_arg):
     return judge_models
 
 
+def build_evaluation_run_folder_path(
+    output_root: str,
+    judge_info: str,
+    timestamp: str,
+    conversation_run_basename: str,
+) -> str:
+    return f"{output_root}/j_{judge_info}_{timestamp}__{conversation_run_basename}"
+
+
+def judge_evaluation_tsv_filename(
+    conversation_filename: str,
+    judge_model: str,
+    judge_instance: Optional[int] = None,
+) -> str:
+    """
+    Basename of the per-evaluation TSV written by LLMJudge._save_results.
+
+    When judge_instance is set (batch runner), suffix is _i{instance}. When None
+    (e.g. single-conversation CLI), there is no _i suffix — matches historical behavior.
+    """
+    conversation_name = Path(conversation_filename).stem
+    judge_suffix = judge_model.replace("/", "_").replace(":", "_")
+    if judge_instance is not None:
+        judge_suffix += f"_i{judge_instance}"
+    return f"{conversation_name}_{judge_suffix}.tsv"
+
+
 def load_rubric_structure(
     rubric_path: str, sep: str = "\t"
 ) -> Tuple[List[str], List[str]]:

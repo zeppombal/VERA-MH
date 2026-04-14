@@ -8,6 +8,7 @@ from judge.constants import BEST_PRACTICE, DAMAGING, NEUTRAL
 from judge.question_navigator import QuestionNavigator
 from judge.response_models import QuestionResponse
 from judge.rubric_config import ConversationData, RubricConfig
+from judge.utils import judge_evaluation_tsv_filename
 from llm_clients import LLMFactory, Role
 from llm_clients.llm_interface import JudgeLLM
 
@@ -351,16 +352,11 @@ class LLMJudge:
             verbose: Whether to print progress
             judge_instance: Optional judge instance number for filename
         """
-        # Extract conversation name from metadata
         filename = conversation.metadata.get("filename", "unknown.txt")
-        conversation_name = Path(filename).stem
-
-        # Build filename with judge model and instance info
-        judge_suffix = self.judge_model.replace("/", "_").replace(":", "_")
-        if judge_instance is not None:
-            judge_suffix += f"_i{judge_instance}"
-
-        output_file = Path(output_folder) / f"{conversation_name}_{judge_suffix}.tsv"
+        tsv_name = judge_evaluation_tsv_filename(
+            filename, self.judge_model, judge_instance
+        )
+        output_file = Path(output_folder) / tsv_name
         if verbose:
             print(f"\nSaving evaluation to {output_file}")
         self._save_iterative_evaluation(results, output_file)

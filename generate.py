@@ -10,6 +10,11 @@ from typing import Any, Dict, List, Optional
 from generate_conversations import ConversationRunner
 from llm_clients.llm_interface import DEFAULT_START_PROMPT
 from utils.debug import set_debug
+from utils.naming import (
+    build_generation_run_folder_name,
+    model_token_for_run_folder,
+    parse_generation_run_folder_name,
+)
 from utils.utils import parse_key_value_list
 
 
@@ -28,6 +33,7 @@ async def main(
     max_total_words: Optional[int] = None,
     max_personas: Optional[int] = None,
     persona_speaks_first: bool = True,
+    resume: bool = False,
 ) -> tuple[List[Dict[str, Any]], str]:
     """
     Generate conversations and return results.
@@ -74,19 +80,56 @@ async def main(
         print(f"  - Max total words: {max_total_words}")
         print(f"  - Max personas: {max_personas}")
         print(f"  - Persona speaks first: {persona_speaks_first}")
+        print(f"  - Resume: {resume}")
 
     # Generate default folder name if not provided
     if folder_name is None:
         folder_name = "conversations"
 
-    if run_id is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        persona_info = persona_model_config["model"].replace("-", "_").replace(".", "_")
-        agent_info = agent_model_config["model"].replace("-", "_").replace(".", "_")
+    if resume:
+        if not os.path.isdir(folder_name):
+            raise ValueError(
+                "Resume mode requires --folder-name to point to an existing run folder."
+            )
+        run_folder_name = os.path.basename(os.path.normpath(folder_name))
+        run_meta = parse_generation_run_folder_name(run_folder_name)
+        expected_persona = model_token_for_run_folder(persona_model_config["model"])
+        expected_agent = model_token_for_run_folder(agent_model_config["model"])
 
-        run_id = (
-            f"p_{persona_info}__a_{agent_info}__t{max_turns}__"
-            f"r{runs_per_prompt}__{timestamp}"
+        if run_meta["persona"] != expected_persona:
+            raise ValueError(
+                "Resume folder persona model does not match current --user-agent. "
+                f"Expected p_{expected_persona}, got p_{run_meta['persona']}."
+            )
+        if run_meta["agent"] != expected_agent:
+            raise ValueError(
+                "Resume folder provider model does not match current --provider-agent. "
+                f"Expected a_{expected_agent}, got a_{run_meta['agent']}."
+            )
+        if run_meta["turns"] != max_turns:
+            raise ValueError(
+                "Resume folder max turns does not match current --turns. "
+                f"Expected t{max_turns}, got t{run_meta['turns']}."
+            )
+        if run_meta["runs"] != runs_per_prompt:
+            raise ValueError(
+                "Resume folder runs-per-prompt does not match current --runs. "
+                f"Expected r{runs_per_prompt}, got r{run_meta['runs']}."
+            )
+        if run_id is None:
+            run_id = run_folder_name
+        elif run_id != run_folder_name:
+            raise ValueError(
+                "Resume mode requires --run-id to match the run folder name when set."
+            )
+    elif run_id is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_id = build_generation_run_folder_name(
+            persona_model_config["model"],
+            agent_model_config["model"],
+            max_turns,
+            runs_per_prompt,
+            timestamp,
         )
         folder_name = f"{folder_name}/{run_id}"
         # TODO: do we want to give a message if the folder already exists?
@@ -104,6 +147,7 @@ async def main(
         max_total_words=max_total_words,
         max_personas=max_personas,
         persona_speaks_first=persona_speaks_first,
+        resume=resume,
     )
 
     # Run conversations
@@ -207,6 +251,15 @@ if __name__ == "__main__":
             "Default is 'conversations'."
         ),
         default="conversations",
+    )
+    parser.add_argument(
+        "--resume",
+        help=(
+            "Resume a previous run from an existing run folder. "
+            "Skips transcripts that already exist for persona/run pairs."
+        ),
+        action="store_true",
+        default=False,
     )
 
     parser.add_argument(
@@ -335,6 +388,7 @@ if __name__ == "__main__":
             max_total_words=args.max_total_words,
             max_personas=args.max_personas,
             persona_speaks_first=not args.provider_speaks_first,
+            resume=args.resume,
         )
     )
     if results and all(r.get("skipped") for r in results):

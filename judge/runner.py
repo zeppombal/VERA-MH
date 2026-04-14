@@ -7,12 +7,13 @@ import asyncio
 import os
 from asyncio import Queue
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 import pandas as pd
 
 from .llm_judge import LLMJudge
 from .rubric_config import ConversationData, RubricConfig
+from .utils import build_evaluation_run_folder_path, judge_evaluation_tsv_filename
 
 # In case this needs to be synced in the meta prompt for the judge
 EVALUATION_SEPARATOR = ":"
@@ -105,6 +106,7 @@ def _create_evaluation_jobs(
     output_folder: str,
     rubric_config: RubricConfig,
     judge_model_extra_params: Optional[Dict[str, Any]] = None,
+    existing_tsv_basenames: Optional[set[str]] = None,
 ) -> List[
     Tuple[ConversationData, str, int, int, str, RubricConfig, Optional[Dict[str, Any]]]
 ]:
@@ -127,6 +129,16 @@ def _create_evaluation_jobs(
     for conversation in conversations:
         for judge_model, num_instances in judge_models.items():
             for instance in range(1, num_instances + 1):
+                # With --resume, each completed job leaves a deterministic .tsv in the
+                # output folder; skip those so we only enqueue missing work.
+                if existing_tsv_basenames is not None:
+                    basename = judge_evaluation_tsv_filename(
+                        conversation.metadata.get("filename", "unknown.txt"),
+                        judge_model,
+                        instance,
+                    )
+                    if basename in existing_tsv_basenames:
+                        continue
                 judge_id = instance - 1  # Convert 1-based instance to 0-based judge_id
                 jobs.append(
                     (
@@ -140,6 +152,17 @@ def _create_evaluation_jobs(
                     )
                 )
     return jobs
+
+
+def _index_existing_evaluation_tsv_basenames(output_folder: str) -> set[str]:
+    """Return set of existing TSV basenames in output folder."""
+    if not os.path.isdir(output_folder):
+        return set()
+    return {
+        name
+        for name in os.listdir(output_folder)
+        if name.endswith(".tsv") and os.path.isfile(os.path.join(output_folder, name))
+    }
 
 
 async def _worker(
@@ -366,6 +389,7 @@ async def batch_evaluate_with_individual_judges(
     per_judge: bool,
     judge_model_extra_params: Optional[Dict[str, Any]] = None,
     verbose_workers: bool = False,
+    existing_tsv_basenames: Optional[set[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Evaluate conversations with multiple judge models using queue workers.
@@ -409,6 +433,7 @@ async def batch_evaluate_with_individual_judges(
         output_folder,
         rubric_config,
         judge_model_extra_params,
+        existing_tsv_basenames,
     )
 
     # Run workers with queue
@@ -433,6 +458,7 @@ async def judge_conversations(
     max_concurrent: Optional[int] = None,
     per_judge: bool = False,
     verbose_workers: bool = False,
+    resume: bool = False,
 ) -> tuple[List[Dict[str, Any]], str]:
     """
     Judge conversations with multiple judge models.
@@ -478,7 +504,9 @@ async def judge_conversations(
                     judge_info += f"_{k}{v}"
 
         folder_name = conversation_folder_name or "conversations"
-        output_folder = f"{output_root}/j_{judge_info}_{timestamp}__{folder_name}"
+        output_folder = build_evaluation_run_folder_path(
+            output_root, judge_info, timestamp, folder_name
+        )
 
     os.makedirs(output_folder, exist_ok=True)
 
@@ -487,6 +515,9 @@ async def judge_conversations(
         print(f"🔍 Judging {total_found} conversations")
 
     total_evaluations = len(conversations) * sum(judge_models.values())
+    existing_tsv_basenames = (
+        _index_existing_evaluation_tsv_basenames(output_folder) if resume else None
+    )
 
     batch_start = datetime.now()
     results = await batch_evaluate_with_individual_judges(
@@ -498,10 +529,26 @@ async def judge_conversations(
         per_judge,
         judge_model_extra_params,
         verbose_workers,
+        existing_tsv_basenames,
     )
 
     ok_n = len(results)
-    skipped_n = total_evaluations - ok_n
+    skipped_existing_n = (
+        total_evaluations
+        - len(
+            _create_evaluation_jobs(
+                conversations,
+                judge_models,
+                output_folder,
+                rubric_config,
+                judge_model_extra_params,
+                existing_tsv_basenames,
+            )
+        )
+        if resume
+        else 0
+    )
+    skipped_error_n = total_evaluations - skipped_existing_n - ok_n
 
     if save_aggregated_results and results:
         # Column order: filename, run_id, judge_model, judge_instance,
@@ -518,7 +565,7 @@ async def judge_conversations(
             if k
             not in ["filename", "run_id", "judge_model", "judge_instance", "judge_id"]
         ]
-        pd.DataFrame(results, columns=columns).to_csv(
+        pd.DataFrame(results, columns=cast(Any, columns)).to_csv(
             f"{output_folder}/{filename}", index=False
         )
     if verbose:
@@ -528,8 +575,10 @@ async def judge_conversations(
             f"→ {output_folder}/"
         )
         print(f"  Wall time: {elapsed_s:.2f} seconds")
-        if skipped_n:
-            print(f"  ({skipped_n} skipped due to errors)")
+        if skipped_existing_n:
+            print(f"  ({skipped_existing_n} skipped: evaluation already exists)")
+        if skipped_error_n:
+            print(f"  ({skipped_error_n} skipped due to errors)")
 
     return results, output_folder
 
