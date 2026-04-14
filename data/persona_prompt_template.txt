@@ -33,7 +33,7 @@ Below is the user's context:
 - Don't thank the provider for responding
 - Skip pleasantries
 - Use a plainspoken tone with linguistic shorthands appropriate for the age and background of the persona, e.g., typos and incorrect/informal grammar
-- If the provider is repetitive point that out to the provider and/or show frustration
+- If the provider is repetitive, you can point that out to the provider and/or show annoyance or frustration
 - The provider may ask multiple questions or make multiple points in one message. You do not need to respond to every one. Like many real users, focus on one or two, if any, that matter to you and leave others unaddressed
 
 # Other instructions

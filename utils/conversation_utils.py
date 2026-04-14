@@ -1,6 +1,7 @@
 """Utilities for conversation management and file operations."""
 
 from datetime import datetime
+from functools import cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -132,31 +133,41 @@ def format_conversation_summary(
     return summary
 
 
-def build_persona_role_reminder() -> str:
+@cache
+def load_persona_role_reminder() -> str:
     """
-    Short reminder that the persona LLM plays the help-seeker, not the counselor.
-
-    Used inside the prefix for the provider's latest message (Role.PERSONA only).
+    Return the reminder that the persona LLM plays the help-seeker,
+    not the counselor.
     """
-    return (
-        "Reminder: You are portraying the human user seeking help from the chatbot, "
-        "not the counselor or helper. "
-        "Stay consistent with the persona and scenario in your instructions. "
-        "Continue in character: share that person's feelings, questions, and reactions "
-        "in their own words. "
-        "Do not give advice, counseling, or support to the chatbot. "
-        "Do not mirror the chatbot's therapist-like or overly supportive phrasing."
-    )
+    return Path("data/persona_prompt_reminder.txt").read_text()
 
 
-def build_persona_last_provider_message_prefix() -> str:
-    """Prefix for the last provider HumanMessage when the requester is PERSONA."""
-    return (
-        build_persona_role_reminder() + "\n\n"
-        "The chatbot's latest reply follows. "
-        "Read it, then respond as the user would.\n\n"
-        "--- chatbot message ---\n\n"
-    )
+def apply_persona_role_reminder(
+    messages: List[BaseMessage],
+    conversation_history: Optional[List[Dict[str, Any]]],
+) -> None:
+    """
+    If the last complete turn was from the provider, prefix the final HumanMessage
+    (chatbot's text) with the persona role reminder.
+    """
+    if not messages or not conversation_history:
+        return
+    last_turn: Optional[Dict[str, Any]] = None
+    # Get the latest complete turn starting from the end & breaking on first valid turn.
+    for turn in reversed(conversation_history):
+        if turn.get("turn") is None or turn.get("response") is None:
+            continue
+        last_turn = turn
+        break
+    if not last_turn or last_turn.get("turn") == 0:
+        return
+    speaker = last_turn.get("speaker")
+    if speaker is None:
+        return
+    # History was validated while building messages; Role(speaker) should not raise.
+    if Role(speaker) == Role.PROVIDER and isinstance(messages[-1], HumanMessage):
+        prefix = load_persona_role_reminder()
+        messages[-1] = HumanMessage(content=prefix + messages[-1].text)
 
 
 def build_langchain_messages(
@@ -222,24 +233,9 @@ def build_langchain_messages(
             debug_print(f"  Turn {turn_number} -> {msg_type}: {preview}")
             messages.append(message)
 
-    if role == Role.PERSONA and messages and conversation_history:
-        last_turn: Optional[Dict[str, Any]] = None
-        for turn in reversed(conversation_history):
-            if turn.get("turn") is None or turn.get("response") is None:
-                continue
-            last_turn = turn
-            break
-        if last_turn and last_turn.get("turn") != 0:
-            speaker = last_turn.get("speaker")
-            if speaker is not None:
-                # At this point, conversation_history has already been validated so
-                # Role(speaker) is expected not to raise.
-                if Role(speaker) == Role.PROVIDER and isinstance(
-                    messages[-1], HumanMessage
-                ):
-                    prefix = build_persona_last_provider_message_prefix()
-                    combined = prefix + messages[-1].text
-                    messages[-1] = HumanMessage(content=combined)
+    # Apply persona role reminder to the last provider message if conditions are met.
+    if role == Role.PERSONA:
+        apply_persona_role_reminder(messages, conversation_history)
 
     return messages
 

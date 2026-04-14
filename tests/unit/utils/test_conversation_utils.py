@@ -9,10 +9,10 @@ from llm_clients.llm_interface import Role
 from utils.conversation_utils import (
     add_timestamp_to_path,
     build_langchain_messages,
-    build_persona_last_provider_message_prefix,
     ensure_provider_has_last_turn,
     format_conversation_as_string,
     format_conversation_summary,
+    load_persona_role_reminder,
 )
 
 
@@ -245,7 +245,7 @@ class TestBuildLangchainMessages:
             conversation_history=history,
         )
 
-        prefix = build_persona_last_provider_message_prefix()
+        prefix = load_persona_role_reminder()
         assert messages[0].text == multiline_text
         assert messages[1].text == prefix + unicode_text
 
@@ -308,7 +308,7 @@ class TestBuildLangchainMessages:
             conversation_history=history,
         )
 
-        prefix = build_persona_last_provider_message_prefix()
+        prefix = load_persona_role_reminder()
         assert len(messages) == 4  # 4 history messages
         # Persona's own messages should be AIMessage (what "I" said)
         assert isinstance(messages[0], AIMessage)
@@ -367,7 +367,7 @@ class TestBuildLangchainMessages:
             conversation_history=history,
         )
 
-        prefix = build_persona_last_provider_message_prefix()
+        prefix = load_persona_role_reminder()
         assert len(messages) == 3  # turn 0 + 2 history messages
         # Turn 0 should always be HumanMessage regardless of role
         assert isinstance(messages[0], HumanMessage)
