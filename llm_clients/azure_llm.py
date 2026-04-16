@@ -176,7 +176,6 @@ class AzureLLM(JudgeLLM):
             messages.append(SystemMessage(content=self.system_prompt))
 
         # Build messages from history
-        # Role reminder is automatically added for personas by build_langchain_messages
         messages.extend(build_langchain_messages(self.role, conversation_history))
 
         # Debug: Print messages being sent to LLM
@@ -201,6 +200,7 @@ class AzureLLM(JudgeLLM):
             except Exception as e:
                 error_msg = str(e)
                 self._set_response_metadata("azure", error=error_msg)
+                # 404 / not-found: explain deployment name, endpoint, API version.
                 if "404" in error_msg or "Resource not found" in error_msg:
                     error_details = str(e)
                     if hasattr(e, "response"):
