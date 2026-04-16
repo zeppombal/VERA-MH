@@ -12,6 +12,7 @@ There are known limitations of the current structure, which will be simplified a
 ## Table of Contents
 
 - [Getting Started](#getting-started)
+- [Connecting your own LLM, Agent, or API](#connecting-your-own-llm-or-api)
 - [Using Extra Parameters](#using-extra-parameters)
 - [Data Files](#data-files)
 - [LLM Conversation Simulator](#llm-conversation-simulator)
@@ -27,6 +28,21 @@ There are known limitations of the current structure, which will be simplified a
 - [First Announcement](https://www.springhealth.com/blog/introducing-vera-mh-new-standard-ethical-ai-mental-healthcare)
 
 # Getting started
+
+## Connecting your own LLM, Agent, or API
+
+Use this when the **provider** you want to evaluate (the mental-health chatbot under test) is **not** already available as a built-in model name in `generate.py`—for example a private HTTP API, an internal gateway, or a new cloud provider.
+
+**What to implement**
+
+1. **Examples** — [`llm_clients/endpoint_llm.py`](llm_clients/endpoint_llm.py) is a working HTTP-style provider example (chat-oriented; judge support may be limited). Other [`llm_clients/`](llm_clients/) modules show LangChain-backed providers.
+2. **Contract** — Subclass [`LLMInterface`](llm_clients/llm_interface.py) for conversation simulation. Subclass [`JudgeLLM`](llm_clients/llm_interface.py) only if you also need this same stack to **run as a judge** (requires structured output via `generate_structured_response`).
+3. **Methods** — Implement `start_conversation()` (first assistant turn) and `generate_response(conversation_history)` (later turns). For `JudgeLLM`, add `generate_structured_response()` for rubric scoring. The simulator passes full history each time; you can stay stateless or track server-side session IDs.
+4. **Wire-up** — Add logic in [`llm_clients/llm_factory.py`](llm_clients/llm_factory.py) to return your class when `-p` / `--provider-agent` (and user-agent if needed) matches your chosen model string. Add API keys or base URLs in [`llm_clients/config.py`](llm_clients/config.py) if required.
+5. **Run** — Use your registered model id with `generate.py` (`-p`, and `-u` for the persona model), then `judge.py` with a supported judge model (built-in judges are recommended for reliability).
+
+**Full guide** (step-by-step code, history format, metadata, structured output caveats): [docs/evaluating.md](docs/evaluating.md).
+
 ## Step-by-step
 0. **Install uv** (if not already installed):
    ```bash
@@ -50,7 +66,7 @@ There are known limitations of the current structure, which will be simplified a
    pre-commit install
    ```
 
-4. **(Optional) Create an LLM class for your agent**: see guidance [here](docs/evaluating.md)
+4. **(Optional) Custom provider** — If your product is not a supported, implement and register a client (see [Connecting your own LLM or API](#connecting-your-own-llm-or-api); full detail in [docs/evaluating.md](docs/evaluating.md))
 
 5. **End-to-End Pipeline**: For convenience, you can run the entire workflow (generation → evaluation → scoring) with a single command:
 
