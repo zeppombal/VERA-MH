@@ -2,7 +2,7 @@
 
 import importlib.util
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
 
@@ -154,6 +154,7 @@ class TestJudgeMain:
                 judge_model="gpt-4o",
                 rubric_config="rubric_config",
                 judge_model_extra_params={},
+                log_file=ANY,
             )
             judge_single.assert_awaited_once_with(
                 "judge_instance", "conversation_data", "evaluations"

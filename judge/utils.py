@@ -1,5 +1,6 @@
 """Utility functions for the judge module."""
 
+import os
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -55,6 +56,40 @@ def judge_evaluation_tsv_filename(
     if judge_instance is not None:
         judge_suffix += f"_i{judge_instance}"
     return f"{conversation_name}_{judge_suffix}.tsv"
+
+
+def get_judge_logs_root() -> str:
+    """
+    Root directory for per-task judge LLM logs.
+
+    Override with env ``VERA_JUDGE_LOGS_ROOT`` (e.g. set by pytest to a temp dir).
+    Default: ``judge_logs`` in the current working directory.
+    """
+    return os.environ.get("VERA_JUDGE_LOGS_ROOT", "judge_logs")
+
+
+def build_judge_task_log_path(
+    run_key: str,
+    conversation_filename: str,
+    judge_model: str,
+    judge_instance: Optional[int] = None,
+    logs_root: Optional[str] = None,
+) -> str:
+    """
+    Path to the per-task judge LLM log file, parallel to judge_evaluation_tsv_filename.
+
+    Layout: {logs_root}/{run_key}/{same_stem_as_tsv}.log
+
+    ``logs_root`` defaults to :func:`get_judge_logs_root`.
+    """
+    root = logs_root if logs_root is not None else get_judge_logs_root()
+    tsv_name = judge_evaluation_tsv_filename(
+        conversation_filename, judge_model, judge_instance
+    )
+    stem = Path(tsv_name).stem
+    # Parent dirs are created in LLMJudge when the log file is opened (avoids empty
+    # judge_logs/... folders when tests mock LLMJudge after this returns).
+    return str(Path(root) / run_key / f"{stem}.log")
 
 
 def load_rubric_structure(
