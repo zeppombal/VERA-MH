@@ -3,6 +3,7 @@
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pandas as pd
 import pytest
 
 from judge.rubric_config import ConversationData
@@ -230,6 +231,39 @@ class TestRunnerResumeSkip:
         job_pairs = {(j[0].metadata["filename"], j[2]) for j in jobs}
         assert ("test_conv.txt", 2) in job_pairs
         assert ("conv_1.txt", 1) in job_pairs
+
+    @pytest.mark.asyncio
+    async def test_resume_rebuilds_results_csv_from_all_tsvs_when_batch_empty(
+        self, tmp_path: Path, rubric_config_factory
+    ):
+        """results.csv reflects every evaluation TSV, not only in-memory batch rows."""
+        eval_dir = tmp_path / "eval_resume"
+        eval_dir.mkdir()
+        tsv_line = "Detects Potential Risk\tBest Practice\tQ1: ok\n"
+        header = "Dimension\tScore\tReasoning\n"
+        for name in (
+            "a1b2c3_Alice_g4o_run1_mock-judge_i1.tsv",
+            "d4e5f6_Bob_g4o_run1_mock-judge_i1.tsv",
+        ):
+            (eval_dir / name).write_text(header + tsv_line, encoding="utf-8")
+
+        rubric_config = await rubric_config_factory(rubric_file="rubric_simple.tsv")
+
+        with patch("judge.runner.batch_evaluate_with_individual_judges") as mock_batch:
+            mock_batch.return_value = []
+            results, _ = await judge_conversations(
+                judge_models={"mock-judge": 1},
+                conversations=[_conversation(tmp_path)],
+                rubric_config=rubric_config,
+                output_folder=str(eval_dir),
+                resume=True,
+                save_aggregated_results=True,
+                verbose=False,
+            )
+
+        assert results == []
+        df = pd.read_csv(eval_dir / "results.csv")
+        assert len(df) == 2
 
 
 @pytest.mark.unit

@@ -14,6 +14,7 @@ import pandas as pd
 
 from .llm_judge import LLMJudge
 from .rubric_config import ConversationData, RubricConfig
+from .score_utils import build_dataframe_from_tsv_files
 from .utils import (
     build_evaluation_run_folder_path,
     build_judge_task_log_path,
@@ -564,24 +565,40 @@ async def judge_conversations(
     )
     skipped_error_n = total_evaluations - skipped_existing_n - ok_n
 
-    if save_aggregated_results and results:
-        # Column order: filename, run_id, judge_model, judge_instance,
-        # judge_id, dimensions
-        columns = [
-            "filename",
-            "run_id",
-            "judge_model",
-            "judge_instance",
-            "judge_id",
-        ] + [
-            k
-            for k in results[0].keys()
-            if k
-            not in ["filename", "run_id", "judge_model", "judge_instance", "judge_id"]
-        ]
-        pd.DataFrame(results, columns=cast(Any, columns)).to_csv(
-            f"{output_folder}/{filename}", index=False
+    if save_aggregated_results:
+        csv_name = filename or "results.csv"
+        out_csv = os.path.join(output_folder, csv_name)
+        has_eval_tsvs = any(
+            name.endswith(".tsv") and os.path.isfile(os.path.join(output_folder, name))
+            for name in os.listdir(output_folder)
         )
+        if has_eval_tsvs:
+            # Per-job TSVs are source of truth; includes skipped rows on --resume.
+            df = build_dataframe_from_tsv_files(Path(output_folder))
+            df.to_csv(out_csv, index=False)
+        elif results:
+            # No TSVs yet (e.g. mocked batch in tests).
+            columns = [
+                "filename",
+                "run_id",
+                "judge_model",
+                "judge_instance",
+                "judge_id",
+            ] + [
+                k
+                for k in results[0].keys()
+                if k
+                not in [
+                    "filename",
+                    "run_id",
+                    "judge_model",
+                    "judge_instance",
+                    "judge_id",
+                ]
+            ]
+            pd.DataFrame(results, columns=cast(Any, columns)).to_csv(
+                out_csv, index=False
+            )
     if verbose:
         elapsed_s = (datetime.now() - batch_start).total_seconds()
         print(
