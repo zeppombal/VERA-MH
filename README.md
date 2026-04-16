@@ -37,7 +37,7 @@ Use this when the **provider** you want to evaluate (the mental-health chatbot u
 
 1. **Examples** — [`llm_clients/endpoint_llm.py`](llm_clients/endpoint_llm.py) is a working HTTP-style provider example (chat-oriented; judge support may be limited). Other [`llm_clients/`](llm_clients/) modules show LangChain-backed providers.
 2. **Contract** — Subclass [`LLMInterface`](llm_clients/llm_interface.py) for conversation simulation. Subclass [`JudgeLLM`](llm_clients/llm_interface.py) only if you also need this same stack to **run as a judge** (requires structured output via `generate_structured_response`).
-3. **Methods** — Implement `start_conversation()` (first assistant turn) and `generate_response(conversation_history)` (later turns). For `JudgeLLM`, add `generate_structured_response()` for rubric scoring. The simulator passes full history each time; you can stay stateless or track server-side session IDs (see the detailed doc).
+3. **Methods** — Implement `start_conversation()` (first assistant turn) and `generate_response(conversation_history)` (later turns). For `JudgeLLM`, add `generate_structured_response()` for rubric scoring. The simulator passes full history each time; you can stay stateless or track server-side session IDs.
 4. **Wire-up** — Add logic in [`llm_clients/llm_factory.py`](llm_clients/llm_factory.py) to return your class when `-p` / `--provider-agent` (and user-agent if needed) matches your chosen model string. Add API keys or base URLs in [`llm_clients/config.py`](llm_clients/config.py) if required.
 5. **Run** — Use your registered model id with `generate.py` (`-p`, and `-u` for the persona model), then `judge.py` with a supported judge model (built-in judges are recommended for reliability).
 
