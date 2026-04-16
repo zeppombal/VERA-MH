@@ -196,6 +196,40 @@ class TestClaudeLLM(TestJudgeLLMBase):
     @pytest.mark.asyncio
     @patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key")
     @patch("llm_clients.claude_llm.ChatAnthropic")
+    async def test_caching_false_omits_cache_control_on_invoke(
+        self, mock_chat_anthropic, mock_response_factory, mock_system_message
+    ):
+        """When caching=False, ainvoke receives no cache_control kwarg."""
+        mock_response = mock_response_factory(
+            text="No cache",
+            response_id="msg_nocache",
+            provider="claude",
+            metadata={
+                "model": "claude-sonnet-4-5-20250929",
+                "usage": {"input_tokens": 1, "output_tokens": 2},
+                "stop_reason": "end_turn",
+            },
+        )
+
+        mock_llm = MagicMock()
+        mock_llm.model = "claude-sonnet-4-5-20250929"
+        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+        mock_chat_anthropic.return_value = mock_llm
+
+        llm = ClaudeLLM(
+            name="TestClaude",
+            role=Role.PERSONA,
+            system_prompt="You are a helpful assistant.",
+            caching=False,
+        )
+        await llm.generate_response(conversation_history=mock_system_message)
+
+        mock_llm.ainvoke.assert_called_once()
+        assert "cache_control" not in mock_llm.ainvoke.call_args.kwargs
+
+    @pytest.mark.asyncio
+    @patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key")
+    @patch("llm_clients.claude_llm.ChatAnthropic")
     async def test_generate_response_omits_none_cache_usage_keys(
         self, mock_chat_anthropic, mock_response_factory, mock_system_message
     ):

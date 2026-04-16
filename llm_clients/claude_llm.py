@@ -21,7 +21,11 @@ _DEFAULT_ANTHROPIC_CACHE_CONTROL: Dict[str, Any] = {"type": "ephemeral"}
 
 
 class ClaudeLLM(JudgeLLM):
-    """Claude implementation using LangChain."""
+    """Claude implementation using LangChain.
+
+    Prompt caching uses Anthropic's per-request ``cache_control`` (see ``caching`` and
+    ``anthropic_cache_control`` constructor args).
+    """
 
     def _no_retry_substrings(self) -> tuple[str, ...]:
         # Anthropic API / Messages API (see https://docs.anthropic.com/en/api/errors)
@@ -39,13 +43,18 @@ class ClaudeLLM(JudgeLLM):
         role: Role,
         system_prompt: Optional[str] = None,
         model_name: Optional[str] = None,
+        caching: bool = True,
         **kwargs,
     ):
         first_message = kwargs.pop("first_message", None)
         start_prompt = kwargs.pop("start_prompt", None)
-        self._anthropic_cache_control: Optional[Dict[str, Any]] = kwargs.pop(
+        cache_control_arg: Optional[Dict[str, Any]] = kwargs.pop(
             "anthropic_cache_control", dict(_DEFAULT_ANTHROPIC_CACHE_CONTROL)
         )
+        if not caching:
+            self._anthropic_cache_control: Optional[Dict[str, Any]] = None
+        else:
+            self._anthropic_cache_control = cache_control_arg
         super().__init__(
             name,
             role,
@@ -198,7 +207,7 @@ class ClaudeLLM(JudgeLLM):
 
             start_time = time.time()
             invoke_kw: Dict[str, Any] = {}
-            if self._anthropic_cache_control:
+            if self._anthropic_cache_control is not None:
                 invoke_kw["cache_control"] = self._anthropic_cache_control
             response = await structured_llm.ainvoke(messages, **invoke_kw)
             end_time = time.time()
