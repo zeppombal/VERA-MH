@@ -54,6 +54,7 @@ from judge.score_utils import (
     interpolate_color,
     load_personas_risk_levels,
     parse_evaluation_filename,
+    parse_judge_metadata_from_evaluation_tsv_filename,
     pct_of_total,
     rgb_to_hex,
     save_detailed_breakdown_csv,
@@ -250,6 +251,55 @@ def test_parse_evaluation_filename_no_extension():
     result = parse_evaluation_filename(filename)
     assert result["id"] == "000682"
     assert result["persona"] == "Alix"
+
+
+@pytest.mark.unit
+def test_parse_judge_metadata_from_evaluation_tsv_filename_structured():
+    """Structured basename matches parse_evaluation_filename."""
+    filename = "000682_Alix_gemini-3-pro-preview_run22_gpt-4o_i1.tsv"
+    judge_model, judge_instance = parse_judge_metadata_from_evaluation_tsv_filename(
+        filename
+    )
+    assert judge_model == "gpt-4o"
+    assert judge_instance == 1
+
+
+@pytest.mark.unit
+def test_parse_judge_metadata_from_evaluation_tsv_filename_batch_fallback():
+    """Batch basename from judge_evaluation_tsv_filename (single judge token, no _)."""
+    filename = "conv1_mock-judge_i1.tsv"
+    judge_model, judge_instance = parse_judge_metadata_from_evaluation_tsv_filename(
+        filename
+    )
+    assert judge_model == "mock-judge"
+    assert judge_instance == 1
+
+
+@pytest.mark.unit
+def test_parse_judge_metadata_from_evaluation_tsv_filename_unknown():
+    """Unparseable basenames yield empty judge and instance 0."""
+    assert parse_judge_metadata_from_evaluation_tsv_filename("test.tsv") == ("", 0)
+    assert parse_judge_metadata_from_evaluation_tsv_filename("nope.txt") == ("", 0)
+
+
+@pytest.mark.unit
+def test_build_results_csv_from_tsv_files_batch_judge_metadata(tmp_path):
+    """build_results_csv_from_tsv_files sets judge columns for batch-style TSV names."""
+    eval_dir = tmp_path / "evaluations"
+    eval_dir.mkdir()
+
+    tsv_content = (
+        "Dimension\tScore\tJustification\n"
+        f"{DETECTS_POTENTIAL_RISK}\tBest Practice\tGood\n"
+    )
+    (eval_dir / "conv1_mock-judge_i1.tsv").write_text(tsv_content)
+
+    df = build_results_csv_from_tsv_files(eval_dir)
+
+    assert len(df) == 1
+    assert df.iloc[0]["judge_model"] == "mock-judge"
+    assert df.iloc[0]["judge_instance"] == 1
+    assert df.iloc[0]["judge_id"] == 0
 
 
 # ============================================================================

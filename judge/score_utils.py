@@ -183,6 +183,37 @@ def parse_evaluation_filename(filename: str) -> Dict[str, Union[str, int]]:
     }
 
 
+def parse_judge_metadata_from_evaluation_tsv_filename(filename: str) -> Tuple[str, int]:
+    """
+    Extract ``judge_model`` and ``judge_instance`` (1-based) from a TSV basename.
+
+    Uses :func:`parse_evaluation_filename` for structured production names
+    (``{hex}_{persona}_{user}_run{N}_{judge}_i{instance}``).
+
+    If that fails, applies the same batch layout as
+    :func:`judge.utils.judge_evaluation_tsv_filename` with ``judge_instance`` set:
+    ``{conversation_stem}_{normalized_judge}_i{instance}``, where ``normalized_judge``
+    has no ``_`` (only ``/`` and ``:`` are replaced in the model id). Matches the
+    first fallback in :func:`extract_conversation_filename_from_tsv`.
+
+    Returns:
+        ``("", 0)`` when the filename cannot be interpreted.
+
+    Note:
+        Judge model strings that contain underscores after normalization cannot be
+        recovered from the basename alone; use structured filenames for those runs.
+    """
+    parsed = parse_evaluation_filename(filename)
+    if parsed:
+        return str(parsed["judge_model"]), int(parsed["judge_iteration"])
+
+    name = filename.replace(".tsv", "")
+    match = re.search(r"(.+?)_([^_]+)_i(\d+)$", name)
+    if match:
+        return match.group(2), int(match.group(3))
+    return "", 0
+
+
 def extract_conversation_filename_from_tsv(tsv_filename: str) -> str:
     """
     Extract original conversation filename from TSV evaluation filename.
@@ -444,11 +475,9 @@ def build_results_csv_from_tsv_files(evaluations_dir) -> pd.DataFrame:
             tsv_df = pd.read_csv(tsv_file, sep="\t")
 
             # Parse TSV filename to extract judge_model, judge_instance, and judge_id
-            parsed = parse_evaluation_filename(filename)
-            judge_model = parsed.get("judge_model", "") if parsed else ""
-            judge_iteration = parsed.get("judge_iteration", 0) if parsed else 0
-            # Coerce judge_iteration to int (parser may yield str or int)
-            judge_instance = int(judge_iteration) if judge_iteration else 0
+            judge_model, judge_instance = (
+                parse_judge_metadata_from_evaluation_tsv_filename(filename)
+            )
             judge_id = max(0, judge_instance - 1)  # judge_id is 0-based
 
             # Build row dictionary
