@@ -77,7 +77,11 @@ class LLMJudge:
         self.logger.setLevel(logging.INFO)
         self.logger.handlers.clear()
 
-        # File handler - one job per file (mode=w avoids interleaved concurrent logs)
+        # One log path per batch job: stem matches the evaluation TSV (see
+        # build_judge_task_log_path). Different evaluation runs use different
+        # output folders, so run_key differs and logs do not collide across runs.
+        # mode="w" truncates on each job start; re-running the same job in the
+        # same folder replaces the log (and TSV), which is intentional.
         file_handler = logging.FileHandler(log_file, mode="w", encoding="utf-8")
         file_handler.setLevel(logging.INFO)
         formatter = logging.Formatter(
