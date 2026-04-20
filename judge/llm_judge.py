@@ -58,6 +58,13 @@ class LLMJudge:
 
         # Setup logger
         if log_file is None:
+            # Batch judging passes an explicit path via build_judge_task_log_path:
+            # judge_logs/<run_key>/<conversation_stem>.log, where run_key is the
+            # evaluation output folder name (scoped to that run). When log_file is
+            # omitted—e.g. LLMJudge constructed directly or tests—we have no run
+            # key; "unscoped" namespaces those logs under the judge_logs root so
+            # they stay separate from run-scoped folders. UUID filenames avoid
+            # concurrent or repeated sessions overwriting the same file.
             log_file = str(
                 Path(get_judge_logs_root())
                 / "unscoped"
