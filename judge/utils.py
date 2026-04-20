@@ -2,6 +2,7 @@
 
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -56,6 +57,25 @@ def judge_evaluation_tsv_filename(
     if judge_instance is not None:
         judge_suffix += f"_i{judge_instance}"
     return f"{conversation_name}_{judge_suffix}.tsv"
+
+
+def build_single_conversation_judge_run_key(
+    conversation_path: str | Path,
+    *,
+    now: Optional[datetime] = None,
+) -> str:
+    """
+    ``run_key`` for :func:`build_judge_task_log_path` in ``judge.py`` single-file
+    (``-c``) mode.
+
+    Format: ``single_<timestamp_ms>__<conversation_stem>``. Batch judging uses the
+    evaluation folder basename instead; this gives a stable, unique folder name
+    per CLI run.
+    """
+    dt = datetime.now() if now is None else now
+    ts = dt.strftime("%Y%m%d_%H%M%S_%f")[:-3]
+    stem = Path(conversation_path).stem
+    return f"single_{ts}__{stem}"
 
 
 def get_judge_logs_root() -> str:

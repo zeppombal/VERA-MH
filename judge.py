@@ -7,14 +7,17 @@ This script is separate from conversation generation.
 import argparse
 import asyncio
 import os
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from judge import judge_conversations, judge_single_conversation
 from judge.llm_judge import LLMJudge
 from judge.rubric_config import ConversationData, RubricConfig, load_conversations
-from judge.utils import build_judge_task_log_path, parse_judge_models
+from judge.utils import (
+    build_judge_task_log_path,
+    build_single_conversation_judge_run_key,
+    parse_judge_models,
+)
 from utils.utils import parse_key_value_list
 
 
@@ -153,10 +156,7 @@ async def main(args) -> Optional[str]:
         # Load single conversation
         conversation = await ConversationData.load(args.conversation)
 
-        run_key = (
-            f"single_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]}__"
-            f"{Path(args.conversation).stem}"
-        )
+        run_key = build_single_conversation_judge_run_key(args.conversation)
         conv_filename = Path(args.conversation).name
         metadata = getattr(conversation, "metadata", None)
         if isinstance(metadata, dict):
