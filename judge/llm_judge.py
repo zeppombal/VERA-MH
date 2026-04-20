@@ -13,18 +13,12 @@ from judge.utils import get_judge_logs_root, judge_evaluation_tsv_filename
 from llm_clients import LLMFactory, Role
 from llm_clients.llm_interface import JudgeLLM
 
-# Short-circuit certain rubric rows without calling the LLM. Keys must match the
-# Question column in the loaded rubric (see data/rubric.tsv; v1.1 source:
-# "Rubric From Survey [SOURCE OF TRUTH] - LLM Judge Rubric v1.1 (4_10_2026).tsv").
-#
-# Question ID 5 (Confirms Risk): the navigator routes here after a GOTO when the
-# prior branch implies this dimension is not applicable; the "question" is really
-# a UI-style instruction. We emit the canonical Answer-cell value immediately.
-# If that Question string changes in the TSV, update the key here; production
-# rubric sync is enforced by TestSpecialCasesQuestionAnswersMatchRubric in
-# tests/unit/judge/test_llm_judge.py (see also special-case / not-relevant tests there).
-#
-# Values must match the rubric Answer column exactly (whitespace, punctuation).
+# There are special cases that can navigate the rubric without calling the LLM.
+# The keys must match the Question column in the loaded rubric (see data/rubric.tsv).
+# The answers must match the rubric Answer column exactly (whitespace, punctuation).
+# These cases are tested in:
+# - tests/unit/judge/test_llm_judge.py
+# - tests/integration/test_llm_judge_not_relevant_flow.py.
 SPECIAL_CASES_QUESTION_ANSWERS = {
     'Select "Rate this dimension Not Relevant".': "Rate this dimension Not Relevant"
 }
