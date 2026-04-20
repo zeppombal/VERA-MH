@@ -7,13 +7,18 @@ import asyncio
 import os
 from asyncio import Queue
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 import pandas as pd
 
 from .llm_judge import LLMJudge
 from .rubric_config import ConversationData, RubricConfig
-from .utils import build_evaluation_run_folder_path, judge_evaluation_tsv_filename
+from .utils import (
+    build_evaluation_run_folder_path,
+    build_judge_task_log_path,
+    judge_evaluation_tsv_filename,
+)
 
 # In case this needs to be synced in the meta prompt for the judge
 EVALUATION_SEPARATOR = ":"
@@ -66,10 +71,19 @@ async def _evaluate_single_conversation_with_judge(
         Dict with filename, run_id, judge_model, judge_instance, judge_id,
         and all dimension scores
     """
+    conversation_filename = conversation.metadata.get("filename", "unknown.txt")
+    run_key = Path(output_folder).name
+    log_file = build_judge_task_log_path(
+        run_key,
+        conversation_filename,
+        judge_model,
+        judge_instance,
+    )
     judge = LLMJudge(
         judge_model=judge_model,
         rubric_config=rubric_config,
         judge_model_extra_params=judge_model_extra_params,
+        log_file=log_file,
     )
 
     evaluation = await judge.evaluate_conversation_question_flow(

@@ -8,6 +8,7 @@ evaluations*/
 !publication_data/**
 logging/
 logs/
+judge_logs/
 tmp_tests/
 **/.DS_Store
 .ipynb_checkpoints/

@@ -5,11 +5,74 @@ question_flow_data and question_order from a loaded RubricConfig. These tests
 verify that data as exposed by LLMJudge and the judge's scoring/matching logic.
 """
 
+from pathlib import Path
+
+import pandas as pd
 import pytest
 
 from judge.constants import NOT_RELEVANT
-from judge.llm_judge import LLMJudge
-from judge.rubric_config import DETECTS_POTENTIAL_RISK
+from judge.llm_judge import SPECIAL_CASES_QUESTION_ANSWERS, LLMJudge
+from judge.rubric_config import (
+    COL_ANSWER,
+    COL_QUESTION,
+    COL_QUESTION_ID,
+    DETECTS_POTENTIAL_RISK,
+)
+
+
+@pytest.mark.unit
+class TestSpecialCasesQuestionAnswersMatchRubric:
+    """SPECIAL_CASES_QUESTION_ANSWERS must match data/rubric.tsv Question/Answer cells.
+
+    The judge skips the LLM for these Question strings and emits the Answer text
+    verbatim; drift between code and the shipped rubric breaks scoring.
+    """
+
+    def test_special_cases_match_production_rubric(self):
+        rubric_path = Path("data/rubric.tsv")
+        assert rubric_path.exists(), f"Rubric file not found: {rubric_path}"
+        rubric_df = pd.read_csv(rubric_path, sep="\t")
+
+        q5 = rubric_df[pd.to_numeric(rubric_df[COL_QUESTION_ID], errors="coerce") == 5]
+        assert (
+            not q5.empty
+        ), "Expected Question ID 5 in data/rubric.tsv (Confirms Risk GOTO)."
+        q5_row = q5.iloc[0]
+        q5_question = q5_row[COL_QUESTION]
+        q5_answer = q5_row[COL_ANSWER]
+        assert (
+            isinstance(q5_question, str)
+            and q5_question in SPECIAL_CASES_QUESTION_ANSWERS
+        ), (
+            "Question ID 5's Question text must appear as a key in "
+            "SPECIAL_CASES_QUESTION_ANSWERS; update llm_judge.py after rubric edits."
+        )
+        assert SPECIAL_CASES_QUESTION_ANSWERS[q5_question] == q5_answer, (
+            "SPECIAL_CASES_QUESTION_ANSWERS[Question ID 5] must equal that row's "
+            "Answer cell "
+            f"(got dict value {SPECIAL_CASES_QUESTION_ANSWERS[q5_question]!r}, "
+            f"rubric has {q5_answer!r})."
+        )
+
+        for question_text, expected_answer in SPECIAL_CASES_QUESTION_ANSWERS.items():
+            rows = rubric_df[rubric_df[COL_QUESTION] == question_text]
+            assert not rows.empty, (
+                f"SPECIAL_CASES_QUESTION_ANSWERS key {question_text!r} not found in "
+                f"{rubric_path} Question column."
+            )
+            primary = rows[
+                rows[COL_QUESTION_ID].notna()
+                & (rows[COL_QUESTION_ID].astype(str).str.strip() != "")
+            ]
+            assert not primary.empty, (
+                f"Rubric rows with Question {question_text!r} must include a primary "
+                "row with Question ID set."
+            )
+            actual_answer = primary.iloc[0][COL_ANSWER]
+            assert actual_answer == expected_answer, (
+                f"For Question {question_text!r}, rubric Answer is {actual_answer!r} "
+                f"but SPECIAL_CASES_QUESTION_ANSWERS expects {expected_answer!r}."
+            )
 
 
 @pytest.mark.unit

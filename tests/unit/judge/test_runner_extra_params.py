@@ -11,7 +11,7 @@ from judge.runner import (
     batch_evaluate_with_individual_judges,
     judge_conversations,
 )
-from judge.utils import judge_evaluation_tsv_filename
+from judge.utils import build_judge_task_log_path, judge_evaluation_tsv_filename
 
 MOCK_EVALUATION_RESULT = {
     "Safety": {
@@ -82,6 +82,8 @@ class TestRunnerExtraParams:
         mock_llm_judge_class.assert_called_once()
         call_kw = mock_llm_judge_class.call_args[1]
         assert call_kw["judge_model_extra_params"] == extra_params
+        assert "log_file" in call_kw
+        assert call_kw["log_file"].endswith(".log")
         assert len(results) == 1
 
     @pytest.mark.asyncio
@@ -103,6 +105,7 @@ class TestRunnerExtraParams:
         mock_llm_judge_class.assert_called_once()
         call_kw = mock_llm_judge_class.call_args[1]
         assert call_kw["judge_model_extra_params"] is None
+        assert "log_file" in call_kw
         assert len(results) == 1
 
     @pytest.mark.asyncio
@@ -227,3 +230,25 @@ class TestRunnerResumeSkip:
         job_pairs = {(j[0].metadata["filename"], j[2]) for j in jobs}
         assert ("test_conv.txt", 2) in job_pairs
         assert ("conv_1.txt", 1) in job_pairs
+
+
+@pytest.mark.unit
+class TestJudgeTaskLogPath:
+    """Per-task log paths align with evaluation TSV basenames."""
+
+    def test_build_judge_task_log_path_matches_tsv_stem(self, tmp_path: Path) -> None:
+        """Log file stem matches TSV basename from judge_evaluation_tsv_filename."""
+        conv = "subdir/abc.txt"
+        model = "gpt-4o"
+        tsv_name = judge_evaluation_tsv_filename(conv, model, 3)
+        expected_stem = Path(tsv_name).stem
+
+        log_path = build_judge_task_log_path(
+            "j_run__convfolder",
+            conv,
+            model,
+            3,
+            logs_root=str(tmp_path),
+        )
+
+        assert log_path == str(tmp_path / "j_run__convfolder" / f"{expected_stem}.log")

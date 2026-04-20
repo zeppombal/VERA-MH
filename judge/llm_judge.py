@@ -1,6 +1,7 @@
 """LLM Judge for evaluating conversations based on rubrics."""
 
 import logging
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -8,12 +9,16 @@ from judge.constants import BEST_PRACTICE, DAMAGING, NEUTRAL
 from judge.question_navigator import QuestionNavigator
 from judge.response_models import QuestionResponse
 from judge.rubric_config import ConversationData, RubricConfig
-from judge.utils import judge_evaluation_tsv_filename
+from judge.utils import get_judge_logs_root, judge_evaluation_tsv_filename
 from llm_clients import LLMFactory, Role
 from llm_clients.llm_interface import JudgeLLM
 
-# NOTE: be sure that the answer (value) exactly matches the format in the rubric
-# we lowercase the questions here to help match the lowered question later in the code
+# There are special cases that can navigate the rubric without calling the LLM.
+# The keys must match the Question column in the loaded rubric (see data/rubric.tsv).
+# The answers must match the rubric Answer column exactly (whitespace, punctuation).
+# These cases are tested in:
+# - tests/unit/judge/test_llm_judge.py
+# - tests/integration/test_llm_judge_not_relevant_flow.py.
 SPECIAL_CASES_QUESTION_ANSWERS = {
     'Select "Rate this dimension Not Relevant".': "Rate this dimension Not Relevant"
 }
@@ -41,25 +46,35 @@ class LLMJudge:
             judge_model: Model to use for judging
             rubric_config: Pre-loaded rubric configuration data
             judge_model_extra_params: Extra parameters for the judge model
-            log_file: Path to log file (default: logs/judge_{timestamp}.log)
+            log_file: Path to log file (default under get_judge_logs_root()/unscoped/)
             verbose: Whether to print verbose output during initialization
         """
 
-        # Setup logger
-        if log_file is None:
-            log_dir = Path("logs")
-            log_dir.mkdir(exist_ok=True)
-            from datetime import datetime
+        # Setup logger: batch judging and `judge.py` pass an explicit path from
+        # build_judge_task_log_path (scoped to the run). Omitted log_file is only
+        # for direct construction, tests, etc.—then we use judge_logs/unscoped/ with a
+        # UUID stem so concurrent sessions do not overwrite.
+        scoped = log_file is not None
+        if not scoped:
+            scope_dir = "unscoped"
+            log_file = str(
+                Path(get_judge_logs_root())
+                / scope_dir
+                / f"judge_{uuid.uuid4().hex}.log"
+            )
 
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            log_file = str(log_dir / f"judge_{timestamp}.log")
+        Path(log_file).parent.mkdir(parents=True, exist_ok=True)
 
         self.logger = logging.getLogger(f"LLMJudge_{id(self)}")
         self.logger.setLevel(logging.INFO)
         self.logger.handlers.clear()
 
-        # File handler - write immediately to disk
-        file_handler = logging.FileHandler(log_file, mode="a")
+        # One log path per batch job: stem matches the evaluation TSV (see
+        # build_judge_task_log_path). Different evaluation runs use different
+        # output folders, so run_key differs and logs do not collide across runs.
+        # mode="w" truncates on each job start; re-running the same job in the
+        # same folder replaces the log (and TSV), which is intentional.
+        file_handler = logging.FileHandler(log_file, mode="w", encoding="utf-8")
         file_handler.setLevel(logging.INFO)
         formatter = logging.Formatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -161,6 +176,15 @@ class LLMJudge:
 
         return llm
 
+    def _close_log_handlers(self) -> None:
+        """Close and remove file handlers so large batches do not leak FDs."""
+        for handler in list(self.logger.handlers):
+            try:
+                handler.close()
+            except Exception:
+                pass
+            self.logger.removeHandler(handler)
+
     async def evaluate_conversation_question_flow(
         self,
         conversation: ConversationData,
@@ -204,40 +228,43 @@ class LLMJudge:
             conversation.content, conversation_filename, verbose
         )
 
-        # Step 1: Navigate through questions and collect answers
-        if start_question_id is None:
-            if not self.question_order:
-                raise ValueError("No questions found in rubric")
-            start_question_id = self.question_order[0]
-        dimension_answers = {}
+        try:
+            # Step 1: Navigate through questions and collect answers
+            if start_question_id is None:
+                if not self.question_order:
+                    raise ValueError("No questions found in rubric")
+                start_question_id = self.question_order[0]
+            dimension_answers = {}
 
-        # this function returns if one of the questions triggered
-        # 'Not Relevant' for all the remaining dimensions
-        not_relevant_question_id = await self._ask_all_questions(
-            start_question_id, dimension_answers, verbose
-        )
-
-        # Step 2: Calculate final scores
-        results = self._calculate_results(
-            not_relevant_question_id, dimension_answers, verbose, reasoning_length
-        )
-
-        # Step 3: Log and save results
-        self._log_final_results(results)
-        if auto_save:
-            self._save_results(
-                conversation, output_folder, results, verbose, judge_instance
+            # this function returns if one of the questions triggered
+            # 'Not Relevant' for all the remaining dimensions
+            not_relevant_question_id = await self._ask_all_questions(
+                start_question_id, dimension_answers, verbose
             )
 
-        # Cleanup LLM resources (e.g., close HTTP sessions for Azure)
-        if self.evaluator is not None:
-            try:
-                await self.evaluator.cleanup()
-            except Exception as e:
-                # Log but don't fail if cleanup fails
-                self.logger.warning(f"Failed to cleanup evaluator LLM: {e}")
+            # Step 2: Calculate final scores
+            results = self._calculate_results(
+                not_relevant_question_id, dimension_answers, verbose, reasoning_length
+            )
 
-        return results
+            # Step 3: Log and save results
+            self._log_final_results(results)
+            if auto_save:
+                self._save_results(
+                    conversation, output_folder, results, verbose, judge_instance
+                )
+
+            return results
+        finally:
+            # Cleanup LLM resources (e.g., close HTTP sessions for Azure)
+            if self.evaluator is not None:
+                try:
+                    await self.evaluator.cleanup()
+                except Exception as e:
+                    # Log but don't fail if cleanup fails
+                    self.logger.warning(f"Failed to cleanup evaluator LLM: {e}")
+                self.evaluator = None
+            self._close_log_handlers()
 
     def _save_iterative_evaluation(
         self, results: Dict[str, Dict[str, str]], output_file: Path, sep: str = "\t"
