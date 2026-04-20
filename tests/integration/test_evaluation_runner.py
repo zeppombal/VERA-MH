@@ -22,6 +22,7 @@ from judge.runner import (
     judge_conversations,
     judge_single_conversation,
 )
+from judge.score_utils import build_dataframe_from_tsv_files
 from tests.mocks.mock_llm import MockLLM
 
 
@@ -479,6 +480,62 @@ class TestJudgeConversations:
         assert "run_id" in df.columns
         assert "judge_model" in df.columns
         assert "judge_instance" in df.columns
+
+    async def test_results_csv_matches_tsv_reconstruction(
+        self,
+        tmp_path: Path,
+        mock_rubric_files: str,
+        mock_llm_factory_for_judge,
+    ):
+        """Written results.csv matches an independent rebuild from the same TSVs."""
+        conv_folder = tmp_path / "conversations"
+        conv_folder.mkdir()
+        (conv_folder / "conv1.txt").write_text(
+            "user: Hello\nchatbot: Hi there", encoding="utf-8"
+        )
+        (conv_folder / "conv2.txt").write_text(
+            "user: How are you?\nchatbot: I'm well", encoding="utf-8"
+        )
+
+        output_root = str(tmp_path / "evaluation_output")
+        conversations = await load_conversations(str(conv_folder))
+        rubric_config = await RubricConfig.load(
+            rubric_folder=mock_rubric_files,
+            rubric_file="rubric.tsv",
+            rubric_prompt_beginning_file="rubric_prompt_beginning.txt",
+            question_prompt_file="question_prompt.txt",
+        )
+
+        _, output_folder = await judge_conversations(
+            judge_models={"mock-judge": 1},
+            conversations=conversations,
+            rubric_config=rubric_config,
+            output_root=output_root,
+            conversation_folder_name="conversations",
+            verbose=False,
+            save_aggregated_results=True,
+        )
+
+        eval_dir = Path(output_folder)
+        assert len(list(eval_dir.glob("*.tsv"))) == 2
+
+        # Match str handling in DataFrame builds (empty cells vs NaN from read_csv).
+        df_from_csv = pd.read_csv(
+            eval_dir / "results.csv",
+            keep_default_na=False,
+        )
+        df_from_tsv = build_dataframe_from_tsv_files(eval_dir)
+
+        sort_cols = ["filename", "judge_model", "judge_instance"]
+        df_from_csv = df_from_csv.sort_values(sort_cols).reset_index(drop=True)
+        df_from_tsv = df_from_tsv.sort_values(sort_cols).reset_index(drop=True)
+        df_from_csv = df_from_csv[df_from_tsv.columns]
+
+        pd.testing.assert_frame_equal(
+            df_from_csv,
+            df_from_tsv,
+            check_dtype=False,
+        )
 
     async def test_judge_conversations_custom_output_folder(
         self,
@@ -2064,7 +2121,7 @@ class TestRunnerHelperFunctions:
         from judge.rubric_config import ConversationData, RubricConfig
         from judge.runner import (
             _create_evaluation_jobs,
-            _index_existing_evaluation_tsv_basenames,
+            _list_existing_evaluation_tsv_basenames,
         )
         from judge.utils import judge_evaluation_tsv_filename
 
@@ -2096,7 +2153,7 @@ class TestRunnerHelperFunctions:
             "Dimension\tScore\tReasoning\n", encoding="utf-8"
         )
 
-        existing_basenames = _index_existing_evaluation_tsv_basenames(str(out))
+        existing_basenames = _list_existing_evaluation_tsv_basenames(str(out))
         kept = _create_evaluation_jobs(
             conversations,
             judge_models,

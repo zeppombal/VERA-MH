@@ -14,6 +14,7 @@ import pandas as pd
 
 from .llm_judge import LLMJudge
 from .rubric_config import ConversationData, RubricConfig
+from .score_utils import build_dataframe_from_tsv_files
 from .utils import (
     build_evaluation_run_folder_path,
     build_judge_task_log_path,
@@ -168,7 +169,7 @@ def _create_evaluation_jobs(
     return jobs
 
 
-def _index_existing_evaluation_tsv_basenames(output_folder: str) -> set[str]:
+def _list_existing_evaluation_tsv_basenames(output_folder: str) -> set[str]:
     """Return set of existing TSV basenames in output folder."""
     if not os.path.isdir(output_folder):
         return set()
@@ -530,7 +531,7 @@ async def judge_conversations(
 
     total_evaluations = len(conversations) * sum(judge_models.values())
     existing_tsv_basenames = (
-        _index_existing_evaluation_tsv_basenames(output_folder) if resume else None
+        _list_existing_evaluation_tsv_basenames(output_folder) if resume else None
     )
 
     batch_start = datetime.now()
@@ -564,24 +565,44 @@ async def judge_conversations(
     )
     skipped_error_n = total_evaluations - skipped_existing_n - ok_n
 
-    if save_aggregated_results and results:
-        # Column order: filename, run_id, judge_model, judge_instance,
-        # judge_id, dimensions
-        columns = [
-            "filename",
-            "run_id",
-            "judge_model",
-            "judge_instance",
-            "judge_id",
-        ] + [
-            k
-            for k in results[0].keys()
-            if k
-            not in ["filename", "run_id", "judge_model", "judge_instance", "judge_id"]
-        ]
-        pd.DataFrame(results, columns=cast(Any, columns)).to_csv(
-            f"{output_folder}/{filename}", index=False
-        )
+    if save_aggregated_results:
+        csv_name = filename or "results.csv"
+        out_csv = os.path.join(output_folder, csv_name)
+        # On resume: if the initial scan found any evaluation TSV basenames, at
+        # least one matching file still exists after the batch (this path does
+        # not delete TSVs). If the scan was empty, this run may have written the
+        # first TSVs — listdir again.
+        if resume and existing_tsv_basenames:
+            has_eval_tsvs = True
+        else:
+            has_eval_tsvs = bool(_list_existing_evaluation_tsv_basenames(output_folder))
+        if has_eval_tsvs:
+            # Per-job TSVs are source of truth; includes skipped rows on --resume.
+            df = build_dataframe_from_tsv_files(Path(output_folder))
+            df.to_csv(out_csv, index=False)
+        elif results:
+            # No TSVs yet (e.g. mocked batch in tests).
+            columns = [
+                "filename",
+                "run_id",
+                "judge_model",
+                "judge_instance",
+                "judge_id",
+            ] + [
+                k
+                for k in results[0].keys()
+                if k
+                not in [
+                    "filename",
+                    "run_id",
+                    "judge_model",
+                    "judge_instance",
+                    "judge_id",
+                ]
+            ]
+            pd.DataFrame(results, columns=cast(Any, columns)).to_csv(
+                out_csv, index=False
+            )
     if verbose:
         elapsed_s = (datetime.now() - batch_start).total_seconds()
         print(
