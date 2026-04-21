@@ -6,9 +6,9 @@ Run with `python -m judge.score -r evaluations/[eval_folder]/results.csv`
 
 Reads results.csv, re-calculates the dataframe from the tsv files in the same
 folder if the results.csv is empty, calculates dimension-level and aggregate scores,
-and outputs to console, JSON file, and generates visualizations:
-- scores_visualization.png: Overall scores with pie chart and dimension breakdown
-- scores_by_risk_visualization.png: Scores broken down by persona risk level
+and outputs to console, JSON files under ``scores/``, and generates visualizations:
+- scores/scores_visualization.png: Overall scores with pie chart and dimension breakdown
+- scores/scores_by_risk_visualization.png: Scores broken down by persona risk level
 """
 
 import argparse
@@ -128,13 +128,21 @@ def _calculate_conversation_metrics(df: pd.DataFrame) -> Tuple[int, float, float
     return total_relevant, pct_all_best, pct_high_harm
 
 
+def _scores_output_dir(csv_path: str) -> Path:
+    """Directory for derived scoring artifacts (``<judge_run>/scores``)."""
+    d = Path(csv_path).parent / "scores"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def _save_results_json(
     results: Dict[str, Any], csv_path: str, output_path: Optional[str] = None
 ):
     """Save results to JSON file."""
     if output_path is None:
-        output_path = str(Path(csv_path).parent / "scores.json")
+        output_path = str(_scores_output_dir(csv_path) / "scores.json")
 
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
         json.dump(results, f, indent=2)
 
@@ -147,8 +155,9 @@ def score_results(
 
     Args:
         results_csv_path: Path to results.csv file
-        output_json_path: Optional path to save JSON output.
-            If None, saves to same directory as CSV.
+        output_json_path: Optional path for the primary JSON output. If None, writes to
+            ``scores/scores.json`` next to ``results.csv`` (under
+            ``<judge_run>/scores/``).
 
     Returns:
         Dictionary containing all scores
@@ -386,8 +395,10 @@ def score_results_by_risk(
     }
 
     if output_json_path is None:
-        output_json_path = str(Path(results_csv_path).parent / "scores_by_risk.json")
+        scores_dir = _scores_output_dir(results_csv_path)
+        output_json_path = str(scores_dir / "scores_by_risk.json")
 
+    Path(output_json_path).parent.mkdir(parents=True, exist_ok=True)
     with open(output_json_path, "w") as f:
         json.dump(results, f, indent=2)
 
@@ -458,7 +469,8 @@ def main():
         "--output-json",
         "-o",
         default=None,
-        help="Path to save JSON output (default: scores.json in same directory as CSV)",
+        help="Path to save JSON output "
+        "(default: scores/scores.json next to results.csv)",
     )
     parser.add_argument(
         "--personas-tsv",
@@ -490,14 +502,13 @@ def main():
     results = score_results(str(results_csv_path), args.output_json)
     print_scores(results)
 
+    scores_dir = _scores_output_dir(str(results_csv_path))
     json_path = (
-        args.output_json
-        if args.output_json
-        else Path(args.results_csv).parent / "scores.json"
+        Path(args.output_json) if args.output_json else scores_dir / "scores.json"
     )
     print(f"\n✅ Scores saved to: {json_path}")
 
-    viz_path = Path(args.results_csv).parent / "scores_visualization.png"
+    viz_path = scores_dir / "scores_visualization.png"
     try:
         create_visualizations(results, viz_path)
     except Exception as e:
@@ -517,9 +528,7 @@ def main():
                 risk_results = score_results_by_risk(
                     str(results_csv_path), str(personas_tsv_path), None
                 )
-                risk_viz_path = (
-                    Path(args.results_csv).parent / "scores_by_risk_visualization.png"
-                )
+                risk_viz_path = scores_dir / "scores_by_risk_visualization.png"
                 create_risk_level_visualizations(risk_results, risk_viz_path)
             except Exception as e:
                 print(f"⚠️  Warning: Could not create risk-level analysis: {e}")

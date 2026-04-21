@@ -91,7 +91,7 @@ class TestVERAMHPipeline:
             str(runs),
             "--turns",
             str(turns),
-            "--folder-name",
+            "--output",
             str(conversations_root),
             "--user-agent-extra-params",
             f"temperature={temp_user}",
@@ -149,14 +149,16 @@ class TestVERAMHPipeline:
         if not conv_dir.exists() or not conv_dir.is_dir():
             raise RuntimeError(f"Generated directory {conv_dir} is not valid")
 
-        # Log results for debugging
-        conv_files = list(conv_dir.glob("*.txt")) + list(conv_dir.glob("*.json"))
+        # Log results for debugging (transcripts under conversations/)
+        conv_dir_tx = conv_dir / "conversations"
+        conv_files = list(conv_dir_tx.glob("*.txt")) + list(conv_dir_tx.glob("*.json"))
         logger = logging.getLogger(__name__)
         if not conv_files:
+            sub = conv_dir_tx if conv_dir_tx.is_dir() else conv_dir
             logger.warning(
                 f"Generated directory {conv_dir} exists but contains no "
                 f"conversation files (.txt/.json). "
-                f"Contents: {[f.name for f in conv_dir.iterdir()]}"
+                f"Contents: {[f.name for f in sub.iterdir()]}"
             )
 
         logger.info(f"Generated conversations in {conv_dir}")
@@ -246,10 +248,10 @@ class TestVERAMHPipeline:
         if result.returncode != 0:
             raise RuntimeError(f"Score CLI failed: {result.stderr}")
 
-        # Load the generated scores.json
-        scores_json = eval_dir / "scores.json"
+        # Load the generated scores.json (under scores/)
+        scores_json = eval_dir / "scores" / "scores.json"
         if not scores_json.exists():
-            raise RuntimeError(f"scores.json not found in {eval_dir}")
+            raise RuntimeError(f"scores.json not found in {eval_dir}/scores/")
 
         with open(scores_json, "r") as f:
             scores_data = json.load(f)
@@ -275,7 +277,7 @@ class TestVERAMHPipeline:
             config = TEST_CONFIG
 
         timestamp = int(time.time())
-        folder_name = f"test_pipeline_{timestamp}"
+        output_dir = f"test_pipeline_{timestamp}"
 
         # Parse judge model to extract instances
         judge_model_name = judge_model or config["JUDGE_MODEL"]
@@ -302,8 +304,8 @@ class TestVERAMHPipeline:
             f"{judge_model_name}:{instances}",
             "--max-personas",
             "1",  # Limit to 1 persona for faster tests
-            "--folder-name",
-            folder_name,
+            "--output",
+            output_dir,
             "--user-agent-extra-params",
             f"temperature={config['TEMP_USER']}",
             "--provider-agent-extra-params",
@@ -326,30 +328,36 @@ class TestVERAMHPipeline:
             if result.returncode != 0:
                 raise RuntimeError(f"Pipeline CLI failed: {result.stderr}")
 
-            # Find the evaluation directory created by run_pipeline
-            evaluations_base_dir = repo_root / "evaluations"
-            if not evaluations_base_dir.exists():
-                raise RuntimeError(
-                    f"Evaluations directory not found: {evaluations_base_dir}"
-                )
-
-            # Find the most recent evaluation subfolder
+            # Layout: repo_root/<output_dir>/p_*__/evaluations/j_*__/scores/scores.json
+            out_base = repo_root / output_dir
+            if not out_base.exists():
+                raise RuntimeError(f"Pipeline output directory not found: {out_base}")
+            gen_runs = sorted(
+                [
+                    d
+                    for d in out_base.iterdir()
+                    if d.is_dir() and d.name.startswith("p_")
+                ],
+                key=lambda d: d.stat().st_ctime,
+            )
+            if not gen_runs:
+                raise RuntimeError(f"No p_* generation run under {out_base}")
+            gen_run = gen_runs[-1]
+            eval_parent = gen_run / "evaluations"
+            if not eval_parent.exists():
+                raise RuntimeError(f"evaluations/ not found under {gen_run}")
             eval_dirs = [
                 d
-                for d in evaluations_base_dir.iterdir()
+                for d in eval_parent.iterdir()
                 if d.is_dir() and d.name.startswith("j_")
             ]
             if not eval_dirs:
-                raise RuntimeError(
-                    f"No evaluation subdirectories found in {evaluations_base_dir}"
-                )
-
+                raise RuntimeError(f"No j_* evaluation folders under {eval_parent}")
             eval_dir = max(eval_dirs, key=lambda d: d.stat().st_ctime)
 
-            # Load and return the scores.json
-            scores_json = eval_dir / "scores.json"
+            scores_json = eval_dir / "scores" / "scores.json"
             if not scores_json.exists():
-                raise RuntimeError(f"scores.json not found in {eval_dir}")
+                raise RuntimeError(f"scores.json not found in {eval_dir}/scores/")
 
             with open(scores_json, "r") as f:
                 scores_data = json.load(f)
@@ -368,15 +376,13 @@ class TestVERAMHPipeline:
             # Clean up test artifacts
             import shutil
 
-            cleanup_dirs = [folder_name, "evaluations"]
-            for dir_name in cleanup_dirs:
-                dir_path = repo_root / dir_name
-                if dir_path.exists() and dir_path.is_dir():
-                    try:
-                        shutil.rmtree(dir_path)
-                    except Exception as e:
-                        logger = logging.getLogger(__name__)
-                        logger.warning(f"Failed to clean up {dir_path}: {e}")
+            dir_path = repo_root / output_dir
+            if dir_path.exists() and dir_path.is_dir():
+                try:
+                    shutil.rmtree(dir_path)
+                except Exception as e:
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Failed to clean up {dir_path}: {e}")
 
     async def run_complete_pipeline(
         self,
@@ -515,7 +521,8 @@ class TestVERAMHPipeline:
         )
 
         # Verify conversation files were created
-        conv_files = list(conv_dir.glob("*.txt")) + list(conv_dir.glob("*.json"))
+        conv_dir_tx = conv_dir / "conversations"
+        conv_files = list(conv_dir_tx.glob("*.txt")) + list(conv_dir_tx.glob("*.json"))
         assert len(conv_files) > 0, "No conversation files were created"
 
         # Judge conversations
@@ -552,8 +559,8 @@ class TestVERAMHPipeline:
             assert metric in aggregates, f"Missing required metric: {metric}"
             assert aggregates[metric] is not None, f"Metric {metric} should not be None"
 
-        # Verify scores.json file is created in the evaluation directory
-        scores_file = eval_dir / "scores.json"
+        # Verify scores.json file is created under scores/
+        scores_file = eval_dir / "scores" / "scores.json"
         assert scores_file.exists(), "scores.json file should be created"
         assert scores_file.stat().st_size > 0, "scores.json should not be empty"
 
@@ -588,16 +595,19 @@ class TestVERAMHPipeline:
         assert conv_dir.exists(), "Conversation directory should exist"
         assert conv_dir.is_dir(), "Conversation path should be a directory"
 
-        # Look for conversation files with multiple extensions
-        json_files = list(conv_dir.glob("*.json"))
-        csv_files = list(conv_dir.glob("*.csv"))
-        txt_files = list(conv_dir.glob("*.txt"))
+        # Look for conversation files with multiple extensions (nested layout)
+        conv_nest = conv_dir / "conversations"
+        json_files = list(conv_nest.glob("*.json"))
+        csv_files = list(conv_nest.glob("*.csv"))
+        txt_files = list(conv_nest.glob("*.txt"))
         all_conversation_files = json_files + csv_files + txt_files
 
-        # Check subdirectories for additional files
-        subdirs = [p for p in conv_dir.iterdir() if p.is_dir()]
+        # Other subdirs (e.g. legacy layouts); skip ``conversations``
+        # already counted above
+        subdirs = [
+            p for p in conv_dir.iterdir() if p.is_dir() and p.name != "conversations"
+        ]
         for subdir in subdirs:
-            # Apply same file filtering as parent directory
             subdir_json = list(subdir.glob("*.json"))
             subdir_csv = list(subdir.glob("*.csv"))
             subdir_txt = list(subdir.glob("*.txt"))
@@ -717,7 +727,7 @@ class TestVERAMHPipeline:
             f"{TEST_CONFIG['JUDGE_MODEL']}:{TEST_CONFIG['JUDGE_INSTANCES']}",
             "--max-personas",
             "1",  # Use only the first persona (Omar)
-            "--folder-name",
+            "--output",
             f"pipeline_test_{timestamp}",
             "--user-agent-extra-params",
             f"temperature={TEST_CONFIG['TEMP_USER']}",
@@ -740,84 +750,51 @@ class TestVERAMHPipeline:
                 # Track directories that will be created for robust cleanup
                 # (track immediately so cleanup works even if pipeline fails)
                 base_folder_name = f"pipeline_test_{timestamp}"
-                created_dirs.extend([base_folder_name, "evaluations"])
+                created_dirs.append(base_folder_name)
 
                 # Run the complete pipeline with real API calls
                 await pipeline_main()
 
-                # Verify expected outputs exist
-                # run_pipeline creates:
-                # 1. A conversation folder with the pattern from folder_name parameter
-                # 2. Inside that folder, generate.py creates subdirectories with
-                # p_MODEL__a_MODEL pattern
-                # 3. An evaluation folder starting with "evaluations" or
-                # "j_MODEL" pattern
+                # Layout: base_folder_name/p_*__/conversations/*.txt,
+                #         base_folder_name/p_*__/evaluations/j_*__/scores/scores.json
                 conversations_dir = None
                 evaluations_dir = None
 
-                # The folder_name parameter creates the base folder directly
+                # The output parameter creates the base folder directly
                 if os.path.exists(base_folder_name) and os.path.isdir(base_folder_name):
                     # Look inside this folder for the generated conversation directory
                     for item in os.listdir(base_folder_name):
                         item_path = os.path.join(base_folder_name, item)
-                        if os.path.isdir(item_path) and (
-                            item.startswith("p_") and "__a_" in item
+                        if (
+                            os.path.isdir(item_path)
+                            and item.startswith("p_")
+                            and "__a_" in item
                         ):
                             conversations_dir = item_path
                             break
-                else:
-                    # Fallback: look for any directory with the timestamp pattern
-                    for item in os.listdir("."):
-                        if os.path.isdir(item) and f"pipeline_test_{timestamp}" in item:
-                            # Check if this contains conversation subdirectories
-                            for subitem in os.listdir(item):
-                                subitem_path = os.path.join(item, subitem)
-                                if os.path.isdir(subitem_path) and (
-                                    subitem.startswith("p_") and "__a_" in subitem
-                                ):
-                                    conversations_dir = subitem_path
-                                    break
-                            if conversations_dir:
-                                break
 
-                # Look for evaluation folder - should be "evaluations" directory
-                # containing j_* subdirectories
-                evaluations_base_dir = None
-                for item in os.listdir("."):
-                    if os.path.isdir(item) and item == "evaluations":
-                        evaluations_base_dir = item
-                        break
+                assert conversations_dir is not None, (
+                    f"run_pipeline should create a p_* generation folder under "
+                    f"{base_folder_name}. Found: {os.listdir('.')}"
+                )
 
-                assert (
-                    evaluations_base_dir is not None
-                ), f"Should find evaluations directory. Found items: {os.listdir('.')}"
-
-                # Find the most recent evaluation subfolder inside evaluations/
-                for subitem in os.listdir(evaluations_base_dir):
-                    subitem_path = os.path.join(evaluations_base_dir, subitem)
+                eval_parent = os.path.join(conversations_dir, "evaluations")
+                assert os.path.isdir(eval_parent), f"Missing {eval_parent}"
+                for subitem in os.listdir(eval_parent):
+                    subitem_path = os.path.join(eval_parent, subitem)
                     if os.path.isdir(subitem_path) and subitem.startswith("j_"):
-                        # Find the most recent evaluation folder
                         if not evaluations_dir or os.path.getctime(
                             subitem_path
                         ) > os.path.getctime(evaluations_dir):
                             evaluations_dir = subitem_path
 
-                # Validate that folders were created
-                assert conversations_dir is not None, (
-                    f"run_pipeline should create conversations folder. "
-                    f"Found items: {os.listdir('.')}, "
-                    f"base folder {base_folder_name} exists: "
-                    f"{os.path.exists(base_folder_name)}"
-                )
-                assert evaluations_dir is not None, (
-                    f"run_pipeline should create evaluations folder. "
-                    f"Found items: {os.listdir('.')}"
-                )
+                assert (
+                    evaluations_dir is not None
+                ), f"run_pipeline should create j_* under {eval_parent}"
 
-                # Validate conversations folder contents
-                conv_files = [
-                    f for f in os.listdir(conversations_dir) if f.endswith(".txt")
-                ]
+                # validate conversations folder contents
+                tx_dir = os.path.join(conversations_dir, "conversations")
+                conv_files = [f for f in os.listdir(tx_dir) if f.endswith(".txt")]
 
                 # Calculate expected number of conversation files
                 # Expected = RUNS_PER_PERSONA (1) * number of personas (1) = 1
@@ -826,20 +803,25 @@ class TestVERAMHPipeline:
                 assert len(conv_files) == expected_files, (
                     f"Conversations folder should contain exactly {expected_files} "
                     f".txt file(s). Found {len(conv_files)} files: {conv_files}, "
-                    f"all folder contents: {os.listdir(conversations_dir)}"
+                    f"all folder contents: {os.listdir(tx_dir)}"
                 )
 
                 # Validate evaluations folder contents
                 eval_files = os.listdir(evaluations_dir)
+                scores_dir = os.path.join(evaluations_dir, "scores")
                 assert (
                     "results.csv" in eval_files
                 ), f"Evaluations should contain results.csv, found: {eval_files}"
+                assert os.path.isdir(
+                    scores_dir
+                ), f"Missing scores/ in {evaluations_dir}"
+                scores_sub = os.listdir(scores_dir)
                 assert (
-                    "scores.json" in eval_files
-                ), f"Evaluations should contain scores.json, found: {eval_files}"
+                    "scores.json" in scores_sub
+                ), f"scores/ should contain scores.json, found: {scores_sub}"
 
                 # Validate scores.json structure
-                scores_path = os.path.join(evaluations_dir, "scores.json")
+                scores_path = os.path.join(evaluations_dir, "scores", "scores.json")
                 with open(scores_path, "r") as f:
                     scores_data = json.load(f)
 
@@ -928,7 +910,7 @@ class TestVERAMHPipeline:
             f"{TEST_CONFIG['JUDGE_MODEL']}:{TEST_CONFIG['JUDGE_INSTANCES']}",
             "--max-personas",
             "1",  # Use only the first persona (Omar)
-            "--folder-name",
+            "--output",
             f"pipeline_comparison_{timestamp}",
             "--user-agent-extra-params",
             f"temperature={TEST_CONFIG['TEMP_USER']}",
@@ -949,41 +931,38 @@ class TestVERAMHPipeline:
                 # Track directories that will be created for robust cleanup
                 # (track immediately so cleanup works even if pipeline fails)
                 comparison_folder_name = f"pipeline_comparison_{timestamp}"
-                created_dirs.extend([comparison_folder_name, "evaluations"])
+                created_dirs.append(comparison_folder_name)
 
                 await pipeline_main()
 
-                # Find the evaluation folder created by run_pipeline
-                # Should be evaluations/ directory containing j_* subdirectories
-                evaluations_base_dir = None
-                for item in os.listdir("."):
-                    if os.path.isdir(item) and item == "evaluations":
-                        evaluations_base_dir = item
-                        break
-
+                out_base = comparison_folder_name
+                gen_run = None
+                if os.path.isdir(out_base):
+                    for item in os.listdir(out_base):
+                        ip = os.path.join(out_base, item)
+                        if (
+                            os.path.isdir(ip)
+                            and item.startswith("p_")
+                            and "__a_" in item
+                        ):
+                            gen_run = ip
+                            break
                 assert (
-                    evaluations_base_dir is not None
-                ), f"Should find evaluations directory. Found items: {os.listdir('.')}"
-
-                # Find the most recent evaluation subfolder inside evaluations/
+                    gen_run is not None
+                ), f"Expected p_* under {out_base}, found {os.listdir('.')}"
+                eval_parent = os.path.join(gen_run, "evaluations")
                 evaluations_dir = None
-                for subitem in os.listdir(evaluations_base_dir):
-                    subitem_path = os.path.join(evaluations_base_dir, subitem)
-                    if os.path.isdir(subitem_path) and subitem.startswith("j_"):
+                for subitem in os.listdir(eval_parent):
+                    sp = os.path.join(eval_parent, subitem)
+                    if os.path.isdir(sp) and subitem.startswith("j_"):
                         if not evaluations_dir or os.path.getctime(
-                            subitem_path
+                            sp
                         ) > os.path.getctime(evaluations_dir):
-                            evaluations_dir = subitem_path
+                            evaluations_dir = sp
+                assert evaluations_dir is not None, f"Expected j_* under {eval_parent}"
 
-                assert evaluations_dir is not None, (
-                    f"run_pipeline should create evaluation subfolder in evaluations/. "
-                    f"Found items: {os.listdir(evaluations_base_dir)}"
-                )
-
-                # Load scores from run_pipeline
-                scores_path = os.path.join(evaluations_dir, "scores.json")
-
-                # Ensure scores.json exists before trying to read it
+                # ensure scores.json exists
+                scores_path = os.path.join(evaluations_dir, "scores", "scores.json")
                 if not os.path.exists(scores_path):
                     # List files in evaluation directory for debugging
                     eval_files = (

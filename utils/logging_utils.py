@@ -8,21 +8,22 @@ from llm_clients import LLMInterface
 
 
 def setup_conversation_logger(
-    log_filename: str, run_id: str, log_folder: str = "logging", level=logging.INFO
+    log_filename: str,
+    *,
+    log_dir: str,
+    level=logging.INFO,
 ) -> logging.Logger:
     """
     Set up a logger for a specific conversation.
 
     Args:
         log_filename: Name of the log file (without extension)
-        log_folder: Directory to save log files
+        log_dir: Directory to save the log file (e.g. ``<run>/conversations/logs/``)
 
     Returns:
         Configured logger instance
     """
-    # Ensure log folder exists
-    os.makedirs(log_folder, exist_ok=True)
-    # Create unique logger name to avoid conflicts
+    os.makedirs(log_dir, exist_ok=True)
     logger_name = f"{log_filename}"
 
     logger = logging.getLogger(logger_name)
@@ -34,8 +35,7 @@ def setup_conversation_logger(
     logger.setLevel(level)
 
     # Create file handler
-    log_file_path = os.path.join(log_folder, run_id, f"{log_filename}.log")
-    os.makedirs(os.path.join(log_folder, run_id), exist_ok=True)
+    log_file_path = os.path.join(log_dir, f"{log_filename}.log")
     file_handler = logging.FileHandler(log_file_path, mode="w", encoding="utf-8")
 
     # Create formatter

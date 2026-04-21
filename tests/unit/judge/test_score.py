@@ -375,7 +375,7 @@ def test_score_results_default_json_path(tmp_path):
     """Test that default JSON path is used when none provided."""
     # Arrange
     csv_path = tmp_path / "results.csv"
-    expected_json_path = tmp_path / "scores.json"
+    expected_json_path = tmp_path / "scores" / "scores.json"
     df = pd.DataFrame(
         {
             "filename": ["f1.txt"],
@@ -1034,7 +1034,7 @@ def test_score_results_by_risk_writes_scores_by_risk_json(tmp_path):
     (eval_dir / "x_Brian_m_run1.tsv").write_text(_eval_tsv())
     csv_path = eval_dir / "results.csv"
     pd.DataFrame().to_csv(csv_path, index=False)
-    json_path = eval_dir / "scores_by_risk.json"
+    json_path = eval_dir / "scores" / "scores_by_risk.json"
 
     score_results_by_risk(str(csv_path), str(personas))
 
@@ -1051,7 +1051,7 @@ def test_score_results_by_risk_saves_json(mock_ensure_csv, tmp_path, fixtures_di
     """Test that results are saved to JSON file."""
     csv_path = tmp_path / "results.csv"
     personas_path = fixtures_dir / "personas_with_risk.tsv"
-    expected_json_path = tmp_path / "scores_by_risk.json"
+    expected_json_path = tmp_path / "scores" / "scores_by_risk.json"
 
     mock_df = _mock_results_df()
     mock_ensure_csv.return_value = mock_df

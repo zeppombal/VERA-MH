@@ -80,12 +80,41 @@ def build_single_conversation_judge_run_key(
 
 def get_judge_logs_root() -> str:
     """
-    Root directory for per-task judge LLM logs.
+    Root directory for legacy per-task judge LLM logs (when ``output_folder`` is
+    not passed to :func:`build_judge_task_log_path`).
 
     Override with env ``VERA_JUDGE_LOGS_ROOT`` (e.g. set by pytest to a temp dir).
     Default: ``judge_logs`` in the current working directory.
     """
     return os.environ.get("VERA_JUDGE_LOGS_ROOT", "judge_logs")
+
+
+def resolve_judge_conversation_input(folder: str) -> tuple[str, Optional[str], str]:
+    """
+    Resolve transcript directory and generation run root for ``judge.py -f``.
+
+    Returns:
+        (transcripts_dir, gen_run_root_or_none, conversation_run_basename)
+
+    - If ``folder/conversations/`` contains ``.txt`` files, ``folder`` is treated as
+      a generation run root (nested layout); transcripts are loaded from
+      ``folder/conversations``.
+    - Otherwise, if ``folder`` itself contains ``.txt`` files, use the legacy flat
+      layout (``gen_run_root`` is None).
+    """
+    folder = os.path.normpath(os.path.abspath(folder))
+    nested = os.path.join(folder, "conversations")
+    if os.path.isdir(nested):
+        nested_txts = [f for f in os.listdir(nested) if f.endswith(".txt")]
+        if nested_txts:
+            return nested, folder, os.path.basename(folder)
+    if os.path.isdir(folder):
+        flat_txts = [f for f in os.listdir(folder) if f.endswith(".txt")]
+        if flat_txts:
+            return folder, None, os.path.basename(folder)
+    if os.path.isdir(nested):
+        return nested, folder, os.path.basename(folder)
+    return folder, None, os.path.basename(folder)
 
 
 def build_judge_task_log_path(
@@ -94,21 +123,23 @@ def build_judge_task_log_path(
     judge_model: str,
     judge_instance: Optional[int] = None,
     logs_root: Optional[str] = None,
+    output_folder: Optional[str] = None,
 ) -> str:
     """
     Path to the per-task judge LLM log file, parallel to judge_evaluation_tsv_filename.
 
-    Layout: {logs_root}/{run_key}/{same_stem_as_tsv}.log
+    With ``output_folder``: ``{output_folder}/logs/{stem}.log``.
 
-    ``logs_root`` defaults to :func:`get_judge_logs_root`.
+    Legacy layout: ``{logs_root}/{run_key}/{stem}.log`` (``logs_root`` defaults to
+    :func:`get_judge_logs_root`). ``run_key`` is ignored when ``output_folder`` is set.
     """
-    root = logs_root if logs_root is not None else get_judge_logs_root()
     tsv_name = judge_evaluation_tsv_filename(
         conversation_filename, judge_model, judge_instance
     )
     stem = Path(tsv_name).stem
-    # Parent dirs are created in LLMJudge when the log file is opened (avoids empty
-    # judge_logs/... folders when tests mock LLMJudge after this returns).
+    if output_folder is not None:
+        return str(Path(output_folder) / "logs" / f"{stem}.log")
+    root = logs_root if logs_root is not None else get_judge_logs_root()
     return str(Path(root) / run_key / f"{stem}.log")
 
 

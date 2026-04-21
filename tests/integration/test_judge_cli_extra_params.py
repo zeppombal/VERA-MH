@@ -34,7 +34,7 @@ class TestJudgeCLIExtraParams:
             "--judge-model",
             "-j",
             help="Model to use for judging",
-            default="claude-3-7-sonnet",
+            default="claude-sonnet-4-5",
         )
 
         parser.add_argument(
@@ -51,13 +51,13 @@ class TestJudgeCLIExtraParams:
                 "--folder",
                 "test_folder",
                 "--judge-model",
-                "claude-3-7-sonnet",
+                "claude-sonnet-4-5",
                 "--judge-model-extra-params",
                 "temperature=0.7,max_tokens=1000",
             ]
         )
 
-        assert args.judge_model == "claude-3-7-sonnet"
+        assert args.judge_model == "claude-sonnet-4-5"
         assert args.judge_model_extra_params == {"temperature": 0.7, "max_tokens": 1000}
 
     def test_cli_judge_model_extra_params_short_flag(self):
@@ -66,7 +66,7 @@ class TestJudgeCLIExtraParams:
 
         parser = argparse.ArgumentParser()
         parser.add_argument("--folder", "-f", default="conversations")
-        parser.add_argument("--judge-model", "-j", default="claude-3-7-sonnet")
+        parser.add_argument("--judge-model", "-j", default="claude-sonnet-4-5")
         parser.add_argument(
             "--judge-model-extra-params",
             "-jep",
@@ -88,7 +88,7 @@ class TestJudgeCLIExtraParams:
 
         parser = argparse.ArgumentParser()
         parser.add_argument("--folder", "-f", default="conversations")
-        parser.add_argument("--judge-model", "-j", default="claude-3-7-sonnet")
+        parser.add_argument("--judge-model", "-j", default="claude-sonnet-4-5")
         parser.add_argument(
             "--judge-model-extra-params",
             "-jep",
@@ -97,7 +97,7 @@ class TestJudgeCLIExtraParams:
         )
 
         # Test without providing extra params
-        args = parser.parse_args(["-f", "test_folder", "-j", "claude-3-7-sonnet"])
+        args = parser.parse_args(["-f", "test_folder", "-j", "claude-sonnet-4-5"])
 
         assert args.judge_model_extra_params == {}
 
@@ -107,7 +107,7 @@ class TestJudgeCLIExtraParams:
 
         parser = argparse.ArgumentParser()
         parser.add_argument("--folder", "-f", default="conversations")
-        parser.add_argument("--judge-model", "-j", default="claude-3-7-sonnet")
+        parser.add_argument("--judge-model", "-j", default="claude-sonnet-4-5")
         parser.add_argument(
             "--judge-model-extra-params",
             "-jep",
@@ -120,7 +120,7 @@ class TestJudgeCLIExtraParams:
                 "-f",
                 "test_folder",
                 "-j",
-                "claude-3-7-sonnet",
+                "claude-sonnet-4-5",
                 "-jep",
                 "temperature=0.8,max_tokens=2000,top_p=0.95",
             ]
@@ -138,7 +138,7 @@ class TestJudgeCLIExtraParams:
 
         parser = argparse.ArgumentParser(prog="judge")
         parser.add_argument("--folder", "-f", default="conversations")
-        parser.add_argument("--judge-model", "-j", default="claude-3-7-sonnet")
+        parser.add_argument("--judge-model", "-j", default="claude-sonnet-4-5")
         parser.add_argument(
             "--judge-model-extra-params",
             "-jep",
@@ -167,7 +167,7 @@ class TestJudgeCLIExtraParams:
 
         parser = argparse.ArgumentParser()
         parser.add_argument("--folder", "-f", default="conversations")
-        parser.add_argument("--judge-model", "-j", default="claude-3-7-sonnet")
+        parser.add_argument("--judge-model", "-j", default="claude-sonnet-4-5")
         parser.add_argument(
             "--judge-model-extra-params",
             "-jep",
@@ -180,7 +180,7 @@ class TestJudgeCLIExtraParams:
                 "-f",
                 "test_folder",
                 "-j",
-                "claude-3-7-sonnet",
+                "claude-sonnet-4-5",
                 "-jep",
                 "temperature=0.7,model_type=chat",
             ]
@@ -204,7 +204,7 @@ class TestJudgeCLIExtraParams:
         )
 
         generate_args = generate_parser.parse_args(
-            ["-u", "claude-3-7-sonnet", "-uep", "temperature=0.7"]
+            ["-u", "claude-sonnet-4-5", "-uep", "temperature=0.7"]
         )
 
         # Test judge.py pattern
@@ -218,7 +218,7 @@ class TestJudgeCLIExtraParams:
         )
 
         judge_args = judge_parser.parse_args(
-            ["-j", "claude-3-7-sonnet", "-jep", "temperature=0.7"]
+            ["-j", "claude-sonnet-4-5", "-jep", "temperature=0.7"]
         )
 
         # Both should produce the same result structure

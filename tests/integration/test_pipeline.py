@@ -9,9 +9,37 @@ These tests focus on argument parsing, configuration building, and error paths.
 """
 
 import argparse
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+# Helpers: pipeline Step 1 expects transcripts under <gen_run>/conversations/*.txt
+
+
+def _make_gen_run_with_txt(
+    tmp_path: Path,
+    files: dict[str, str],
+    *,
+    basename: str = "p_test__a_m__t1__r1__ts",
+) -> Path:
+    gen_run = tmp_path / basename
+    gen_run.mkdir()
+    sub = gen_run / "conversations"
+    sub.mkdir()
+    for fname, content in files.items():
+        (sub / fname).write_text(content)
+    return gen_run
+
+
+def _make_gen_run_empty_conversations(
+    tmp_path: Path, basename: str = "p_test__a_m__t1__r1__ts"
+) -> Path:
+    gen_run = tmp_path / basename
+    gen_run.mkdir()
+    (gen_run / "conversations").mkdir()
+    return gen_run
+
 
 # Fixtures
 
@@ -30,7 +58,7 @@ def pipeline_args():
         max_total_words=None,
         max_concurrent=None,
         max_personas=2,
-        folder_name=None,
+        output="output",
         run_id=None,
         debug=False,
         judge_model_extra_params={},
@@ -39,7 +67,6 @@ def pipeline_args():
         judge_limit=None,
         judge_verbose_workers=False,
         rubrics=["data/rubric.tsv"],
-        judge_output="evaluations",
         resume_generate=False,
         resume_judge=False,
         skip_risk_analysis=False,
@@ -205,7 +232,7 @@ class TestPipelineArgumentParsing:
             "10",
             "--max-personas",
             "5",
-            "--folder-name",
+            "--output",
             "custom_folder",
             "--run-id",
             "test_run_id",
@@ -221,8 +248,6 @@ class TestPipelineArgumentParsing:
             "--rubrics",
             "data/rubric.tsv",
             "data/custom_rubric.tsv",
-            "--judge-output",
-            "custom_output",
             "--skip-risk-analysis",
             "--personas-tsv",
             "custom/personas.tsv",
@@ -237,12 +262,11 @@ class TestPipelineArgumentParsing:
             assert args.max_total_words == 5000
             assert args.max_concurrent == 10
             assert args.max_personas == 5
-            assert args.folder_name == "custom_folder"
+            assert args.output == "custom_folder"
             assert args.run_id == "test_run_id"
             assert args.judge_max_concurrent == 5
             assert args.judge_limit == 10
             assert args.rubrics == ["data/rubric.tsv", "data/custom_rubric.tsv"]
-            assert args.judge_output == "custom_output"
             assert args.personas_tsv == "custom/personas.tsv"
 
 
@@ -318,7 +342,7 @@ class TestPipelineConfiguration:
             judge_model=pipeline_args.judge_model,
             judge_model_extra_params=pipeline_args.judge_model_extra_params,
             limit=pipeline_args.judge_limit,
-            output=pipeline_args.judge_output,
+            output=None,
             max_concurrent=pipeline_args.judge_max_concurrent,
             per_judge=pipeline_args.judge_per_judge,
             verbose_workers=pipeline_args.judge_verbose_workers,
@@ -331,7 +355,7 @@ class TestPipelineConfiguration:
         assert judge_args.folder == conv_folder
         assert judge_args.rubrics == pipeline_args.rubrics
         assert judge_args.judge_model == ["claude-sonnet-4-5-20250929"]
-        assert judge_args.output == pipeline_args.judge_output
+        assert judge_args.output is None
         assert judge_args.resume is False
 
     def test_empty_extra_params_dont_pollute_config(self):
@@ -435,22 +459,10 @@ class TestPipelineNewArguments:
         assert judge_args.rubrics == ["data/rubric.tsv", "data/custom_rubric.tsv"]
         assert len(judge_args.rubrics) == 2
 
-    def test_judge_output_argument_exists(self, pipeline_args):
-        """Test that judge_output argument exists in pipeline args."""
-        assert hasattr(pipeline_args, "judge_output")
-        assert pipeline_args.judge_output == "evaluations"  # Default value
-
-    def test_judge_output_passed_to_judge(self, pipeline_args):
-        """Test that judge_output is correctly passed to judge args."""
-        # Set custom output folder
-        pipeline_args.judge_output = "custom_evaluations"
-
-        # As done in main(): judge receives this output folder
-        judge_args = argparse.Namespace(
-            output=pipeline_args.judge_output,
-        )
-
-        assert judge_args.output == "custom_evaluations"
+    def test_output_argument_exists(self, pipeline_args):
+        """Test that output (generation parent) exists in pipeline args."""
+        assert hasattr(pipeline_args, "output")
+        assert pipeline_args.output == "output"
 
     def test_parse_arguments_with_run_id(self):
         """Test parsing arguments with --run-id."""
@@ -501,30 +513,6 @@ class TestPipelineNewArguments:
 
             assert args.rubrics == ["data/rubric.tsv", "data/custom_rubric.tsv"]
 
-    def test_parse_arguments_with_judge_output(self):
-        """Test parsing arguments with --judge-output."""
-        from run_pipeline import parse_arguments
-
-        test_args = [
-            "--user-agent",
-            "claude-sonnet-4-5-20250929",
-            "--provider-agent",
-            "gpt-4o",
-            "--runs",
-            "1",
-            "--turns",
-            "4",
-            "--judge-model",
-            "claude-sonnet-4-5-20250929",
-            "--judge-output",
-            "custom_evals",
-        ]
-
-        with patch("sys.argv", ["run_pipeline.py"] + test_args):
-            args = parse_arguments()
-
-            assert args.judge_output == "custom_evals"
-
     def test_parse_arguments_defaults_for_new_args(self):
         """Test that new arguments have correct defaults."""
         from run_pipeline import parse_arguments
@@ -548,7 +536,7 @@ class TestPipelineNewArguments:
             # Check defaults
             assert args.run_id is None
             assert args.rubrics == ["data/rubric.tsv"]
-            assert args.judge_output == "evaluations"
+            assert args.output == "output"
 
     def test_short_flags_for_extra_params(self):
         """Test that short flags work for extra params arguments."""
@@ -671,13 +659,11 @@ class TestPipelineValidation:
 
         from run_pipeline import main as pipeline_main
 
-        # Create empty conversation folder
-        conv_folder = tmp_path / "conversations"
-        conv_folder.mkdir()
+        gen_run = _make_gen_run_empty_conversations(tmp_path)
 
-        # Mock generate_main to return empty folder
+        # Mock generate_main to return run folder with no .txt under conversations/
         async def mock_generate(*args, **kwargs):
-            return None, str(conv_folder)
+            return None, str(gen_run)
 
         with patch("generate.main", side_effect=mock_generate):
             # Mock sys.exit to raise SystemExit instead of actually exiting
@@ -699,15 +685,17 @@ class TestPipelineValidation:
 
         from run_pipeline import main as pipeline_main
 
-        # Create conversation folder with only .log files
-        conv_folder = tmp_path / "conversations"
-        conv_folder.mkdir()
-        (conv_folder / "conversation1.log").write_text("log content")
-        (conv_folder / "conversation2.log").write_text("log content")
+        gen_run = _make_gen_run_with_txt(
+            tmp_path,
+            {
+                "conversation1.log": "log content",
+                "conversation2.log": "log content",
+            },
+        )
 
-        # Mock generate_main to return folder with only logs
+        # Mock generate_main to return folder with only logs under conversations/
         async def mock_generate(*args, **kwargs):
-            return None, str(conv_folder)
+            return None, str(gen_run)
 
         with patch("generate.main", side_effect=mock_generate):
             # Mock sys.exit to raise SystemExit instead of actually exiting
@@ -731,14 +719,13 @@ class TestPipelineValidation:
 
         from run_pipeline import main as pipeline_main
 
-        # Create conversation folder with valid files
-        conv_folder = tmp_path / "conversations"
-        conv_folder.mkdir()
-        (conv_folder / "conv1.txt").write_text("User: Hi\nAssistant: Hello")
+        gen_run = _make_gen_run_with_txt(
+            tmp_path, {"conv1.txt": "User: Hi\nAssistant: Hello"}
+        )
 
         # Mock generate_main to return valid folder
         async def mock_generate(*args, **kwargs):
-            return None, str(conv_folder)
+            return None, str(gen_run)
 
         # Mock judge_main to return None
         async def mock_judge(args):
@@ -773,14 +760,13 @@ class TestPipelineValidation:
 
         from run_pipeline import main as pipeline_main
 
-        # Create conversation folder with valid files
-        conv_folder = tmp_path / "conversations"
-        conv_folder.mkdir()
-        (conv_folder / "conv1.txt").write_text("User: Hi\nAssistant: Hello")
+        gen_run = _make_gen_run_with_txt(
+            tmp_path, {"conv1.txt": "User: Hi\nAssistant: Hello"}
+        )
 
         # Mock generate_main to return valid folder
         async def mock_generate(*args, **kwargs):
-            return None, str(conv_folder)
+            return None, str(gen_run)
 
         # Mock judge_main to return non-existent folder
         async def mock_judge(args):
@@ -813,10 +799,9 @@ class TestPipelineValidation:
 
         from run_pipeline import main as pipeline_main
 
-        # Create conversation folder with valid files
-        conv_folder = tmp_path / "conversations"
-        conv_folder.mkdir()
-        (conv_folder / "conv1.txt").write_text("User: Hi\nAssistant: Hello")
+        gen_run = _make_gen_run_with_txt(
+            tmp_path, {"conv1.txt": "User: Hi\nAssistant: Hello"}
+        )
 
         # Create evaluation folder but no results.csv
         eval_folder = tmp_path / "evaluations"
@@ -825,7 +810,7 @@ class TestPipelineValidation:
 
         # Mock generate_main to return valid folder
         async def mock_generate(*args, **kwargs):
-            return None, str(conv_folder)
+            return None, str(gen_run)
 
         # Mock judge_main to return folder without results.csv
         async def mock_judge(args):
@@ -860,10 +845,9 @@ class TestPipelineValidation:
 
         from run_pipeline import main as pipeline_main
 
-        # Create conversation folder with valid files
-        conv_folder = tmp_path / "conversations"
-        conv_folder.mkdir()
-        (conv_folder / "conv1.txt").write_text("User: Hi\nAssistant: Hello")
+        gen_run = _make_gen_run_with_txt(
+            tmp_path, {"conv1.txt": "User: Hi\nAssistant: Hello"}
+        )
 
         # Create evaluation folder with some files but no results.csv
         eval_folder = tmp_path / "evaluations"
@@ -874,7 +858,7 @@ class TestPipelineValidation:
 
         # Mock functions
         async def mock_generate(*args, **kwargs):
-            return None, str(conv_folder)
+            return None, str(gen_run)
 
         async def mock_judge(args):
             return str(eval_folder)
@@ -915,10 +899,9 @@ class TestPipelineValidation:
 
         from run_pipeline import main as pipeline_main
 
-        # Create conversation folder with valid files
-        conv_folder = tmp_path / "conversations"
-        conv_folder.mkdir()
-        (conv_folder / "conv1.txt").write_text("User: Hi\nAssistant: Hello")
+        gen_run = _make_gen_run_with_txt(
+            tmp_path, {"conv1.txt": "User: Hi\nAssistant: Hello"}
+        )
 
         # Create evaluation folder with results.csv containing expected columns
         eval_folder = tmp_path / "evaluations"
@@ -943,7 +926,7 @@ class TestPipelineValidation:
 
         # Mock functions
         async def mock_generate(*args, **kwargs):
-            return None, str(conv_folder)
+            return None, str(gen_run)
 
         async def mock_judge(args):
             return str(eval_folder)
@@ -1020,10 +1003,9 @@ class TestPipelineValidation:
 
         from run_pipeline import main as pipeline_main
 
-        # Create conversation folder with valid files
-        conv_folder = tmp_path / "conversations"
-        conv_folder.mkdir()
-        (conv_folder / "conv1.txt").write_text("User: Hi\nAssistant: Hello")
+        gen_run = _make_gen_run_with_txt(
+            tmp_path, {"conv1.txt": "User: Hi\nAssistant: Hello"}
+        )
 
         # Create evaluation folder with results.csv missing critical columns
         eval_folder = tmp_path / "evaluations"
@@ -1033,7 +1015,7 @@ class TestPipelineValidation:
 
         # Mock functions
         async def mock_generate(*args, **kwargs):
-            return None, str(conv_folder)
+            return None, str(gen_run)
 
         async def mock_judge(args):
             return str(eval_folder)
@@ -1068,11 +1050,13 @@ class TestPipelineValidation:
 
         from run_pipeline import main as pipeline_main
 
-        # Create conversation folder with valid files
-        conv_folder = tmp_path / "conversations"
-        conv_folder.mkdir()
-        (conv_folder / "conv1.txt").write_text("User: Hi\nAssistant: Hello")
-        (conv_folder / "conv2.txt").write_text("User: Hey\nAssistant: Hi there")
+        gen_run = _make_gen_run_with_txt(
+            tmp_path,
+            {
+                "conv1.txt": "User: Hi\nAssistant: Hello",
+                "conv2.txt": "User: Hey\nAssistant: Hi there",
+            },
+        )
 
         # Create evaluation folder with results.csv
         eval_folder = tmp_path / "evaluations"
@@ -1083,7 +1067,7 @@ class TestPipelineValidation:
 
         # Mock functions
         async def mock_generate(*args, **kwargs):
-            return None, str(conv_folder)
+            return None, str(gen_run)
 
         async def mock_judge(args):
             return str(eval_folder)
@@ -1166,119 +1150,144 @@ class TestPipelineResumeParsing:
 
 @pytest.mark.integration
 class TestPipelineResumeValidation:
-    """validate_pipeline_resume_args() path checks."""
+    """resolve_pipeline_resume_paths() path checks."""
 
-    def test_resume_generate_requires_folder_name(self):
-        from run_pipeline import validate_pipeline_resume_args
+    def test_resume_generate_rejects_non_p_output(self, tmp_path):
+        from run_pipeline import resolve_pipeline_resume_paths
 
+        bad = tmp_path / "not_a_p_folder"
+        bad.mkdir()
         args = argparse.Namespace(
             resume_generate=True,
             resume_judge=False,
-            folder_name=None,
-            judge_output="evaluations",
+            output=str(bad),
         )
         with pytest.raises(SystemExit) as exc_info:
-            validate_pipeline_resume_args(args)
+            resolve_pipeline_resume_paths(args)
         assert exc_info.value.code == 2
 
     def test_resume_generate_requires_existing_directory(self, tmp_path):
-        from run_pipeline import validate_pipeline_resume_args
+        from run_pipeline import resolve_pipeline_resume_paths
 
         missing = tmp_path / "p_x__a_y__t1__r1__nope"
         args = argparse.Namespace(
             resume_generate=True,
             resume_judge=False,
-            folder_name=str(missing),
-            judge_output="evaluations",
+            output=str(missing),
         )
         with pytest.raises(SystemExit) as exc_info:
-            validate_pipeline_resume_args(args)
-        assert exc_info.value.code == 2
-
-    def test_resume_generate_requires_run_folder_basename(self, tmp_path):
-        from run_pipeline import validate_pipeline_resume_args
-
-        bad = tmp_path / "conversations"
-        bad.mkdir()
-        args = argparse.Namespace(
-            resume_generate=True,
-            resume_judge=False,
-            folder_name=str(bad),
-            judge_output="evaluations",
-        )
-        with pytest.raises(SystemExit) as exc_info:
-            validate_pipeline_resume_args(args)
+            resolve_pipeline_resume_paths(args)
         assert exc_info.value.code == 2
 
     def test_resume_generate_accepts_valid_run_folder(self, tmp_path):
-        from run_pipeline import validate_pipeline_resume_args
+        from run_pipeline import resolve_pipeline_resume_paths
 
         run_dir = tmp_path / "p_persona__a_agent__t4__r1__20260101_120000"
         run_dir.mkdir()
         args = argparse.Namespace(
             resume_generate=True,
             resume_judge=False,
-            folder_name=str(run_dir),
-            judge_output="evaluations",
+            output=str(run_dir),
         )
-        validate_pipeline_resume_args(args)
+        resolve_pipeline_resume_paths(args)
 
     def test_resume_judge_requires_existing_directory(self, tmp_path):
-        from run_pipeline import validate_pipeline_resume_args
+        from run_pipeline import resolve_pipeline_resume_paths
 
-        missing = tmp_path / "j_missing__run__"
+        p_run = tmp_path / "p_x__a_y__t1__r1__ts"
+        p_run.mkdir()
+        ev = p_run / "evaluations"
+        ev.mkdir()
+        missing = ev / "j_missing__run__"
         args = argparse.Namespace(
             resume_generate=False,
             resume_judge=True,
-            folder_name=None,
-            judge_output=str(missing),
+            output=str(missing),
         )
         with pytest.raises(SystemExit) as exc_info:
-            validate_pipeline_resume_args(args)
+            resolve_pipeline_resume_paths(args)
         assert exc_info.value.code == 2
 
     def test_resume_judge_rejects_parent_evaluations_directory(self, tmp_path):
-        from run_pipeline import validate_pipeline_resume_args
+        from run_pipeline import resolve_pipeline_resume_paths
 
-        parent = tmp_path / "evaluations"
+        p_run = tmp_path / "p_x__a_y__t1__r1__ts"
+        p_run.mkdir()
+        parent = p_run / "evaluations"
         parent.mkdir()
         args = argparse.Namespace(
             resume_generate=False,
             resume_judge=True,
-            folder_name=None,
-            judge_output=str(parent),
+            output=str(parent),
         )
         with pytest.raises(SystemExit) as exc_info:
-            validate_pipeline_resume_args(args)
+            resolve_pipeline_resume_paths(args)
         assert exc_info.value.code == 2
 
     def test_resume_judge_requires_j_evaluation_folder_basename(self, tmp_path):
-        from run_pipeline import validate_pipeline_resume_args
+        from run_pipeline import resolve_pipeline_resume_paths
 
-        wrong = tmp_path / "some_output_dir"
+        p_run = tmp_path / "p_x__a_y__t1__r1__ts"
+        p_run.mkdir()
+        ev = p_run / "evaluations"
+        ev.mkdir()
+        wrong = ev / "some_output_dir"
         wrong.mkdir()
         args = argparse.Namespace(
             resume_generate=False,
             resume_judge=True,
-            folder_name=None,
-            judge_output=str(wrong),
+            output=str(wrong),
         )
         with pytest.raises(SystemExit) as exc_info:
-            validate_pipeline_resume_args(args)
+            resolve_pipeline_resume_paths(args)
         assert exc_info.value.code == 2
 
     def test_resume_judge_accepts_valid_evaluation_folder(self, tmp_path):
-        from run_pipeline import validate_pipeline_resume_args
+        from run_pipeline import resolve_pipeline_resume_paths
 
-        eval_dir = tmp_path / "j_gpt4o__p_run__20260101_120000"
+        p_run = tmp_path / "p_gpt4o__a_x__t1__r1__20260101_120000"
+        p_run.mkdir()
+        ev = p_run / "evaluations"
+        ev.mkdir()
+        eval_dir = ev / "j_gpt4o__p_run__20260101_120000"
         eval_dir.mkdir()
         args = argparse.Namespace(
             resume_generate=False,
             resume_judge=True,
-            folder_name=None,
-            judge_output=str(eval_dir),
+            output=str(eval_dir),
         )
-        validate_pipeline_resume_args(args)
+        resolve_pipeline_resume_paths(args)
+
+    def test_both_resume_requires_single_j_under_evaluations(self, tmp_path):
+        from run_pipeline import resolve_pipeline_resume_paths
+
+        run_dir = tmp_path / "p_u__a_p__t1__r1__20260101_120000"
+        run_dir.mkdir()
+        ev = run_dir / "evaluations"
+        ev.mkdir()
+
+        a0 = argparse.Namespace(
+            resume_generate=True, resume_judge=True, output=str(run_dir)
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            resolve_pipeline_resume_paths(a0)
+        assert exc_info.value.code == 2
+
+        j1 = ev / "j_a__b__20260101_120000"
+        j1.mkdir()
+        a1 = argparse.Namespace(
+            resume_generate=True, resume_judge=True, output=str(run_dir)
+        )
+        resolve_pipeline_resume_paths(a1)
+
+        j2 = ev / "j_c__d__20260101_120001"
+        j2.mkdir()
+        a2 = argparse.Namespace(
+            resume_generate=True, resume_judge=True, output=str(run_dir)
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            resolve_pipeline_resume_paths(a2)
+        assert exc_info.value.code == 2
 
 
 @pytest.mark.integration
@@ -1293,15 +1302,15 @@ class TestPipelineResumeWiring:
 
         from run_pipeline import main as pipeline_main
 
-        conv_folder = tmp_path / "conversations"
-        conv_folder.mkdir()
-        (conv_folder / "c.txt").write_text("User: hi\nAssistant: hey")
+        gen_run = _make_gen_run_with_txt(
+            tmp_path, {"c.txt": "User: hi\nAssistant: hey"}
+        )
 
         eval_folder = tmp_path / "evaluations"
         eval_folder.mkdir()
         (eval_folder / "results.csv").write_text("filename,x\nc.txt,y\n")
 
-        gen_mock = AsyncMock(return_value=(None, str(conv_folder)))
+        gen_mock = AsyncMock(return_value=(None, str(gen_run)))
         judge_mock = AsyncMock(return_value=str(eval_folder))
 
         mock_judge_module = MagicMock()
@@ -1331,11 +1340,15 @@ class TestPipelineResumeWiring:
 
         from run_pipeline import main as pipeline_main
 
-        run_dir = tmp_path / "p_u__a_p__t1__r1__20260101_120000"
-        run_dir.mkdir()
-        (run_dir / "c.txt").write_text("User: hi\nAssistant: hey")
+        run_dir = _make_gen_run_with_txt(
+            tmp_path,
+            {"c.txt": "User: hi\nAssistant: hey"},
+            basename="p_u__a_p__t1__r1__20260101_120000",
+        )
 
-        eval_folder = tmp_path / "j_j__r__20260101_120000"
+        ev = run_dir / "evaluations"
+        ev.mkdir()
+        eval_folder = ev / "j_j__r__20260101_120000"
         eval_folder.mkdir()
         (eval_folder / "results.csv").write_text("filename,x\nc.txt,y\n")
 
@@ -1347,7 +1360,7 @@ class TestPipelineResumeWiring:
 
         argv = valid_pipeline_args + [
             "--resume-generate",
-            "--folder-name",
+            "-o",
             str(run_dir),
             "--skip-risk-analysis",
         ]
@@ -1374,15 +1387,18 @@ class TestPipelineResumeWiring:
 
         from run_pipeline import main as pipeline_main
 
-        conv_folder = tmp_path / "p_x__a_y__t1__r1__ts"
-        conv_folder.mkdir()
-        (conv_folder / "c.txt").write_text("User: hi\nAssistant: hey")
-
-        eval_folder = tmp_path / "j_model__convfolder__ts"
+        gen_run = _make_gen_run_with_txt(
+            tmp_path,
+            {"c.txt": "User: hi\nAssistant: hey"},
+            basename="p_x__a_y__t1__r1__ts",
+        )
+        ev = gen_run / "evaluations"
+        ev.mkdir()
+        eval_folder = ev / "j_model__convfolder__ts"
         eval_folder.mkdir()
         (eval_folder / "results.csv").write_text("filename,x\nc.txt,y\n")
 
-        gen_mock = AsyncMock(return_value=(None, str(conv_folder)))
+        gen_mock = AsyncMock(return_value=(None, str(gen_run)))
         judge_mock = AsyncMock(return_value=str(eval_folder))
 
         mock_judge_module = MagicMock()
@@ -1390,7 +1406,7 @@ class TestPipelineResumeWiring:
 
         argv = valid_pipeline_args + [
             "--resume-judge",
-            "--judge-output",
+            "-o",
             str(eval_folder),
             "--skip-risk-analysis",
         ]
@@ -1406,7 +1422,7 @@ class TestPipelineResumeWiring:
         ):
             await pipeline_main()
 
-        assert gen_mock.await_args.kwargs["resume"] is False
+        assert gen_mock.await_args.kwargs["resume"] is True
         assert judge_mock.await_args.args[0].resume is True
 
     @pytest.mark.asyncio
@@ -1417,11 +1433,14 @@ class TestPipelineResumeWiring:
 
         from run_pipeline import main as pipeline_main
 
-        run_dir = tmp_path / "p_u__a_p__t1__r1__20260101_120000"
-        run_dir.mkdir()
-        (run_dir / "c.txt").write_text("User: hi\nAssistant: hey")
-
-        eval_folder = tmp_path / "j_j__r__20260101_120000"
+        run_dir = _make_gen_run_with_txt(
+            tmp_path,
+            {"c.txt": "User: hi\nAssistant: hey"},
+            basename="p_u__a_p__t1__r1__20260101_120000",
+        )
+        rev = run_dir / "evaluations"
+        rev.mkdir()
+        eval_folder = rev / "j_j__r__20260101_120000"
         eval_folder.mkdir()
         (eval_folder / "results.csv").write_text("filename,x\nc.txt,y\n")
 
@@ -1433,11 +1452,9 @@ class TestPipelineResumeWiring:
 
         argv = valid_pipeline_args + [
             "--resume-generate",
-            "--folder-name",
-            str(run_dir),
             "--resume-judge",
-            "--judge-output",
-            str(eval_folder),
+            "-o",
+            str(run_dir),
             "--skip-risk-analysis",
         ]
 

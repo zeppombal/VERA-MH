@@ -59,6 +59,21 @@ class ConversationRunner:
         self.persona_speaks_first = persona_speaks_first
         self.resume = resume
 
+        nested = os.path.join(folder_name, "conversations")
+        legacy_flat_txts = False
+        if os.path.isdir(folder_name):
+            has_nested = os.path.isdir(nested)
+            has_root_txt = any(
+                name.endswith(".txt") for name in os.listdir(folder_name)
+            )
+            legacy_flat_txts = has_root_txt and not has_nested
+        if legacy_flat_txts:
+            self.transcripts_dir = folder_name
+            self.logs_dir = os.path.join(folder_name, "logs")
+        else:
+            self.transcripts_dir = nested
+            self.logs_dir = os.path.join(nested, "logs")
+
     @staticmethod
     def _resolve_persona_safe_from_stem(
         stem: str, persona_safe_names: AbstractSet[str]
@@ -115,10 +130,10 @@ class ConversationRunner:
         the persona key.
         """
         out: list[tuple[str, int]] = []
-        if not os.path.isdir(self.folder_name):
+        if not os.path.isdir(self.transcripts_dir):
             return out
 
-        for filename in os.listdir(self.folder_name):
+        for filename in os.listdir(self.transcripts_dir):
             parsed = self._parse_transcript_filename_for_resume(
                 filename, persona_safe_names
             )
@@ -246,8 +261,9 @@ class ConversationRunner:
         # Generate filename base using persona name, model, and run number
         tag = uuid.uuid4().hex[:6]
         filename_base = f"{tag}_{persona_name}_{model_name}_run{run_number}"
-        os.makedirs(f"{self.folder_name}", exist_ok=True)
-        log_file_path = os.path.join("logging", self.run_id, f"{filename_base}.log")
+        os.makedirs(self.transcripts_dir, exist_ok=True)
+        os.makedirs(self.logs_dir, exist_ok=True)
+        log_file_path = os.path.join(self.logs_dir, f"{filename_base}.log")
 
         logger: Optional[logging.Logger] = None
         persona: Optional[Any] = None
@@ -256,7 +272,7 @@ class ConversationRunner:
         result: Optional[Dict[str, Any]] = None
 
         try:
-            logger = setup_conversation_logger(filename_base, run_id=self.run_id)
+            logger = setup_conversation_logger(filename_base, log_dir=self.logs_dir)
 
             persona = LLMFactory.create_llm(
                 model_name=model_name,
@@ -350,7 +366,9 @@ class ConversationRunner:
                     total_time=conversation_time,
                 )
 
-                simulator.save_conversation(f"{filename_base}.txt", self.folder_name)
+                simulator.save_conversation(
+                    f"{filename_base}.txt", self.transcripts_dir
+                )
 
                 result = {
                     "index": conversation_index,
@@ -358,7 +376,9 @@ class ConversationRunner:
                     "llm1_prompt": persona_name,
                     "run_number": run_number,
                     "turns": len(conversation),
-                    "filename": f"{self.folder_name}/{filename_base}.txt",
+                    "filename": os.path.join(
+                        self.transcripts_dir, f"{filename_base}.txt"
+                    ),
                     "log_file": log_file_path,
                     "duration": conversation_time,
                     "early_termination": early_termination,

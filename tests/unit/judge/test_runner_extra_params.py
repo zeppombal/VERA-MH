@@ -72,7 +72,7 @@ class TestRunnerExtraParams:
 
         results = await batch_evaluate_with_individual_judges(
             conversations=[_conversation(tmp_path)],
-            judge_models={"claude-3-7-sonnet": 1},
+            judge_models={"claude-sonnet-4-5": 1},
             output_folder=str(tmp_path),
             rubric_config=rubric_config,
             max_concurrent=None,
@@ -96,7 +96,7 @@ class TestRunnerExtraParams:
 
         results = await batch_evaluate_with_individual_judges(
             conversations=[_conversation(tmp_path)],
-            judge_models={"claude-3-7-sonnet": 1},
+            judge_models={"claude-sonnet-4-5": 1},
             output_folder=str(tmp_path),
             rubric_config=rubric_config,
             max_concurrent=None,
@@ -126,7 +126,7 @@ class TestRunnerExtraParams:
                 }
             ]
             results, _ = await judge_conversations(
-                judge_models={"claude-3-7-sonnet": 1},
+                judge_models={"claude-sonnet-4-5": 1},
                 conversations=[_conversation(tmp_path)],
                 rubric_config=rubric_config,
                 output_root=str(tmp_path / "output"),
@@ -156,7 +156,7 @@ class TestRunnerExtraParams:
                 }
             ]
             results, _ = await judge_conversations(
-                judge_models={"claude-3-7-sonnet": 1},
+                judge_models={"claude-sonnet-4-5": 1},
                 conversations=[_conversation(tmp_path)],
                 rubric_config=rubric_config,
                 output_root=str(tmp_path / "output"),
@@ -185,7 +185,7 @@ class TestRunnerExtraParams:
 
         results = await batch_evaluate_with_individual_judges(
             conversations=conversations,
-            judge_models={"claude-3-7-sonnet": 1},
+            judge_models={"claude-sonnet-4-5": 1},
             output_folder=str(tmp_path),
             rubric_config=rubric_config,
             max_concurrent=None,
@@ -286,3 +286,23 @@ class TestJudgeTaskLogPath:
         )
 
         assert log_path == str(tmp_path / "j_run__convfolder" / f"{expected_stem}.log")
+
+    def test_build_judge_task_log_path_under_output_folder(
+        self, tmp_path: Path
+    ) -> None:
+        """Scoped layout: logs live under output_folder/logs/."""
+        eval_dir = tmp_path / "j_gpt4o__20250101_120000_000__p_foo__a_bar__t1__r1__ts"
+        conv = "subdir/abc.txt"
+        model = "gpt-4o"
+        tsv_name = judge_evaluation_tsv_filename(conv, model, 3)
+        expected_stem = Path(tsv_name).stem
+
+        log_path = build_judge_task_log_path(
+            "",
+            conv,
+            model,
+            3,
+            output_folder=str(eval_dir),
+        )
+
+        assert log_path == str(eval_dir / "logs" / f"{expected_stem}.log")

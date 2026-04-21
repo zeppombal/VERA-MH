@@ -1,6 +1,7 @@
 """Unit tests for judge.py CLI and main entrypoint."""
 
 import importlib.util
+import os
 from pathlib import Path
 from unittest.mock import ANY, AsyncMock, patch
 
@@ -46,17 +47,17 @@ class TestJudgeParser:
     def test_conversation_with_judge_model(self):
         """Single conversation mode: -c and -j parse correctly."""
         parser = get_parser()
-        args = parser.parse_args(["-c", "path/to/conv.txt", "-j", "claude-3-7-sonnet"])
+        args = parser.parse_args(["-c", "path/to/conv.txt", "-j", "claude-sonnet-4-5"])
         assert args.conversation == "path/to/conv.txt"
         assert args.folder is None
-        assert args.judge_model == ["claude-3-7-sonnet"]
+        assert args.judge_model == ["claude-sonnet-4-5"]
 
     def test_defaults(self):
         """Optional args have expected defaults."""
         parser = get_parser()
         args = parser.parse_args(["-f", "folder", "-j", "gpt-4o"])
         assert args.rubrics == ["data/rubric.tsv"]
-        assert args.output == "evaluations"
+        assert args.output is None
         assert args.limit is None
         assert args.max_concurrent is None
         assert args.per_judge is False
@@ -156,10 +157,12 @@ class TestJudgeMain:
                 judge_model_extra_params={},
                 log_file=ANY,
             )
-            judge_single.assert_awaited_once_with(
-                "judge_instance", "conversation_data", "evaluations"
-            )
-            assert result is None
+            judge_single.assert_awaited_once()
+            ja = judge_single.await_args[0]
+            assert ja[0] == "judge_instance"
+            assert ja[1] == "conversation_data"
+            assert str(ja[2]).startswith("output/adhoc/single_")
+            assert result == ja[2]
 
     @pytest.mark.asyncio
     async def test_main_folder_calls_judge_conversations(self):
@@ -201,7 +204,9 @@ class TestJudgeMain:
             result = await main(args)
 
             RubricConfig.load.assert_called_once_with(rubric_folder="data")
-            load_convos.assert_called_once_with("conversations/run1", limit=10)
+            load_convos.assert_called_once_with(
+                os.path.abspath("conversations/run1"), limit=10
+            )
             judge_convos.assert_awaited_once()
             assert judge_convos.await_args is not None
             call_kw = judge_convos.await_args[1]

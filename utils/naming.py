@@ -40,7 +40,7 @@ def parse_generation_run_folder_name(folder_name: str) -> Dict[str, Any]:
     match = re.match(pattern, folder_name)
     if not match:
         raise ValueError(
-            "Resume mode requires --folder-name to be a run folder with format "
+            "Resume mode requires --output to be a run folder with format "
             "'p_{persona}__a_{agent}__t{turns}__r{runs}__{timestamp}'."
         )
     return {
@@ -60,3 +60,20 @@ def persona_token_for_transcript_stem(persona_name: str) -> str:
 def is_generation_run_folder_basename(name: str) -> bool:
     """True if basename looks like a generation run folder (p_*__a_*...)."""
     return name.startswith("p_") and "__a_" in name
+
+
+def is_judge_run_folder_basename(name: str) -> bool:
+    """True if basename looks like a judge evaluation run folder (j_*__*)."""
+    return name.startswith("j_") and "__" in name
+
+
+def build_single_conversation_run_folder_name(
+    conversation_stem: str, timestamp: str
+) -> str:
+    """
+    Basename for single-file judge runs: single_<timestamp>__<conversation_stem>.
+
+    Stems may contain characters unsafe for paths; callers should normalize if needed.
+    """
+    safe = conversation_stem.replace("/", "_").replace("\\", "_").replace(" ", "_")
+    return f"single_{timestamp}__{safe}"

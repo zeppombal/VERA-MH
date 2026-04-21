@@ -73,12 +73,12 @@ async def _evaluate_single_conversation_with_judge(
         and all dimension scores
     """
     conversation_filename = conversation.metadata.get("filename", "unknown.txt")
-    run_key = Path(output_folder).name
     log_file = build_judge_task_log_path(
-        run_key,
+        "",
         conversation_filename,
         judge_model,
         judge_instance,
+        output_folder=output_folder,
     )
     judge = LLMJudge(
         judge_model=judge_model,
@@ -415,7 +415,7 @@ async def batch_evaluate_with_individual_judges(
     Args:
         conversations: List of ConversationData objects
         judge_models: Dict mapping model names to number of instances
-                     Example: {"claude-3-7-sonnet": 3, "gpt-4o": 2}
+                     Example: {"claude-sonnet-4-5": 3, "gpt-4o": 2}
         output_folder: Folder to save evaluation results
         rubric_config: Pre-loaded rubric configuration
         max_concurrent: Maximum number of concurrent workers
@@ -480,7 +480,7 @@ async def judge_conversations(
 
     Args:
         judge_models: Dict mapping model names to number of instances
-                     Example: {"claude-3-7-sonnet": 3, "gpt-4o": 2}
+                     Example: {"claude-sonnet-4-5": 3, "gpt-4o": 2}
         conversations: List of pre-loaded ConversationData objects
         rubric_config: Pre-loaded rubric configuration
         output_root: Root folder for evaluation outputs

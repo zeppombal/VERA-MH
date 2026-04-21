@@ -151,10 +151,10 @@ The project uses Claude Code with custom testing commands and agents:
 ## Key Commands
 ```bash
 # Generate conversations
-python3 generate.py -u claude-3-7-sonnet -p claude-3-7-sonnet -t 6 -r 1
+python3 generate.py -u claude-sonnet-4-5 -p claude-sonnet-4-5 -t 6 -r 1
 
 # Judge/evaluate conversations
-python3 judge.py -f conversations/{YOUR_FOLDER} -j claude-3-7-sonnet
+python3 judge.py -f output/{YOUR_P_RUN}/ -j claude-sonnet-4-5
 
 # Development
 uv sync              # Install/update dependencies

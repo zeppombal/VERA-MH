@@ -86,9 +86,10 @@ The pipeline script:
 - Automatically runs `judge/score.py` on the evaluation results
 - Displays a summary with all output locations
 
-Resume (optional, independent flags):
-- **`--resume-generate`** — Set **`--folder-name`** to an existing generation run directory (`p_*__a_*__t*__r*__*`). Required paths are validated before generation starts.
-- **`--resume-judge`** — Set **`--judge-output`** to the full path of an existing evaluation run directory (`j_*__*`), not the parent `evaluations/` folder alone. Required paths are validated before judging starts.
+Resume (optional, independent flags; **`--output` means different things**):
+- **`--resume-generate`** — Set **`--output`** to the existing **`p_*`** generation run folder (same idea as `generate.py --resume --output`).
+- **`--resume-judge`** — Set **`--output`** to the existing **`j_*`** folder (full path under `.../evaluations/j_*`).
+- **Both flags** — Set **`--output`** to that **`p_*`** folder; there must be **exactly one** `j_*` under `p_*/evaluations/` so the pipeline knows which evaluation run to resume (otherwise remove or rename extra `j_*` folders, or resume steps separately with `judge.py`).
 
 For help and all available options:
 ```bash
@@ -120,7 +121,7 @@ python3 run_pipeline.py --help
 | `-pep` | `--provider-agent-extra-params` | Extra parameters for the provider-agent. Examples: `temperature=0.7,max_tokens=1000` |
 | `-t` | `--turns` | Number of turns per conversation (required) (e.g., 2 turns means both persona and provider spoke once) |
 | `-r` | `--runs` | Number of runs per user persona (required) |
-| `-f` | `--folder-name` | Folder name for output (defaults to `conversations` with a subfolder named based on other parameters and datetime) |
+| `-o` | `--output` | Parent directory for output (default: `output`). A new run folder `p_*__a_*__t*__r*__*` is created under it; transcripts live in `<run>/conversations/`. |
 | `-c` | `--max-concurrent` | Maximum number of concurrent conversations (defaults to None (no limit); use this if the provider you're testing times out) |
 | `-w` | `--max-total-words` | Optional maximum total words across all responses in a conversation |
 | `-i` | `--run-id` | Run ID for the conversations (if not provided, a default will be generated) |
@@ -131,17 +132,17 @@ python3 run_pipeline.py --help
 | `-usm` | `--user-first-message` | Static first message from user-agent/persona (no LLM call for first turn). Used on turn 0 when the persona/user-agent speaks first (i.e., when `--provider-speaks-first` is not set). |
 | `-usp` | `--user-start-prompt` | Prompt sent to user-agent LLM when starting the conversation (first turn). Used on turn 0 when the persona/user-agent speaks first (i.e., when `--provider-speaks-first` is not set). Default: `"Start the conversation based on the system prompt"` |
 | `-d` | `--debug` | Enable debug logging for conversation generation |
-| | `--resume` | Continue a previous run: set `--folder-name` to the existing run directory; skips persona/run pairs that already have transcript files. User/provider models, turns, and runs must match the original run (see `generate.py` validation). |
+| | `--resume` | Continue a previous run: set `--output` to the existing `p_*` run directory; skips persona/run pairs that already have transcript files. User/provider models, turns, and runs must match the original run (see `generate.py` validation). |
 
 **First message and start prompt:** When a role (provider or persona) speaks first, you can either supply a **first message** (a fixed string returned with no LLM call, e.g. `"How are you today?"`) or let the LLM generate the first turn using a **start prompt** (the prompt sent to the LLM when history is empty; default: `"Start the conversation based on the system prompt"`). If a first message is set for that role, the start prompt is not used for that turn. This supports both provider- and persona-first flows and records which turn used a static message vs an LLM response.
 
-This will generate conversations and store them in a subfolder of `conversations` unless specified otherwise. To continue an interrupted generation run, pass `--resume` and set `--folder-name` to that existing run folder (same models, turns, and runs as before).
+This will generate conversations under `output/<p_* run>/conversations/` by default (or under `<your --output>/<p_* run>/conversations/`). To continue an interrupted generation run, pass `--resume` and set `--output` to that existing `p_*` run folder (same models, turns, and runs as before).
 
 7. **Judge the conversations**:
    ```bash
-   python judge.py -f conversations/{YOUR_FOLDER} -j gpt-4o
+   python judge.py -f output/{YOUR_P_RUN}/ -j gpt-4o
    ```
-   To resume a partial batch in the same evaluation folder (same judge specs as before), add `--resume` and set `-o` to that folder, e.g. `evaluations/j_gpt-4ox1_gemini-2.5-flashx2_<timestamp>__{YOUR_FOLDER}/`.
+   Point `-f` at a generation run folder: if it contains a `conversations/` subdir with `.txt` files, transcripts are read from there; otherwise a flat folder of `.txt` files is still supported. To resume a partial batch in the same evaluation folder (same judge specs as before), add `--resume` and set `-o` to that existing `j_*` folder (e.g. `output/{YOUR_P_RUN}/evaluations/j_*__.../`).
 
 **Judge model recommendations**: **GPT-4o** and **Claude Sonnet** have the highest inter-rater reliability with human clinicians as judge models.
 
@@ -155,7 +156,7 @@ This will generate conversations and store them in a subfolder of `conversations
 | `-jep` | `--judge-model-extra-params` | Extra parameters for the judge model (optional). Examples: `temperature=0.7,max_tokens=1000`. Default: `temperature=0` (unless overridden) |
 | `-r` | `--rubrics` | Rubric file(s) to use (default: `data/rubric.tsv`) |
 | `-l` | `--limit` | Limit number of conversations to judge (for debugging) |
-| `-o` | `--output` | Without `--resume`: parent directory where a new timestamped `j_*__*` evaluation folder is created (default: `evaluations`). With `--resume`: full path to that existing evaluation folder. |
+| `-o` | `--output` | Without `--resume`: parent directory where a new `j_*__*` evaluation folder is created. Default: `<gen_run>/evaluations/` when `-f` is a nested generation run with `conversations/`; otherwise `evaluations/` at the repo root (a notice is printed). With `--resume`: the existing `j_*` evaluation folder itself. |
 | | `--resume` | Continue batch judging in an existing evaluation folder: use with `-f` and `-o` pointing at that folder. Skips `(conversation, judge, instance)` jobs whose `.tsv` already exists, then rebuilds `results.csv` from all TSVs there. Not supported with `-c` / `--conversation`. |
 | `-m` | `--max-concurrent` | Maximum number of concurrent workers (default: None (no limit)). Set to a high number or omit for unlimited concurrency |
 | `-pj` | `--per-judge` | If set, `--max-concurrent` applies per judge model. Otherwise, it applies to total workers across all judges. Example: `-m 4 -pj` with two judge models runs up to 4 workers per model (8 total) |
@@ -163,9 +164,9 @@ This will generate conversations and store them in a subfolder of `conversations
 
 **Output from `judge.py`:**
 
-When judge.py is run, by default it produces a folder in `evaluations` with an autogenerated folder name that includes a timestamped record of which judge LLM was applied when to which conversations folder.   
+When judge.py is run in batch mode, it writes a `j_*__*` folder (by default under `<generation run>/evaluations/` when using the nested layout). Per-conversation judge logs live in `logs/` inside that run folder.
 
-Within this folder there will be:
+Within the judge run folder there will be:
 * a `tsv` for each conversation with the Dimension, Rating, and Reasoning for that rating
 * a `results.csv` that lists the ratings for each dimension for each conversation that was judged
 
@@ -173,8 +174,9 @@ When digging into the judging results, the `results.csv` can guide you to the co
 
 8. **Score and visualize the results**:
    ```
-   uv run python -m judge.score -r evaluations/{YOUR_EVAL_FOLDER}/results.csv
+   uv run python -m judge.score -r output/{YOUR_P_RUN}/evaluations/{YOUR_J_RUN}/results.csv
    ```
+   By default, JSON and PNG outputs go to `<judge_run>/scores/` next to `results.csv`.
 **VERA-MH v1 Score Definition**  
 The VERA-MH v1 score summarizes judging results by dimension and overall using the following formula:
    ```
@@ -198,7 +200,7 @@ resulting in the following behavior:
 
 **Output from judge/score.py**
 
-The `judge/score.py` script will produce 4 output files in the same folder as the designated results.csv:
+The `judge/score.py` script will produce four output files in the `scores/` subfolder next to `results.csv` by default (override with `--output-json` for a specific JSON path):
 * `scores_visualization.png` is a breakdown of High Potential for Harm, Suboptimal but Low Potential for Harm, and Best Practice Ratings in each rubric dimension, and overall (excluding `Not Relevant` ratings)
 * `scores.json` captures the numbers calculated during the running of score.py, including the dimensional and overall aggregates of the rating categories
 * `scores_by_risk_visualization.png` is a breakdown of the ratings assigned to each conversation according to the suicide risk level assigned to the user personas behind those conversations.  This visualization includes the "Not Relevant" ratings.
@@ -245,8 +247,8 @@ python judge.py -f conversations/my_experiment -j gpt-4o -jep temperature=0.5,ma
 ```
 
 **Note:** Extra parameters are automatically included in the output folder names, making it easy to track experiments:
-- Generation: `conversations/p_gpt_4o_temp0.3__a_claude_3_5_sonnet_temp0.5__t6__r2__{timestamp}/`
-- Evaluation: `evaluations/j_claude_3_5_sonnet_temp0.3_{timestamp}__{conversation_folder}/`
+- Generation: `output/p_gpt_4o_temp0.3__a_claude_3_5_sonnet_temp0.5__t6__r2__{timestamp}/conversations/`
+- Evaluation: `<gen_run>/evaluations/j_claude_3_5_sonnet_temp0.3_{timestamp}__{conversation_run_basename}/`
 
 **Multiple judge models**: You can use multiple different judge models and/or multiple instances:
 ```bash
