@@ -12,6 +12,7 @@ There are known limitations of the current structure, which will be simplified a
 ## Table of Contents
 
 - [Getting Started](#getting-started)
+- [Reliable VERA score (automated)](#reliable-vera-score-automated)
 - [Connecting your own LLM, Agent, or API](#connecting-your-own-llm-or-api)
 - [Using Extra Parameters](#using-extra-parameters)
 - [Data Files](#data-files)
@@ -28,6 +29,28 @@ There are known limitations of the current structure, which will be simplified a
 - [First Announcement](https://www.springhealth.com/blog/introducing-vera-mh-new-standard-ethical-ai-mental-healthcare)
 
 # Getting started
+
+## Recommended settings
+
+Use this profile when you want a **reliable, comparable VERA-MH score**:
+
+- **Personas**
+  - Use all **100** rows in [`data/personas.tsv`](data/personas.tsv).
+  - Persona mix covers presenting concerns, SI risk, disclosure, and modifiers.
+  - Full set probes safety more thoroughly than small persona slices.
+  - Full set also tends to reduce score variability vs. smaller persona sets.
+- **Conversations**
+  - **200** transcripts total:
+    - **100** personas × **one** run with **GPT 5.2** simulating the user.
+    - **100** personas × **one** run with **Claude Opus 4.5** simulating the user.
+- **Depth**
+  - **30** turns per conversation.
+- **Judges**
+  - Score the full batch with **GPT-4o** and **Claude Sonnet 4.5**.
+  - Reported scores are fairly insensitive to judge choice.
+  - One judge model is often enough if you want to save cost.
+
+To run this profile in one scripted flow after [environment setup](#step-by-step), see [Reliable VERA score (automated)](#reliable-vera-score-automated) (under **Step-by-step**, after the generic `run_pipeline.py` example).
 
 ## Connecting your own LLM, Agent, or API
 
@@ -95,6 +118,43 @@ For help and all available options:
 ```bash
 python3 run_pipeline.py --help
 ```
+
+### Reliable VERA score (automated)
+
+For the [recommended settings](#recommended-settings) (dual user agents, 30 turns, dual judges, pooled headline score), run from the repository root after completing steps **0–2** above (`uv sync`, activate `.venv`, configure `.env`), and step **4** if you use a custom provider:
+
+```bash
+./scripts/run_recommended_vera_pipeline.sh <provider-agent-model>
+```
+
+Use the same **provider** model id you would pass to `run_pipeline.py` as `--provider-agent` (the system under evaluation). The script:
+
+- Runs `run_pipeline.py` **twice**: once with **GPT 5.2** as the user agent (`gpt-5.2`) and once with **Claude Opus 4.5** (`claude-opus-4-5-20251101`), each with **30** turns and **1** conversation per persona (all personas in `data/personas.tsv` unless you cap the count).
+- Judges each batch with **GPT-4o** and **Claude Sonnet 4.5** (`claude-sonnet-4-5-20250929`).
+- Merges both evaluation runs via `scripts/pool_vera_scores.py` into a **single pooled** folder `j_pooled__.../` (next to your `p_*` runs by default) containing merged `results.csv`, `pool_metadata.json`, `scores/scores.json`, and the usual score / risk visualizations. Use that pooled folder for headline VERA numbers across the combined judge rows.
+
+By default, generation folders go under `output/`; the pooled `j_pooled__...` folder is created in that same parent unless you override it. See environment variables in `scripts/run_recommended_vera_pipeline.sh`, for example:
+
+| Variable | Purpose |
+|----------|---------|
+| `VERA_OUTPUT_PARENT` | Parent for new `p_*` runs (default: `output`) |
+| `VERA_MAX_CONCURRENT` | Passed through as `--max-concurrent` |
+| `VERA_MAX_PERSONAS` | Passed through as `--max-personas` (smoke tests) |
+| `VERA_POOL_OUTPUT` | Parent directory for the new `j_pooled__...` folder (default: same as `VERA_OUTPUT_PARENT`) |
+| `VERA_POOL_SKIP_RISK` | If set, skip pooled risk-level analysis |
+| `VERA_USER_GPT`, `VERA_USER_CLAUDE`, `VERA_JUDGE_GPT`, `VERA_JUDGE_CLAUDE` | Override default model ids |
+
+Arguments after `<provider-agent-model>` are forwarded to `run_pipeline.py` (for example `--max-concurrent 10`).
+
+**Pooling only:** If you already have two evaluation directories (`.../evaluations/j_*`), merge them with:
+
+```bash
+python3 scripts/pool_vera_scores.py -o <pool_parent_dir> \
+  path/to/first/.../evaluations/j_* \
+  path/to/second/.../evaluations/j_*
+```
+
+Use `python3 scripts/pool_vera_scores.py --help` for options (including `--extract-from-log` for parsing a saved `run_pipeline.py` log).
 
 6. **Run the simulation** (quick test with 6 turns for cost-effective trial):
    ```bash
