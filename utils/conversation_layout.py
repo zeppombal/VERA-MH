@@ -3,6 +3,8 @@
 import os
 from typing import Optional
 
+from .naming import is_generation_run_folder_basename
+
 
 def resolve_conversation_input(folder: str) -> tuple[str, Optional[str], str]:
     """
@@ -14,6 +16,11 @@ def resolve_conversation_input(folder: str) -> tuple[str, Optional[str], str]:
 
     - If ``folder/conversations/`` contains ``.txt`` files, ``folder`` is treated as
       a generation run root; transcripts are read from ``folder/conversations``.
+    - If ``folder`` is named ``conversations``, contains ``.txt`` files, and its
+      parent's basename passes ``is_generation_run_folder_basename`` (canonical
+      ``p_*__a_*__t*__r*__*`` layout from ``utils.naming``), treat ``folder`` as
+      that run's nested transcript directory (same as passing the parent). This
+      keeps judge run folder names and score metadata aligned with the run id.
     - Otherwise, if ``folder`` itself contains ``.txt`` files, use the legacy flat
       layout (``gen_run_root`` is None).
     - If ``folder/conversations/`` exists but has no ``.txt`` files yet, use that
@@ -34,6 +41,15 @@ def resolve_conversation_input(folder: str) -> tuple[str, Optional[str], str]:
     if dir_has_txt_files(nested):
         return nested, folder, basename
     if dir_has_txt_files(folder):
+        if basename == "conversations":
+            parent = os.path.dirname(folder)
+            parent_base = os.path.basename(parent)
+            if (
+                parent
+                and parent_base
+                and is_generation_run_folder_basename(parent_base)
+            ):
+                return folder, parent, parent_base
         return folder, None, basename
     if os.path.isdir(nested):
         return nested, folder, basename

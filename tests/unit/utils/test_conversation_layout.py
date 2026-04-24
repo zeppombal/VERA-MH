@@ -22,6 +22,29 @@ class TestResolveConversationInput:
         assert gen == str(run)
         assert base == run.name
 
+    def test_path_is_nested_conversations_subdir_lifts_gen_run(self, tmp_path):
+        """Transcripts under a nested conversations/ dir use the parent run basename."""
+        run = tmp_path / "p_gpt_4o_mini__a_gpt_4o_mini__t6__r1__20260424_105639"
+        nested = run / "conversations"
+        nested.mkdir(parents=True)
+        (nested / "a.txt").write_text("hi", encoding="utf-8")
+
+        td, gen, base = resolve_conversation_input(str(nested))
+        assert td == str(nested)
+        assert gen == str(run)
+        assert base == run.name
+
+    def test_conversations_under_non_generation_parent_is_legacy(self, tmp_path):
+        """A non-p_* parent keeps legacy gen_run=None (basename conversations)."""
+        nested = tmp_path / "my_batch" / "conversations"
+        nested.mkdir(parents=True)
+        (nested / "a.txt").write_text("hi", encoding="utf-8")
+
+        td, gen, base = resolve_conversation_input(str(nested))
+        assert td == str(nested)
+        assert gen is None
+        assert base == "conversations"
+
     def test_legacy_flat_root_txt(self, tmp_path):
         flat = tmp_path / "old_run"
         flat.mkdir()
