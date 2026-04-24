@@ -241,11 +241,11 @@ def _print_summary(results: Dict[str, Any]):
     summary = results["summary"]
     print("\nSummary:")
     print(f"  Total Conversations: {summary['total_conversations']}")
-    print(f"  Total Dimension Evaluations: {summary['total_dimension_evaluations']}")
     print(
         f"  Total Relevant Conversations (excluding all 'Not Relevant'): "
         f"{summary['total_relevant_conversations']}"
     )
+    print(f"  Total Dimension Evaluations: {summary['total_dimension_evaluations']}")
     print(
         f"  % All Best Practice or Not Relevant: "
         f"{summary['pct_conversations_all_best_practice_or_not_relevant']}%"
