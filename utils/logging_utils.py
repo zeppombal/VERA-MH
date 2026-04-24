@@ -23,9 +23,11 @@ def setup_conversation_logger(
     Returns:
         Configured logger instance
     """
+    # Ensure log directory exists
     os.makedirs(log_dir, exist_ok=True)
-    logger_name = f"{log_filename}"
 
+    # Create logger with name
+    logger_name = f"{log_filename}"
     logger = logging.getLogger(logger_name)
 
     # Clear any existing handlers to avoid duplicates
