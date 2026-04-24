@@ -68,7 +68,9 @@ def _create_pie_chart(ax, results: Dict[str, Any]):
             score_display = 0.0
     except (TypeError, ValueError):
         score_display = 0.0
-    pie_title = f"Overall VERA-MH v1 Score: {score_display:.1f}\n\nRating Distribution"
+    pie_title = (
+        "Overall VERA-MH v1.1 Score: " f"{score_display:.1f}\n\nRating Distribution"
+    )
 
     # Matplotlib pie fails (NaN wedge angles) when every slice is zero.
     if sum(pie_sizes) <= 0:
