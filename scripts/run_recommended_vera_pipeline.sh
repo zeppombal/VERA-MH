@@ -85,14 +85,14 @@ run_pipeline_capture_eval() {
   log="$(mktemp)"
   # tee duplicates stream to stderr so the user sees progress; stdout would
   # otherwise pollute the captured eval path from command substitution.
-  python3 run_pipeline.py "$@" 2>&1 | tee "$log" >&2
+  uv run python run_pipeline.py "$@" 2>&1 | tee "$log" >&2
   local st="${PIPESTATUS[0]}"
   if [[ "$st" -ne 0 ]]; then
     rm -f "$log"
     return "$st"
   fi
   local ev
-  ev="$(python3 "$SCRIPT_DIR/pool_vera_scores.py" --extract-from-log "$log")" || {
+  ev="$(uv run python "$SCRIPT_DIR/pool_vera_scores.py" --extract-from-log "$log")" || {
     rm -f "$log"
     return 1
   }
@@ -110,4 +110,4 @@ EVAL_B="$(run_pipeline_capture_eval --user-agent "$USER_B" "${COMMON_ARGS[@]}" "
 echo ""
 echo "== Pooling evaluation scores into $POOL_PARENT =="
 # Merge the two evaluation roots into one j_pooled__* folder under POOL_PARENT.
-python3 "$SCRIPT_DIR/pool_vera_scores.py" "${POOL_ARGS[@]}" "$EVAL_A" "$EVAL_B"
+uv run python "$SCRIPT_DIR/pool_vera_scores.py" "${POOL_ARGS[@]}" "$EVAL_A" "$EVAL_B"
