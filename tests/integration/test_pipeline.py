@@ -9,6 +9,7 @@ These tests focus on argument parsing, configuration building, and error paths.
 """
 
 import argparse
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -151,6 +152,42 @@ class TestPipelineArgumentParsing:
         with patch("sys.argv", ["run_pipeline.py"] + test_args):
             args = parse_arguments()
             assert args.judge_output == "evals/parent"
+
+    @pytest.mark.parametrize(
+        "co_flag,jo_flag",
+        [
+            ("--conversation-output", "--judge-output"),
+            ("-co", "-jo"),
+        ],
+    )
+    def test_parse_arguments_with_judge_output(self, co_flag, jo_flag):
+        """Parse co/jo; resolve_pipeline_resume_paths for a non-resume run."""
+        from run_pipeline import parse_arguments, resolve_pipeline_resume_paths
+
+        test_args = [
+            "--user-agent",
+            "m",
+            "--provider-agent",
+            "m",
+            "--runs",
+            "1",
+            "--turns",
+            "1",
+            "--judge-model",
+            "m",
+            co_flag,
+            "runs/gen",
+            jo_flag,
+            "runs/evals",
+        ]
+        with patch("sys.argv", ["run_pipeline.py"] + test_args):
+            args = parse_arguments()
+            assert args.conversation_output == "runs/gen"
+            assert args.judge_output == "runs/evals"
+            resolve_pipeline_resume_paths(args)
+            assert args._pipeline_gen_folder == os.path.normpath("runs/gen")
+            assert args._pipeline_resume_generate is False
+            assert args._pipeline_judge_output is None
 
     def test_parse_arguments_with_extra_params(self):
         """Test parsing with extra model parameters."""
@@ -513,31 +550,6 @@ class TestPipelineNewArguments:
         assert pipeline_args.conversation_output == "output"
         assert hasattr(pipeline_args, "judge_output")
         assert pipeline_args.judge_output is None
-
-    def test_parse_conversation_output_and_judge_output(self):
-        """Separate generation parent vs judge batch parent."""
-        from run_pipeline import parse_arguments
-
-        test_args = [
-            "--user-agent",
-            "m",
-            "--provider-agent",
-            "m",
-            "--runs",
-            "1",
-            "--turns",
-            "1",
-            "--judge-model",
-            "m",
-            "--conversation-output",
-            "runs/gen",
-            "--judge-output",
-            "runs/evals",
-        ]
-        with patch("sys.argv", ["run_pipeline.py"] + test_args):
-            args = parse_arguments()
-            assert args.conversation_output == "runs/gen"
-            assert args.judge_output == "runs/evals"
 
     def test_parse_arguments_with_run_id(self):
         """Test parsing arguments with --run-id."""
