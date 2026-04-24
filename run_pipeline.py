@@ -64,30 +64,30 @@ def resolve_pipeline_resume_paths(args: argparse.Namespace) -> None:
     - Both flags: ``--conversation-output`` = ``p_*``; exactly one ``j_*`` under
       ``p_*/evaluations/`` (``--judge-output`` is ignored).
     """
-    co_raw = getattr(args, "conversation_output", None) or "output"
-    co = os.path.normpath(co_raw)
-    jo = getattr(args, "judge_output", None)
-    if isinstance(jo, str) and not jo.strip():
-        jo = None
-    rg, rj = args.resume_generate, args.resume_judge
+    convo_output_raw = getattr(args, "conversation_output", None) or "output"
+    convo_output = os.path.normpath(convo_output_raw)
+    judge_output = getattr(args, "judge_output", None)
+    if isinstance(judge_output, str) and not judge_output.strip():
+        judge_output = None
+    resume_gen, resume_judge = args.resume_generate, args.resume_judge
 
-    if not rg and not rj:
-        args._pipeline_gen_folder = co
+    if not resume_gen and not resume_judge:
+        args._pipeline_gen_folder = convo_output
         args._pipeline_resume_generate = False
         args._pipeline_judge_output = None
         return
 
-    if rg and rj:
-        co_path = Path(co).resolve()
-        if not co_path.is_dir():
+    if resume_gen and resume_judge:
+        convo_output_path = Path(convo_output).resolve()
+        if not convo_output_path.is_dir():
             print(
                 "error: with --resume-generate and --resume-judge, "
                 "--conversation-output must be an existing directory: "
-                f"{co!r}",
+                f"{convo_output!r}",
                 file=sys.stderr,
             )
             sys.exit(2)
-        base = co_path.name
+        base = convo_output_path.name
         if not is_generation_run_folder_basename(base):
             print(
                 "error: with both resume flags, --conversation-output must be the "
@@ -96,7 +96,7 @@ def resolve_pipeline_resume_paths(args: argparse.Namespace) -> None:
                 file=sys.stderr,
             )
             sys.exit(2)
-        eval_parent = co_path / "evaluations"
+        eval_parent = convo_output_path / "evaluations"
         if not eval_parent.is_dir():
             print(
                 "error: expected evaluations/ under the generation run folder: "
@@ -104,12 +104,12 @@ def resolve_pipeline_resume_paths(args: argparse.Namespace) -> None:
                 file=sys.stderr,
             )
             sys.exit(2)
-        j_dirs = sorted(
+        judge_dirs = sorted(
             p
             for p in eval_parent.iterdir()
             if p.is_dir() and is_judge_run_folder_basename(p.name)
         )
-        if len(j_dirs) == 0:
+        if len(judge_dirs) == 0:
             print(
                 "error: no j_* evaluation folder found under "
                 f"{eval_parent}. Create one by judging first, or use only "
@@ -117,8 +117,8 @@ def resolve_pipeline_resume_paths(args: argparse.Namespace) -> None:
                 file=sys.stderr,
             )
             sys.exit(2)
-        if len(j_dirs) > 1:
-            names = ", ".join(d.name for d in j_dirs)
+        if len(judge_dirs) > 1:
+            names = ", ".join(d.name for d in judge_dirs)
             print(
                 "error: multiple j_* folders under evaluations/; use only one "
                 "evaluation run for combined resume, or judge manually. "
@@ -126,21 +126,21 @@ def resolve_pipeline_resume_paths(args: argparse.Namespace) -> None:
                 file=sys.stderr,
             )
             sys.exit(2)
-        args._pipeline_gen_folder = str(co_path)
+        args._pipeline_gen_folder = str(convo_output_path)
         args._pipeline_resume_generate = True
-        args._pipeline_judge_output = str(j_dirs[0])
+        args._pipeline_judge_output = str(judge_dirs[0])
         return
 
-    if rg:
-        co_path = Path(co).resolve()
-        if not co_path.is_dir():
+    if resume_gen:
+        convo_output_path = Path(convo_output).resolve()
+        if not convo_output_path.is_dir():
             print(
                 "error: --resume-generate: --conversation-output must be an existing "
-                f"directory: {co!r}",
+                f"directory: {convo_output!r}",
                 file=sys.stderr,
             )
             sys.exit(2)
-        generate_basename = co_path.name
+        generate_basename = convo_output_path.name
         if not is_generation_run_folder_basename(generate_basename):
             print(
                 "error: --resume-generate: --conversation-output must be the "
@@ -149,24 +149,24 @@ def resolve_pipeline_resume_paths(args: argparse.Namespace) -> None:
                 file=sys.stderr,
             )
             sys.exit(2)
-        args._pipeline_gen_folder = str(co_path)
+        args._pipeline_gen_folder = str(convo_output_path)
         args._pipeline_resume_generate = True
         args._pipeline_judge_output = None
         return
 
     # resume_judge only
-    if not jo:
+    if not judge_output:
         print(
             "error: --resume-judge requires --judge-output pointing at the existing "
             "evaluation run folder (j_*__*).",
             file=sys.stderr,
         )
         sys.exit(2)
-    out_path = Path(os.path.normpath(jo)).resolve()
+    out_path = Path(os.path.normpath(judge_output)).resolve()
     if not out_path.is_dir():
         print(
             "error: --resume-judge: --judge-output must be an existing directory: "
-            f"{jo!r}",
+            f"{judge_output!r}",
             file=sys.stderr,
         )
         sys.exit(2)
