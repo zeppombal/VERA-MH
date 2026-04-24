@@ -1,6 +1,6 @@
 #!/usr/bin/env uv run python
 """
-Pool judge evaluation results from multiple evaluation runs (e.g. two user-agent
+Pool judge evaluation results from multiple evaluation runs (e.g. 2+ user-agent
 pipelines) into one results.csv, then recompute VERA scores and visualizations.
 
 Typical layout for each input path:
@@ -178,9 +178,9 @@ def _annotate_pooled_results(
     combined: Any,
     source_eval_dirs: list[Path],
     rows_per_source: list[int],
-) -> None:
+) -> dict[str, Any]:
     """
-    Mutate *results* in place for pooled reporting and provenance.
+    Return *results* shallow-merged with pooled reporting and provenance.
 
     Sets top-level ``judge_model`` and ``persona_model`` to the literal ``"pooled"``
     (so charts and JSON match user expectations) and adds a ``pooled`` object with
@@ -188,21 +188,27 @@ def _annotate_pooled_results(
     values present in the merged dataframe.
 
     Args:
-        results: Score dict returned by ``score_results`` (modified in place).
+        results: Score dict returned by ``score_results``.
         combined: Merged judge results dataframe (pandas ``DataFrame``).
         source_eval_dirs: Evaluation directories that were concatenated, in order.
         rows_per_source: Row count from each source, same order as *source_eval_dirs*.
+
+    Returns:
+        New dict: ``{**results, ...pooled fields...}`` (nested values are shared).
     """
     judges = sorted(
         {str(x) for x in combined["judge_model"].dropna().astype(str).unique()}
     )
-    results["judge_model"] = "pooled"
-    results["persona_model"] = "pooled"
-    results["pooled"] = {
-        "source_evaluation_directories": [str(p) for p in source_eval_dirs],
-        "rows_per_source": rows_per_source,
-        "total_rows": int(len(combined)),
-        "unique_judge_models_in_data": judges,
+    return {
+        **results,
+        "judge_model": "pooled",
+        "persona_model": "pooled",
+        "pooled": {
+            "source_evaluation_directories": [str(p) for p in source_eval_dirs],
+            "rows_per_source": rows_per_source,
+            "total_rows": int(len(combined)),
+            "unique_judge_models_in_data": judges,
+        },
     }
 
 
@@ -299,7 +305,7 @@ def pool_evaluation_directories(
 
     scores_json = out_eval / "scores" / "scores.json"
     results = score_results(str(results_csv), str(scores_json))
-    _annotate_pooled_results(results, combined, eval_dirs, rows_per_source)
+    results = _annotate_pooled_results(results, combined, eval_dirs, rows_per_source)
     _save_results_json(results, str(results_csv), str(scores_json))
 
     print_scores(results)
