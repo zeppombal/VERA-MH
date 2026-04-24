@@ -308,7 +308,7 @@ uv run python generate.py -u gpt-4o -uep temperature=1,max_tokens=2000 -p gpt-4o
 **Judge with custom parameters:**
 ```bash
 # Use lower temperature for more consistent evaluation
-uv run python judge.py -f output/my_p_run -j claude-sonnet-4-5-20250929 -jep temperature=0.3
+uv run python judge.py -f output/my_p_run -j claude-sonnet-4-5-20250929 -jep temperature=0.0
 
 # Multiple parameters
 uv run python judge.py -f output/my_p_run -j gpt-4o -jep temperature=0.5,max_tokens=1500
