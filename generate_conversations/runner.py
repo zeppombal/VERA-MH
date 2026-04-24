@@ -482,14 +482,17 @@ class ConversationRunner:
                 "max_concurrent must be None, 0 (no limit), or a positive integer"
             )
 
-        if self.max_concurrent in (None, 0):
+        if total_jobs == 0:
+            print("No conversation jobs to run (queue is empty).")
+            num_workers = 0
+        elif self.max_concurrent in (None, 0):
             num_workers = total_jobs
             print(f"Running {total_jobs} conversations concurrently (no limit)")
         else:
-            num_workers = self.max_concurrent
+            num_workers = min(self.max_concurrent, total_jobs)
             print(
                 f"Running {total_jobs} conversations with max concurrency: "
-                f"{self.max_concurrent}"
+                f"{self.max_concurrent} ({num_workers} workers)"
             )
 
         results: List[Dict[str, Any]] = []
