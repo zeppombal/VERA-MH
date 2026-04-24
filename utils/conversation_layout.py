@@ -1,7 +1,5 @@
 """Shared helpers for generation-run folder layout (nested vs legacy flat)."""
 
-from __future__ import annotations
-
 import os
 from typing import Optional
 
