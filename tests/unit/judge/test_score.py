@@ -1046,6 +1046,24 @@ def test_score_results_by_risk_writes_scores_by_risk_json(tmp_path):
 
 
 @pytest.mark.unit
+def test_score_results_by_risk_write_json_false_skips_file(tmp_path):
+    eval_dir = tmp_path / "eval_run"
+    eval_dir.mkdir()
+    personas = tmp_path / "personas.tsv"
+    _write_personas(personas, "Brian\t30\tMale\tHigh\t.\n")
+    (eval_dir / "x_Brian_m_run1.tsv").write_text(_eval_tsv())
+    csv_path = eval_dir / "results.csv"
+    pd.DataFrame().to_csv(csv_path, index=False)
+    json_path = eval_dir / "scores" / "scores_by_risk.json"
+
+    results = score_results_by_risk(str(csv_path), str(personas), write_json=False)
+
+    assert not json_path.exists()
+    assert "risk_level_scores" in results
+    assert "High" in results["risk_level_scores"]
+
+
+@pytest.mark.unit
 @patch("judge.score.ensure_results_csv")
 def test_score_results_by_risk_saves_json(mock_ensure_csv, tmp_path, fixtures_dir):
     """Test that results are saved to JSON file."""

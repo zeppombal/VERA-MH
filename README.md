@@ -12,7 +12,11 @@ There are known limitations of the current structure, which will be simplified a
 ## Table of Contents
 
 - [Getting Started](#getting-started)
+- [Environment setup](#environment-setup)
 - [Connecting your own LLM, Agent, or API](#connecting-your-own-llm-or-api)
+- [Recommended settings](#recommended-settings)
+- [Reliable VERA-MH score (automated)](#reliable-vera-mh-score-automated)
+- [Running VERA-MH step by step](#running-vera-mh-step-by-step)
 - [Using Extra Parameters](#using-extra-parameters)
 - [Data Files](#data-files)
 - [LLM Conversation Simulator](#llm-conversation-simulator)
@@ -29,21 +33,10 @@ There are known limitations of the current structure, which will be simplified a
 
 # Getting started
 
-## Connecting your own LLM, Agent, or API
+This page covers [Environment setup](#environment-setup), optional [custom provider wiring](#connecting-your-own-llm-or-api), [Recommended settings](#recommended-settings) for comparable scores, the [automated pooled pipeline](#reliable-vera-mh-score-automated), and [Running VERA-MH step by step](#running-vera-mh-step-by-step) (`run_pipeline.py`, `generate.py`, `judge.py`, scoring, and flag tables).
 
-Use this when the **provider** you want to evaluate (the mental-health chatbot under test) is **not** already available as a built-in model name in `generate.py`—for example a private HTTP API, an internal gateway, or a new cloud provider.
+## Environment setup
 
-**What to implement**
-
-1. **Examples** — [`llm_clients/endpoint_llm.py`](llm_clients/endpoint_llm.py) is a working HTTP-style provider example (chat-oriented; judge support may be limited). Other [`llm_clients/`](llm_clients/) modules show LangChain-backed providers.
-2. **Contract** — Subclass [`LLMInterface`](llm_clients/llm_interface.py) for conversation simulation. Subclass [`JudgeLLM`](llm_clients/llm_interface.py) only if you also need this same stack to **run as a judge** (requires structured output via `generate_structured_response`).
-3. **Methods** — Implement `start_conversation()` (first assistant turn) and `generate_response(conversation_history)` (later turns). For `JudgeLLM`, add `generate_structured_response()` for rubric scoring. The simulator passes full history each time; you can stay stateless or track server-side session IDs.
-4. **Wire-up** — Add logic in [`llm_clients/llm_factory.py`](llm_clients/llm_factory.py) to return your class when `-p` / `--provider-agent` (and user-agent if needed) matches your chosen model string. Add API keys or base URLs in [`llm_clients/config.py`](llm_clients/config.py) if required.
-5. **Run** — Use your registered model id with `generate.py` (`-p`, and `-u` for the persona model), then `judge.py` with a supported judge model (built-in judges are recommended for reliability).
-
-**Full guide** (step-by-step code, history format, metadata, structured output caveats): [docs/evaluating.md](docs/evaluating.md).
-
-## Step-by-step
 0. **Install uv** (if not already installed):
    ```bash
    pip install uv
@@ -66,12 +59,87 @@ Use this when the **provider** you want to evaluate (the mental-health chatbot u
    pre-commit install
    ```
 
-4. **(Optional) Custom provider** — If your product is not a supported, implement and register a client (see [Connecting your own LLM or API](#connecting-your-own-llm-or-api); full detail in [docs/evaluating.md](docs/evaluating.md))
+## Connecting your own LLM, Agent, or API
 
-5. **End-to-End Pipeline**: For convenience, you can run the entire workflow (generation → evaluation → scoring) with a single command:
+Use this when the **provider** you want to evaluate (the mental-health chatbot under test) is **not** already available as a built-in model name in `generate.py`—for example a private HTTP API, an internal gateway, or a new cloud provider.
+
+**What to implement**
+
+1. **Examples** — [`llm_clients/endpoint_llm.py`](llm_clients/endpoint_llm.py) is a working HTTP-style provider example (chat-oriented; judge support may be limited). Other [`llm_clients/`](llm_clients/) modules show LangChain-backed providers.
+2. **Contract** — Subclass [`LLMInterface`](llm_clients/llm_interface.py) for conversation simulation. Subclass [`JudgeLLM`](llm_clients/llm_interface.py) only if you also need this same stack to **run as a judge** (requires structured output via `generate_structured_response`).
+3. **Methods** — Implement `start_conversation()` (first assistant turn) and `generate_response(conversation_history)` (later turns). For `JudgeLLM`, add `generate_structured_response()` for rubric scoring. The simulator passes full history each time; you can stay stateless or track server-side session IDs.
+4. **Wire-up** — Add logic in [`llm_clients/llm_factory.py`](llm_clients/llm_factory.py) to return your class when `-p` / `--provider-agent` (and user-agent if needed) matches your chosen model string. Add API keys or base URLs in [`llm_clients/config.py`](llm_clients/config.py) if required.
+5. **Run** — Use your registered model id with `generate.py` (`-p`, and `-u` for the persona model), then `judge.py` with a supported judge model (built-in judges are recommended for reliability).
+
+**Full guide** (step-by-step code, history format, metadata, structured output caveats): [docs/evaluating.md](docs/evaluating.md).
+
+## Recommended settings
+
+Use this profile when you want a **reliable VERA-MH score comparable to the published VERA-MH v1.1 scores**:
+
+- **Personas**
+  - Use all **100** rows in [`data/personas.tsv`](data/personas.tsv).
+  - Persona mix covers presenting concerns, SI risk, disclosure, and modifiers.
+  - Full set probes safety more thoroughly than small persona slices.
+  - Full set also tends to reduce score variability vs. smaller persona sets.
+- **Conversations**
+  - **200** transcripts total:
+    - **100** personas × **one** run with **GPT 5.2** simulating the user.
+    - **100** personas × **one** run with **Claude Opus 4.5** simulating the user.
+- **Max Conversation Turns**
+  - **30** turns per conversation.
+- **Judges**
+  - Score the full batch with **GPT-4o** and **Claude Sonnet 4.5**.
+  - Reported scores are fairly insensitive to judge choice.
+  - One judge model is often enough if you want to save cost.
+
+To run this profile in one scripted flow after [Environment setup](#environment-setup), see [Reliable VERA-MH score (automated)](#reliable-vera-mh-score-automated).
+
+## Reliable VERA-MH score (automated)
+
+For the [recommended settings](#recommended-settings) (dual user agents, 30 turns, dual judges, pooled headline score), run from the repository root after [Environment setup](#environment-setup) (steps **0–2**: `uv sync`, activate `.venv`, configure `.env`) and, if you use a custom provider, the steps in [Connecting your own LLM, Agent, or API](#connecting-your-own-llm-or-api):
 
 ```bash
-python3 run_pipeline.py \
+./scripts/run_recommended_vera_pipeline.sh <provider-agent-model>
+```
+
+Use the same **provider** model id you would pass to `run_pipeline.py` as `--provider-agent` (the system under evaluation). The script:
+
+- Runs `run_pipeline.py` **twice**: once with **GPT 5.2** as the user agent (`gpt-5.2`) and once with **Claude Opus 4.5** (`claude-opus-4-5-20251101`), each with **30** turns and **1** conversation per persona (all personas in `data/personas.tsv` unless you cap the count).
+- Judges each batch with **GPT-4o** and **Claude Sonnet 4.5** (`claude-sonnet-4-5-20250929`).
+- Merges both evaluation runs via `scripts/pool_vera_scores.py` into a **single pooled** folder `j_pooled__.../` (next to your `p_*` runs by default) containing merged `results.csv`, `pool_metadata.json`, `scores/scores.json`, and the usual score / risk visualizations. Use that pooled folder for headline VERA-MH numbers across the combined judge rows.
+
+By default, generation folders go under `output/`; the pooled `j_pooled__...` folder is created in that same parent unless you override it. See environment variables in `scripts/run_recommended_vera_pipeline.sh`, for example:
+
+| Variable | Purpose |
+|----------|---------|
+| `VERA_OUTPUT_PARENT` | Parent for new `p_*` runs (default: `output`) |
+| `VERA_MAX_CONCURRENT` | Passed through as `--max-concurrent` |
+| `VERA_MAX_PERSONAS` | Passed through as `--max-personas` (smoke tests) |
+| `VERA_POOL_OUTPUT` | Parent directory for the new `j_pooled__...` folder (default: same as `VERA_OUTPUT_PARENT`) |
+| `VERA_POOL_SKIP_RISK` | If set, skip pooled risk-level analysis |
+| `VERA_USER_A`, `VERA_USER_B`, `VERA_JUDGE_A`, `VERA_JUDGE_B` | Override default model ids (first/second suite and judge order) |
+
+Arguments after `<provider-agent-model>` are forwarded to `run_pipeline.py` (for example `--max-concurrent 10`).
+
+**Pooling only:** If you already have two evaluation directories (`.../evaluations/j_*`), merge them with:
+
+```bash
+uv run python scripts/pool_vera_scores.py -o <pool_parent_dir> \
+  path/to/first/.../evaluations/j_* \
+  path/to/second/.../evaluations/j_*
+```
+
+Use `uv run python scripts/pool_vera_scores.py --help` for options (including `--extract-from-log` for parsing a saved `run_pipeline.py` log).
+
+## Running VERA-MH step by step
+
+1. **(Optional) Custom provider** — If your product is not supported, implement and register a client (see [Connecting your own LLM, Agent, or API](#connecting-your-own-llm-or-api); full detail in [docs/evaluating.md](docs/evaluating.md)).
+
+2. **End-to-End Pipeline**: For convenience, you can run the entire workflow (generation → evaluation → scoring) with a single command:
+
+```bash
+uv run python run_pipeline.py \
   --user-agent claude-sonnet-4-5-20250929 \
   --provider-agent gpt-4o \
   --runs 2 \
@@ -93,19 +161,19 @@ Resume (optional, independent flags):
 
 For help and all available options:
 ```bash
-python3 run_pipeline.py --help
+uv run python run_pipeline.py --help
 ```
 
-6. **Run the simulation** (quick test with 6 turns for cost-effective trial):
+3. **Run the simulation** (quick test with 6 turns for cost-effective trial):
    ```bash
-   python generate.py -u gpt-4o -uep temperature=1 -p gpt-4o -pep temperature=1 -t 6 -r 1
+   uv run python generate.py -u gpt-4o -uep temperature=1 -p gpt-4o -pep temperature=1 -t 6 -r 1
    ```
    
    **6a. Quick test**: The command above generates a small set of conversations for initial testing.
    
-   **6b. For production-quality evaluations**: To generate conversations that reproduce published VERA scores, achieve valid scoring, or use scoring features, we recommend:
+   **6b. For production-quality evaluations**: To generate conversations that reproduce published VERA-MH scores, achieve valid scoring, or use scoring features, we recommend:
    ```bash
-   python generate.py -u gemini-3-pro-preview -p <your-AI-product> -pep <your-AI-product-extras> -t 20 -r 20 -c 10
+   uv run python generate.py -u gemini-3-pro-preview -p <your-AI-product> -pep <your-AI-product-extras> -t 20 -r 20 -c 10
    ```
    - **20 conversation turns** over **20 runs** per persona for reliable scoring
    - **Max concurrent** of **10** conversations (use `-c 10`) to manage API rate limits
@@ -138,9 +206,9 @@ python3 run_pipeline.py --help
 
 This will generate conversations under `output/<p_* run>/conversations/` by default (or under `<your --output>/<p_* run>/conversations/`). To continue an interrupted generation run, pass `--resume` and set `--output` to that existing `p_*` run folder (same models, turns, and runs as before).
 
-7. **Judge the conversations**:
+4. **Judge the conversations**:
    ```bash
-   python judge.py -f output/{YOUR_P_RUN}/ -j gpt-4o
+   uv run python judge.py -f output/{YOUR_P_RUN}/ -j gpt-4o
    ```
    Point `-f` at a generation run folder: if it contains a `conversations/` subdir with `.txt` files, transcripts are read from there; otherwise a flat folder of `.txt` files is still supported. To resume a partial batch in the same evaluation folder (same judge specs as before), add `--resume` and set `-o` to that existing `j_*` folder (e.g. `output/{YOUR_P_RUN}/evaluations/j_*__.../`).
 
@@ -172,7 +240,7 @@ Within the judge run folder there will be:
 
 When digging into the judging results, the `results.csv` can guide you to the conversations that had specific ratings you want to investigate and the individual conversation rating `tsv` files can help you understand at what point in the rubric the rating was assigned.
 
-8. **Score and visualize the results**:
+5. **Score and visualize the results**:
    ```
    uv run python -m judge.score -r output/{YOUR_P_RUN}/evaluations/{YOUR_J_RUN}/results.csv
    ```
@@ -206,7 +274,7 @@ The `judge/score.py` script will produce four output files in the `scores/` subf
 * `scores_by_risk_visualization.png` is a breakdown of the ratings assigned to each conversation according to the suicide risk level assigned to the user personas behind those conversations.  This visualization includes the "Not Relevant" ratings.
 * `scores_by_risk.json` captures the numbers behind the `scores_by_risk_visualization.png` file
 
-9. **(Optional) Compare scores across multiple evaluations**:
+6. **(Optional) Compare scores across multiple evaluations**:
    ```
    uv run python -m judge.score_comparison -i evaluations_to_compare.csv
    ```
@@ -231,19 +299,19 @@ Both `generate.py` and `judge.py` support extra parameters for fine-tuning model
 **Generate with temperature control:**
 ```bash
 # Lower temperature (0.3) for more consistent responses
-python generate.py -u gpt-4o -uep temperature=0.3 -p claude-sonnet-4-5-20250929 -pep temperature=0.5 -t 6 -r 2
+uv run python generate.py -u gpt-4o -uep temperature=0.3 -p claude-sonnet-4-5-20250929 -pep temperature=0.5 -t 6 -r 2
 
 # Higher temperature (1.0) with max tokens
-python generate.py -u gpt-4o -uep temperature=1,max_tokens=2000 -p gpt-4o -pep temperature=1 -t 6 -r 1
+uv run python generate.py -u gpt-4o -uep temperature=1,max_tokens=2000 -p gpt-4o -pep temperature=1 -t 6 -r 1
 ```
 
 **Judge with custom parameters:**
 ```bash
 # Use lower temperature for more consistent evaluation
-python judge.py -f output/my_p_run -j claude-sonnet-4-5-20250929 -jep temperature=0.3
+uv run python judge.py -f output/my_p_run -j claude-sonnet-4-5-20250929 -jep temperature=0.0
 
 # Multiple parameters
-python judge.py -f output/my_p_run -j gpt-4o -jep temperature=0.5,max_tokens=1500
+uv run python judge.py -f output/my_p_run -j gpt-4o -jep temperature=0.5,max_tokens=1500
 ```
 
 **Note:** Extra parameters are automatically included in the output folder names, making it easy to track experiments:
@@ -253,13 +321,13 @@ python judge.py -f output/my_p_run -j gpt-4o -jep temperature=0.5,max_tokens=150
 **Multiple judge models**: You can use multiple different judge models and/or multiple instances:
 ```bash
 # Multiple different models
-python judge.py -f output/{YOUR_P_RUN} -j gpt-4o claude-sonnet-4-20250514
+uv run python judge.py -f output/{YOUR_P_RUN} -j gpt-4o claude-sonnet-4-20250514
 
 # Multiple instances of the same model (for reliability testing)
-python judge.py -f output/{YOUR_P_RUN} -j gpt-4o:3
+uv run python judge.py -f output/{YOUR_P_RUN} -j gpt-4o:3
 
 # Combine both: different models with multiple instances
-python judge.py -f output/{YOUR_P_RUN} -j gpt-4o:2 claude-sonnet-4-20250514:3
+uv run python judge.py -f output/{YOUR_P_RUN} -j gpt-4o:2 claude-sonnet-4-20250514:3
 ```
 
 ## Data Files
@@ -444,7 +512,7 @@ results = asyncio.run(run())
 ### Command Line Usage
 
 ```bash
-python generate.py
+uv run python generate.py
 ```
 
 The script will:
