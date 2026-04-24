@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env uv run python
 """
 Pool judge evaluation results from multiple evaluation runs (e.g. two user-agent
 pipelines) into one results.csv, then recompute VERA scores and visualizations.
@@ -9,18 +9,22 @@ Typical layout for each input path:
 You may pass either the evaluation directory (``j_*`` folder) or ``results.csv``
 inside it. For example::
 
-  python3 scripts/pool_vera_scores.py \\
+  uv run python scripts/pool_vera_scores.py \\
     output/p_claude__a_gpt_4o__t6__r1_20260422_100000/evaluations/j_gpt_4o__... \\
     output/p_gpt_4o__a_gpt_4o__t6__r1_20260422_110000/evaluations/j_gpt_4o__.../results.csv
 
+**Legacy layout** (e.g. top-level ``evaluations/j_*`` next to a flat ``conversations/``
+run): merging and scoring still work; only the auto-generated ``j_pooled__*`` folder
+name may fall back to ``unknown`` placeholders because the script cannot infer the
+``p_*`` generation basename from the path alone.
+
 Also supports extracting the last evaluation directory from a run_pipeline log:
-  python3 scripts/pool_vera_scores.py --extract-from-log /path/to/log.txt
+  uv run python scripts/pool_vera_scores.py --extract-from-log /path/to/log.txt
 """
 
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import re
 import sys
@@ -28,36 +32,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-# Repo root = parent of scripts/
+# in case running from the scripts directory
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-
-def _load_parse_generation_run_folder_name():
-    """
-    Dynamically load ``parse_generation_run_folder_name`` from ``utils/naming.py``.
-
-    Importing ``utils`` as a package pulls LangChain and other heavy dependencies.
-    Loading only ``naming.py`` keeps ``--extract-from-log`` usable with a minimal
-    interpreter.
-
-    Returns:
-        The ``parse_generation_run_folder_name`` callable from that module.
-
-    Raises:
-        RuntimeError: If the module spec or loader cannot be created for ``naming.py``.
-    """
-    path = REPO_ROOT / "utils" / "naming.py"
-    spec = importlib.util.spec_from_file_location("vera_naming_standalone", path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Cannot load {path}")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod.parse_generation_run_folder_name
-
-
-parse_generation_run_folder_name = _load_parse_generation_run_folder_name()
+from utils.naming import parse_generation_run_folder_name  # noqa: E402
 
 
 def extract_last_evaluation_dir_from_pipeline_log(text: str) -> str:
@@ -118,8 +98,11 @@ def _generation_folder_for_eval(eval_dir: Path) -> Path | None:
     """
     Walk from an evaluation folder up to the corresponding generation run folder.
 
-    Expected layout: ``.../p_*__/evaluations/j_*``. If *eval_dir* is not under
-    ``.../evaluations/`` or the grandparent is not a ``p_*`` folder, returns None.
+    Expected layout: ``.../p_*__/evaluations/j_*`` (nested generation run). If
+    *eval_dir* is not directly under an ``evaluations`` folder whose parent is a
+    ``p_*`` run (e.g. legacy ``repo/evaluations/j_*``), returns None. Callers still
+    pool successfully; they only lose path-derived metadata for the synthetic output
+    folder name.
 
     Args:
         eval_dir: Resolved path to a ``j_*`` evaluation directory.
@@ -182,7 +165,8 @@ def _synthetic_pooled_folder_basename(source_eval_dirs: list[Path]) -> str:
         try:
             meta = parse_generation_run_folder_name(gen.name)
             agent = meta["agent"]
-            t, r = meta["turns"], meta["runs"]
+            t = meta["turns"]
+            r = meta["runs"]
             return f"j_pooled__p_{persona_slug}__a_{agent}__t{t}__r{r}__{ts}"
         except ValueError:
             pass
@@ -281,6 +265,21 @@ def pool_evaluation_directories(
     combined = pd.concat(dfs, ignore_index=True, sort=False)
     if len(combined) == 0:
         raise ValueError("Combined results dataframe is empty.")
+
+    missing_gen = [d for d in eval_dirs if _generation_folder_for_eval(d) is None]
+    if missing_gen:
+        preview = "; ".join(str(p) for p in missing_gen[:3])
+        if len(missing_gen) > 3:
+            preview += f"; ... and {len(missing_gen) - 3} more"
+        print(
+            "Warning: some evaluation paths are not under .../p_*/evaluations/j_* "
+            f"({preview}). "
+            "Merged results and scores are unchanged; the new j_pooled__* folder name "
+            "may use unknown placeholders for persona/agent/turns/runs. "
+            "Use nested paths from generate.py / run_pipeline.py for descriptive "
+            "names.",
+            file=sys.stderr,
+        )
 
     synth_name = _synthetic_pooled_folder_basename(eval_dirs)
     out_eval = (output_parent / synth_name).resolve()
