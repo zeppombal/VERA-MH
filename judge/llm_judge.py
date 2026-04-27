@@ -9,7 +9,7 @@ from judge.constants import BEST_PRACTICE, DAMAGING, NEUTRAL
 from judge.question_navigator import QuestionNavigator
 from judge.response_models import QuestionResponse
 from judge.rubric_config import ConversationData, RubricConfig
-from judge.utils import judge_evaluation_tsv_filename
+from judge.utils import default_adhoc_parent, judge_evaluation_tsv_filename
 from llm_clients import LLMFactory, Role
 from llm_clients.llm_interface import JudgeLLM
 
@@ -46,19 +46,19 @@ class LLMJudge:
             judge_model: Model to use for judging
             rubric_config: Pre-loaded rubric configuration data
             judge_model_extra_params: Extra parameters for the judge model
-            log_file: Path to log file (default under output/adhoc/judge_unscoped/)
+            log_file: Path to log file (default under <adhoc>/judge_unscoped/; see
+                default_adhoc_parent() / VERA_ADHOC_PARENT)
             verbose: Whether to print verbose output during initialization
         """
 
         # Setup logger: batch judging and `judge.py` pass an explicit path from
         # build_judge_task_log_path (scoped to the run). Omitted log_file is only
-        # for direct construction, tests, etc.—then we use output/adhoc/judge_unscoped/
-        # with a UUID stem so concurrent sessions do not overwrite.
+        # for direct construction, tests, etc.—then judge_unscoped/ under
+        # default_adhoc_parent(); UUID stem avoids concurrent overwrites.
         scoped = log_file is not None
         if not scoped:
             log_file = str(
-                Path("output")
-                / "adhoc"
+                Path(default_adhoc_parent())
                 / "judge_unscoped"
                 / f"judge_{uuid.uuid4().hex}.log"
             )

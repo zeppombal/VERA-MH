@@ -162,7 +162,9 @@ class TestJudgeMain:
             ja = judge_single.await_args[0]
             assert ja[0] == "judge_instance"
             assert ja[1] == "conversation_data"
-            assert str(ja[2]).startswith("output/adhoc/single_")
+            out_run = Path(ja[2])
+            assert out_run.name.startswith("single_")
+            assert out_run.name.endswith("__conv")
             assert result == ja[2]
 
     @pytest.mark.asyncio

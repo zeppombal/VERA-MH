@@ -243,3 +243,12 @@ def extract_persona_name_from_filename(filename: str) -> Optional[str]:
     except Exception as e:
         print(f"Error extracting persona name from filename {filename}: {e}")
         return None
+
+
+def default_adhoc_parent() -> str:
+    """
+    Parent directory for single-file judge runs and unscoped LLMJudge log dirs.
+
+    Set VERA_ADHOC_PARENT to override (tests use a temp directory).
+    """
+    return os.environ.get("VERA_ADHOC_PARENT") or os.path.join("output", "adhoc")
