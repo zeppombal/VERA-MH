@@ -15,7 +15,11 @@ from typing import Optional
 from judge import judge_conversations, judge_single_conversation
 from judge.llm_judge import LLMJudge
 from judge.rubric_config import ConversationData, RubricConfig, load_conversations
-from judge.utils import build_judge_task_log_path, parse_judge_models
+from judge.utils import (
+    build_judge_task_log_path,
+    default_adhoc_parent,
+    parse_judge_models,
+)
 from utils.conversation_layout import resolve_conversation_input
 from utils.naming import (
     build_single_conversation_run_folder_name,
@@ -97,7 +101,8 @@ def get_parser() -> argparse.ArgumentParser:
             "Batch: parent directory for a new j_*__* folder (default: "
             "<gen_run>/evaluations/ when -f points at a nested p_* run, else "
             "evaluations/). With --resume, must be the existing j_* run folder. "
-            "Single-file (-c): parent for single_<ts>__<stem>/ (default: output/adhoc)."
+            "Single-file (-c): parent for single_<ts>__<stem>/ "
+            "(default: output/adhoc; env VERA_ADHOC_PARENT overrides)."
         ),
     )
     parser.add_argument(
@@ -165,7 +170,7 @@ async def main(args) -> Optional[str]:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
         single_name = build_single_conversation_run_folder_name(stem, ts)
         if args.output is None:
-            parent = os.path.join("output", "adhoc")
+            parent = default_adhoc_parent()
         else:
             parent = args.output
         os.makedirs(parent, exist_ok=True)
