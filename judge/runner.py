@@ -73,12 +73,11 @@ async def _evaluate_single_conversation_with_judge(
         and all dimension scores
     """
     conversation_filename = conversation.metadata.get("filename", "unknown.txt")
-    run_key = Path(output_folder).name
     log_file = build_judge_task_log_path(
-        run_key,
         conversation_filename,
         judge_model,
         judge_instance,
+        output_folder=output_folder,
     )
     judge = LLMJudge(
         judge_model=judge_model,
@@ -303,6 +302,10 @@ async def _run_workers_with_queue(
     results = []
     total_jobs = len(jobs)
 
+    if total_jobs == 0:
+        print("No evaluation jobs to run (queue is empty).")
+        return results
+
     if per_judge:
         # Group jobs by judge model
         jobs_by_model = {}
@@ -319,11 +322,15 @@ async def _run_workers_with_queue(
             for job in model_jobs:
                 await queue.put(job)
 
-            # Determine number of workers for this model
-            num_workers = len(model_jobs) if max_concurrent is None else max_concurrent
+            # Do not spawn more worker tasks than jobs (e.g. resume with few pending).
+            model_job_n = len(model_jobs)
+            if max_concurrent is None:
+                num_workers = model_job_n
+            else:
+                num_workers = min(max_concurrent, model_job_n)
             print(
                 f"Starting {num_workers} workers for {judge_model} "
-                f"({len(model_jobs)} jobs total)"
+                f"({model_job_n} jobs total) "
                 f"(max concurrent: {max_concurrent})"
             )
 
@@ -364,10 +371,13 @@ async def _run_workers_with_queue(
         for job in jobs:
             await queue.put(job)
 
-        # Determine number of workers
-        num_workers = total_jobs if max_concurrent is None else max_concurrent
+        # Do not spawn more worker tasks than jobs (e.g. resume with few pending).
+        if max_concurrent is None:
+            num_workers = total_jobs
+        else:
+            num_workers = min(max_concurrent, total_jobs)
         print(
-            f"Starting {num_workers} workers for all jobs ({total_jobs} total)"
+            f"Starting {num_workers} workers for all jobs ({total_jobs} total) "
             f"(max concurrent: {max_concurrent})"
         )
 
@@ -405,6 +415,19 @@ async def batch_evaluate_with_individual_judges(
     judge_model_extra_params: Optional[Dict[str, Any]] = None,
     verbose_workers: bool = False,
     existing_tsv_basenames: Optional[set[str]] = None,
+    jobs: Optional[
+        List[
+            Tuple[
+                ConversationData,
+                str,
+                int,
+                int,
+                str,
+                RubricConfig,
+                Optional[Dict[str, Any]],
+            ]
+        ]
+    ] = None,
 ) -> List[Dict[str, Any]]:
     """
     Evaluate conversations with multiple judge models using queue workers.
@@ -415,12 +438,17 @@ async def batch_evaluate_with_individual_judges(
     Args:
         conversations: List of ConversationData objects
         judge_models: Dict mapping model names to number of instances
-                     Example: {"claude-3-7-sonnet": 3, "gpt-4o": 2}
+                     Example: {"claude-sonnet-4-5": 3, "gpt-4o": 2}
         output_folder: Folder to save evaluation results
         rubric_config: Pre-loaded rubric configuration
         max_concurrent: Maximum number of concurrent workers
         per_judge: If True, max_concurrent applies per judge model; if False, total
         judge_model_extra_params: Extra parameters for the judge model
+        existing_tsv_basenames: If set, skip jobs whose evaluation TSV basename
+            is in this set (resume mode).
+        jobs: If provided, run exactly these jobs instead of calling
+            _create_evaluation_jobs (avoids duplicate work when the caller
+            already built the queue).
 
     Returns:
         Flattened list of evaluation results with one row per
@@ -430,25 +458,38 @@ async def batch_evaluate_with_individual_judges(
     total_judge_instances = sum(judge_models.values())
     total_evaluations = total_files * total_judge_instances
 
-    print(
-        f"Evaluating {total_files} conversations with "
-        f"{len(judge_models)} judge models "
-        f"({total_judge_instances} total instances)..."
-    )
-    print(f"Total evaluations to run: {total_evaluations}")
+    if jobs is None:
+        jobs = _create_evaluation_jobs(
+            conversations,
+            judge_models,
+            output_folder,
+            rubric_config,
+            judge_model_extra_params,
+            existing_tsv_basenames,
+        )
+
+    if existing_tsv_basenames is not None:
+        pending_n = len(jobs)
+        skipped_n = total_evaluations - pending_n
+        print(
+            f"Queued {pending_n} evaluation job(s); "
+            f"{skipped_n} skipped (evaluation TSV already in output folder)."
+        )
+        print(
+            f"Folder scale: {total_files} conversation file(s) × "
+            f"{total_judge_instances} judge instance slot(s) = "
+            f"{total_evaluations} total slot(s)."
+        )
+    else:
+        print(
+            f"Evaluating {total_files} conversations with "
+            f"{len(judge_models)} judge models "
+            f"({total_judge_instances} total instances)..."
+        )
+        print(f"Total evaluations to run: {total_evaluations}")
     print(
         f"Concurrency: {max_concurrent} workers "
         f"({'per judge model' if per_judge else 'total'})"
-    )
-
-    # Create all evaluation jobs
-    jobs = _create_evaluation_jobs(
-        conversations,
-        judge_models,
-        output_folder,
-        rubric_config,
-        judge_model_extra_params,
-        existing_tsv_basenames,
     )
 
     # Run workers with queue
@@ -480,7 +521,7 @@ async def judge_conversations(
 
     Args:
         judge_models: Dict mapping model names to number of instances
-                     Example: {"claude-3-7-sonnet": 3, "gpt-4o": 2}
+                     Example: {"claude-sonnet-4-5": 3, "gpt-4o": 2}
         conversations: List of pre-loaded ConversationData objects
         rubric_config: Pre-loaded rubric configuration
         output_root: Root folder for evaluation outputs
@@ -526,13 +567,51 @@ async def judge_conversations(
     os.makedirs(output_folder, exist_ok=True)
 
     total_found = len(conversations)
-    if verbose:
-        print(f"🔍 Judging {total_found} conversations")
-
     total_evaluations = len(conversations) * sum(judge_models.values())
+    total_judge_instances = sum(judge_models.values())
     existing_tsv_basenames = (
         _list_existing_evaluation_tsv_basenames(output_folder) if resume else None
     )
+
+    resume_jobs: Optional[
+        List[
+            Tuple[
+                ConversationData,
+                str,
+                int,
+                int,
+                str,
+                RubricConfig,
+                Optional[Dict[str, Any]],
+            ]
+        ]
+    ] = None
+    if resume:
+        resume_jobs = _create_evaluation_jobs(
+            conversations,
+            judge_models,
+            output_folder,
+            rubric_config,
+            judge_model_extra_params,
+            existing_tsv_basenames,
+        )
+        if verbose:
+            pending_jobs = len(resume_jobs)
+            skipped_jobs = total_evaluations - pending_jobs
+            if total_judge_instances == 1:
+                print(
+                    f"🔍 Judging {pending_jobs} conversation(s) "
+                    f"(skipping {skipped_jobs} already judged; "
+                    f"{total_found} loaded from folder)."
+                )
+            else:
+                print(
+                    f"🔍 {pending_jobs} evaluation job(s) to run "
+                    f"({skipped_jobs} skipped: TSV already on disk; "
+                    f"{total_found} conversations loaded)."
+                )
+    elif verbose:
+        print(f"🔍 Judging {total_found} conversations")
 
     batch_start = datetime.now()
     results = await batch_evaluate_with_individual_judges(
@@ -545,24 +624,15 @@ async def judge_conversations(
         judge_model_extra_params,
         verbose_workers,
         existing_tsv_basenames,
+        jobs=resume_jobs,
     )
 
     ok_n = len(results)
-    skipped_existing_n = (
-        total_evaluations
-        - len(
-            _create_evaluation_jobs(
-                conversations,
-                judge_models,
-                output_folder,
-                rubric_config,
-                judge_model_extra_params,
-                existing_tsv_basenames,
-            )
-        )
-        if resume
-        else 0
-    )
+    if resume:
+        assert resume_jobs is not None
+        skipped_existing_n = total_evaluations - len(resume_jobs)
+    else:
+        skipped_existing_n = 0
     skipped_error_n = total_evaluations - skipped_existing_n - ok_n
 
     if save_aggregated_results:

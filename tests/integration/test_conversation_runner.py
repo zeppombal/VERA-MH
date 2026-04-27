@@ -1103,9 +1103,9 @@ class TestConversationRunnerFileOperations:
                 # Act
                 results = await runner.run_conversations(persona_names=None)
 
-        # Assert - should create 3 conversation files
+        # Assert - should create 3 conversation files (nested layout)
         assert len(results) == 3
-        txt_files = list(conv_folder.glob("*.txt"))
+        txt_files = list((conv_folder / "conversations").glob("*.txt"))
         assert len(txt_files) == 3
 
     async def test_filename_uniqueness(
@@ -1212,7 +1212,7 @@ class TestConversationRunnerErrorHandling:
 
                 assert result.get("skipped") is True
                 assert "Simulated API error" in result.get("error", "")
-                txt_files = list(conv_folder.glob("*.txt"))
+                txt_files = list((conv_folder / "conversations").glob("*.txt"))
                 assert txt_files == []
 
     async def test_empty_persona_list(

@@ -11,6 +11,7 @@ from typing import AbstractSet, Any, Dict, List, Optional, Tuple
 
 from llm_clients import LLMFactory
 from llm_clients.llm_interface import LLMGenerationFailed, Role
+from utils.conversation_layout import resolve_conversation_input
 from utils.logging_utils import (
     cleanup_logger,
     log_conversation_end,
@@ -58,6 +59,10 @@ class ConversationRunner:
         self.max_personas = max_personas
         self.persona_speaks_first = persona_speaks_first
         self.resume = resume
+
+        transcripts_dir, _, _ = resolve_conversation_input(folder_name)
+        self.transcripts_dir = transcripts_dir
+        self.logs_dir = os.path.join(transcripts_dir, "logs")
 
     @staticmethod
     def _resolve_persona_safe_from_stem(
@@ -115,10 +120,10 @@ class ConversationRunner:
         the persona key.
         """
         out: list[tuple[str, int]] = []
-        if not os.path.isdir(self.folder_name):
+        if not os.path.isdir(self.transcripts_dir):
             return out
 
-        for filename in os.listdir(self.folder_name):
+        for filename in os.listdir(self.transcripts_dir):
             parsed = self._parse_transcript_filename_for_resume(
                 filename, persona_safe_names
             )
@@ -246,8 +251,9 @@ class ConversationRunner:
         # Generate filename base using persona name, model, and run number
         tag = uuid.uuid4().hex[:6]
         filename_base = f"{tag}_{persona_name}_{model_name}_run{run_number}"
-        os.makedirs(f"{self.folder_name}", exist_ok=True)
-        log_file_path = os.path.join("logging", self.run_id, f"{filename_base}.log")
+        os.makedirs(self.transcripts_dir, exist_ok=True)
+        os.makedirs(self.logs_dir, exist_ok=True)
+        log_file_path = os.path.join(self.logs_dir, f"{filename_base}.log")
 
         logger: Optional[logging.Logger] = None
         persona: Optional[Any] = None
@@ -256,7 +262,7 @@ class ConversationRunner:
         result: Optional[Dict[str, Any]] = None
 
         try:
-            logger = setup_conversation_logger(filename_base, run_id=self.run_id)
+            logger = setup_conversation_logger(filename_base, log_dir=self.logs_dir)
 
             persona = LLMFactory.create_llm(
                 model_name=model_name,
@@ -350,7 +356,9 @@ class ConversationRunner:
                     total_time=conversation_time,
                 )
 
-                simulator.save_conversation(f"{filename_base}.txt", self.folder_name)
+                simulator.save_conversation(
+                    f"{filename_base}.txt", self.transcripts_dir
+                )
 
                 result = {
                     "index": conversation_index,
@@ -358,7 +366,9 @@ class ConversationRunner:
                     "llm1_prompt": persona_name,
                     "run_number": run_number,
                     "turns": len(conversation),
-                    "filename": f"{self.folder_name}/{filename_base}.txt",
+                    "filename": os.path.join(
+                        self.transcripts_dir, f"{filename_base}.txt"
+                    ),
                     "log_file": log_file_path,
                     "duration": conversation_time,
                     "early_termination": early_termination,
@@ -472,14 +482,17 @@ class ConversationRunner:
                 "max_concurrent must be None, 0 (no limit), or a positive integer"
             )
 
-        if self.max_concurrent in (None, 0):
+        if total_jobs == 0:
+            print("No conversation jobs to run (queue is empty).")
+            num_workers = 0
+        elif self.max_concurrent in (None, 0):
             num_workers = total_jobs
             print(f"Running {total_jobs} conversations concurrently (no limit)")
         else:
-            num_workers = self.max_concurrent
+            num_workers = min(self.max_concurrent, total_jobs)
             print(
                 f"Running {total_jobs} conversations with max concurrency: "
-                f"{self.max_concurrent}"
+                f"{self.max_concurrent} ({num_workers} workers)"
             )
 
         results: List[Dict[str, Any]] = []

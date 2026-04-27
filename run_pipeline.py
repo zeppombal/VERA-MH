@@ -27,63 +27,183 @@ from judge.score_viz import (
     create_visualizations,
 )
 from llm_clients.llm_interface import DEFAULT_START_PROMPT
-from utils.naming import is_generation_run_folder_basename
+from utils.conversation_layout import resolve_conversation_input
+from utils.naming import is_generation_run_folder_basename, is_judge_run_folder_basename
 from utils.utils import parse_key_value_list
 
 
-def validate_pipeline_resume_args(args: argparse.Namespace) -> None:
-    """Exit with an error if resume flags are set without valid paths."""
-    if args.resume_generate:
-        if not args.folder_name:
+def _display_path(path: str | os.PathLike[str]) -> str:
+    """
+    Format *path* for terminal output: relative to cwd when under it, else absolute.
+
+    Keeps pipeline summaries consistent (generate often returns relative paths;
+    judge may return absolute paths).
+    """
+    try:
+        resolved = Path(path).resolve()
+        cwd = Path.cwd().resolve()
+        return str(resolved.relative_to(cwd))
+    except (ValueError, OSError):
+        return str(Path(path).resolve())
+
+
+def resolve_pipeline_resume_paths(args: argparse.Namespace) -> None:
+    """
+    Attach pipeline fields from ``--conversation-output`` / ``--judge-output``:
+
+    - Fresh: ``_pipeline_gen_folder`` = ``--conversation-output`` (parent for new
+      ``p_*``); ``_pipeline_resume_generate`` = False; ``_pipeline_judge_output`` =
+      None.
+
+    - ``--resume-generate``: ``--conversation-output`` = existing ``p_*`` run folder
+      (same as ``generate.py --resume --output``).
+
+    - ``--resume-judge`` alone: ``--judge-output`` = existing ``j_*`` folder; step 1
+      resumes the parent ``p_*`` co-located above ``evaluations/``.
+
+    - Both flags: ``--conversation-output`` = ``p_*``; exactly one ``j_*`` under
+      ``p_*/evaluations/`` (``--judge-output`` is ignored).
+    """
+    convo_output_raw = getattr(args, "conversation_output", None) or "output"
+    convo_output = os.path.normpath(convo_output_raw)
+    judge_output = getattr(args, "judge_output", None)
+    if isinstance(judge_output, str) and not judge_output.strip():
+        judge_output = None
+    resume_gen, resume_judge = args.resume_generate, args.resume_judge
+
+    if not resume_gen and not resume_judge:
+        args._pipeline_gen_folder = convo_output
+        args._pipeline_resume_generate = False
+        args._pipeline_judge_output = None
+        return
+
+    if resume_gen and resume_judge:
+        convo_output_path = Path(convo_output).resolve()
+        if not convo_output_path.is_dir():
             print(
-                "error: --resume-generate requires --folder-name "
-                "set to an existing generation run directory "
-                "(p_*__a_*__t*__r*__*).",
+                "error: with --resume-generate and --resume-judge, "
+                "--conversation-output must be an existing directory: "
+                f"{convo_output!r}",
                 file=sys.stderr,
             )
             sys.exit(2)
-        folder = os.path.normpath(args.folder_name)
-        if not os.path.isdir(folder):
-            print(
-                "error: --resume-generate: --folder-name must exist and be a "
-                f"directory: {folder!r}",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-        base = os.path.basename(folder)
+        base = convo_output_path.name
         if not is_generation_run_folder_basename(base):
             print(
-                "error: --resume-generate: --folder-name must be the run folder itself "
-                f"(basename like p_*__a_*__...), not {base!r}",
+                "error: with both resume flags, --conversation-output must be the "
+                "generation run folder itself (basename like p_*__a_*__...), "
+                f"not {base!r}",
                 file=sys.stderr,
             )
             sys.exit(2)
+        eval_parent = convo_output_path / "evaluations"
+        if not eval_parent.is_dir():
+            print(
+                "error: expected evaluations/ under the generation run folder: "
+                f"{eval_parent}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        judge_dirs = sorted(
+            p
+            for p in eval_parent.iterdir()
+            if p.is_dir() and is_judge_run_folder_basename(p.name)
+        )
+        if len(judge_dirs) == 0:
+            print(
+                "error: no j_* evaluation folder found under "
+                f"{eval_parent}. Create one by judging first, or use only "
+                "--resume-generate.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        if len(judge_dirs) > 1:
+            names = ", ".join(d.name for d in judge_dirs)
+            print(
+                "error: multiple j_* folders under evaluations/; use only one "
+                "evaluation run for combined resume, or judge manually. "
+                f"Found: {names}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        args._pipeline_gen_folder = str(convo_output_path)
+        args._pipeline_resume_generate = True
+        args._pipeline_judge_output = str(judge_dirs[0])
+        return
 
-    if args.resume_judge:
-        out = os.path.normpath(args.judge_output)
-        if not os.path.isdir(out):
+    if resume_gen:
+        convo_output_path = Path(convo_output).resolve()
+        if not convo_output_path.is_dir():
             print(
-                "error: --resume-judge: --judge-output must be an existing directory: "
-                f"{out!r}",
+                "error: --resume-generate: --conversation-output must be an existing "
+                f"directory: {convo_output!r}",
                 file=sys.stderr,
             )
             sys.exit(2)
-        base = os.path.basename(out)
-        if base == "evaluations":
+        generate_basename = convo_output_path.name
+        if not is_generation_run_folder_basename(generate_basename):
             print(
-                "error: --resume-judge: --judge-output must be the full path to "
-                "an evaluation run folder (j_*__*), not the parent evaluations/ "
-                "directory.",
+                "error: --resume-generate: --conversation-output must be the "
+                "generation run folder (basename like p_*__a_*__...), not "
+                f"{generate_basename!r}",
                 file=sys.stderr,
             )
             sys.exit(2)
-        if not (base.startswith("j_") and "__" in base):
-            print(
-                "error: --resume-judge: --judge-output must be an evaluation run "
-                f"folder (basename like j_*__*), got {base!r}",
-                file=sys.stderr,
-            )
-            sys.exit(2)
+        args._pipeline_gen_folder = str(convo_output_path)
+        args._pipeline_resume_generate = True
+        args._pipeline_judge_output = None
+        return
+
+    # resume_judge only
+    if not judge_output:
+        print(
+            "error: --resume-judge requires --judge-output pointing at the existing "
+            "evaluation run folder (j_*__*).",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    out_path = Path(os.path.normpath(judge_output)).resolve()
+    if not out_path.is_dir():
+        print(
+            "error: --resume-judge: --judge-output must be an existing directory: "
+            f"{judge_output!r}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    judge_basename = out_path.name
+    if judge_basename == "evaluations":
+        print(
+            "error: --resume-judge: --judge-output must be the evaluation run folder "
+            "(j_*__*), not .../evaluations/ alone.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    if not is_judge_run_folder_basename(judge_basename):
+        print(
+            "error: --resume-judge: --judge-output must be an evaluation run folder "
+            f"(basename like j_*__*), not {judge_basename!r}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    if out_path.parent.name != "evaluations":
+        print(
+            "error: --resume-judge: expected path .../p_*/evaluations/j_*; "
+            f"got parent {out_path.parent.name!r}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    gen_output_path = out_path.parent.parent
+    if not is_generation_run_folder_basename(gen_output_path.name):
+        print(
+            "error: --resume-judge: could not find generation run folder above "
+            "evaluations/ (expected .../p_*/evaluations/j_*). "
+            f"Got {gen_output_path.name!r}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    args._pipeline_gen_folder = str(gen_output_path)
+    args._pipeline_resume_generate = True
+    args._pipeline_judge_output = str(out_path)
 
 
 def parse_arguments():
@@ -170,7 +290,26 @@ Example:
         help="Maximum number of personas to load (for testing)",
     )
     parser.add_argument(
-        "--folder-name", "-f", help="Custom folder name for conversations"
+        "--conversation-output",
+        "-co",
+        default="output",
+        help=(
+            "Passed to generate.py as --output: parent directory for a new p_* run "
+            "(default: output/). With --resume-generate (or both resume flags), must "
+            "be the existing p_* generation run folder."
+        ),
+    )
+    parser.add_argument(
+        "--judge-output",
+        "-jo",
+        default=None,
+        help=(
+            "Passed to judge.py as --output: parent directory for a new batch "
+            "evaluation (new j_* under this path). Default None for judge.py defaults "
+            "(<conversation-output>/evaluations/, or repo evaluations/ for legacy flat "
+            "transcript folders). With --resume-judge only, must be the existing "
+            "j_* evaluation folder path."
+        ),
     )
     parser.add_argument(
         "--run-id",
@@ -217,16 +356,18 @@ Example:
         "--resume-generate",
         action="store_true",
         help=(
-            "Continue generation in an existing run folder: required --folder-name "
-            "must be that directory (see generate.py resume validation)."
+            "Continue generation in an existing p_* folder; set --conversation-output "
+            "(-co) to that folder (see generate.py resume validation)."
         ),
     )
     parser.add_argument(
         "--resume-judge",
         action="store_true",
         help=(
-            "Continue judging in an existing evaluation run folder: required "
-            "--judge-output must be that full path (j_*__*), not evaluations/ alone."
+            "Continue judging in an existing j_* folder; set --judge-output (-jo) to "
+            "that full path (.../evaluations/j_*). With both resume flags, set "
+            "--conversation-output (-co) to the p_* folder and ensure a single j_* "
+            "exists under evaluations/."
         ),
     )
 
@@ -260,15 +401,6 @@ Example:
         default=["data/rubric.tsv"],
         help="Rubric file(s) to use for evaluation (default: data/rubric.tsv)",
     )
-    parser.add_argument(
-        "--judge-output",
-        default="evaluations",
-        help=(
-            "Without --resume-judge: parent directory for a new j_*__* folder "
-            "(default: evaluations). With --resume-judge: full path to that existing "
-            "folder."
-        ),
-    )
 
     # Optional arguments for scoring
     parser.add_argument(
@@ -287,7 +419,7 @@ async def main():
     """Main entry point for the pipeline runner."""
 
     args = parse_arguments()
-    validate_pipeline_resume_args(args)
+    resolve_pipeline_resume_paths(args)
 
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     print("VERA-MH Pipeline: Generation → Evaluation → Scoring")
@@ -352,17 +484,17 @@ async def main():
             for k, v in agent_model_config.items()
             if k not in ["model", "model_name", "name", "temperature", "max_tokens"]
         },
-        folder_name=args.folder_name,
+        output_folder=args._pipeline_gen_folder,
         run_id=args.run_id,
         max_concurrent=args.max_concurrent,
         max_total_words=args.max_total_words,
         max_personas=args.max_personas,
         persona_speaks_first=not args.provider_speaks_first,
-        resume=args.resume_generate,
+        resume=args._pipeline_resume_generate,
     )
 
     print("")
-    print(f"✓ Conversations saved to: {conversation_folder}/")
+    print(f"✓ Conversations saved to: {_display_path(conversation_folder)}/")
     print("")
 
     # Validate that Step 1 produced conversation files
@@ -371,7 +503,7 @@ async def main():
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         print("❌ Pipeline failed at Step 1: Conversation folder not created")
         print("")
-        print(f"Expected folder: {conversation_folder}")
+        print(f"Expected folder: {_display_path(conversation_folder)}")
         print("")
         print("Troubleshooting:")
         print("  - Check that generate.py returned a valid folder path")
@@ -379,20 +511,30 @@ async def main():
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         sys.exit(1)
 
-    # Count conversation files (exclude log files)
-    conversation_files = [
-        f
-        for f in os.listdir(conversation_folder)
-        if f.endswith(".txt") and not f.endswith(".log")
-    ]
+    # Same nested vs flat transcript resolution as judge.py (legacy runs have .txt
+    # at the generation run root; new layout uses .../conversations/*.txt).
+    transcripts_dir, _, _ = resolve_conversation_input(conversation_folder)
+    conversation_files = []
+    if os.path.isdir(transcripts_dir):
+        conversation_files = [
+            f
+            for f in os.listdir(transcripts_dir)
+            if f.endswith(".txt") and not f.endswith(".log")
+        ]
 
     if not conversation_files:
         print("")
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         print("❌ Pipeline failed at Step 1: No conversations were generated")
         print("")
-        print(f"Conversation folder: {conversation_folder}")
-        print(f"Files in folder: {len(os.listdir(conversation_folder))}")
+        print(f"Conversation folder: {_display_path(conversation_folder)}")
+        n_listed = (
+            len(os.listdir(transcripts_dir)) if os.path.isdir(transcripts_dir) else 0
+        )
+        print(
+            f"Files in transcript directory ({_display_path(transcripts_dir)}): "
+            f"{n_listed}"
+        )
         print("")
         print("Possible causes:")
         print(
@@ -420,6 +562,11 @@ async def main():
     print("▶ Step 2/3: Evaluating conversations...")
 
     # Build argparse.Namespace for judge.py's main function
+    judge_out = (
+        args._pipeline_judge_output
+        if args.resume_judge
+        else getattr(args, "judge_output", None)
+    )
     judge_args = argparse.Namespace(
         conversation=None,  # Not using single conversation mode
         folder=conversation_folder,
@@ -427,7 +574,7 @@ async def main():
         judge_model=args.judge_model,
         judge_model_extra_params=args.judge_model_extra_params,
         limit=args.judge_limit,
-        output=args.judge_output,
+        output=judge_out,
         max_concurrent=args.judge_max_concurrent,
         per_judge=args.judge_per_judge,
         verbose_workers=args.judge_verbose_workers,
@@ -454,7 +601,7 @@ async def main():
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         print("❌ Pipeline failed at Step 2: Evaluation folder not created")
         print("")
-        print(f"Expected folder: {evaluation_folder}")
+        print(f"Expected folder: {_display_path(evaluation_folder)}")
         print("")
         print("Troubleshooting:")
         print("  - Check that judge.py returned a valid folder path")
@@ -469,8 +616,8 @@ async def main():
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         print("❌ Pipeline failed at Step 2: No evaluation results were generated")
         print("")
-        print(f"Evaluation folder: {evaluation_folder}")
-        print(f"Expected results file: {results_csv_path}")
+        print(f"Evaluation folder: {_display_path(evaluation_folder)}")
+        print(f"Expected results file: {_display_path(results_csv_path)}")
         print("")
 
         # Check if folder is empty
@@ -505,7 +652,7 @@ async def main():
         sys.exit(1)
 
     print("")
-    print(f"✓ Evaluations saved to: {evaluation_folder}/")
+    print(f"✓ Evaluations saved to: {_display_path(evaluation_folder)}/")
     print("✓ Validated: results.csv exists with evaluation data")
     print("")
 
@@ -521,17 +668,17 @@ async def main():
     results = score_results(results_csv_path=results_csv)
     print_scores(results)
 
-    # Create standard visualizations
-    viz_path = Path(evaluation_folder) / "scores_visualization.png"
+    scores_subdir = Path(evaluation_folder) / "scores"
+    scores_subdir.mkdir(parents=True, exist_ok=True)
+    viz_path = scores_subdir / "scores_visualization.png"
     create_visualizations(results, viz_path)
 
-    # Perform risk-level analysis unless skipped
     if not args.skip_risk_analysis:
         risk_results = score_results_by_risk(
             results_csv_path=results_csv,
             personas_tsv_path=args.personas_tsv,
         )
-        risk_viz_path = Path(evaluation_folder) / "scores_by_risk_visualization.png"
+        risk_viz_path = scores_subdir / "scores_by_risk_visualization.png"
         create_risk_level_visualizations(risk_results, risk_viz_path)
 
     # =========================================================================
@@ -542,16 +689,19 @@ async def main():
     print("✓ Pipeline complete!")
     print("")
     print("Output Locations:")
-    print(f"  Conversations:     {conversation_folder}/")
-    print(f"  Evaluations:       {evaluation_folder}/")
-    print(f"  Scores (JSON):     {evaluation_folder}/scores.json")
+    gen_p = Path(conversation_folder)
+    ev_p = Path(evaluation_folder)
+    sc = ev_p / "scores"
+    print(f"  Output folder:    {_display_path(gen_p)}/")
+    print(f"  Conversations:       {_display_path(gen_p / 'conversations')}/")
+    print(f"  Evaluations:       {_display_path(ev_p)}/")
+    print(f"  Scores (JSON):     {_display_path(sc / 'scores.json')}")
     if not args.skip_risk_analysis:
-        print(f"                     {evaluation_folder}/scores_by_risk.json")
-    print(f"  Visualizations:    {evaluation_folder}/scores_visualization.png")
+        print(f"                     {_display_path(sc / 'scores_by_risk.json')}")
+    print(f"  Visualizations:    {_display_path(sc / 'scores_visualization.png')}")
     if not args.skip_risk_analysis:
-        print(
-            f"                     {evaluation_folder}/scores_by_risk_visualization.png"
-        )
+        v = sc / "scores_by_risk_visualization.png"
+        print(f"                     {_display_path(v)}")
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 

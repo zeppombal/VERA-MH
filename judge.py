@@ -7,16 +7,19 @@ This script is separate from conversation generation.
 import argparse
 import asyncio
 import os
+import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from judge import judge_conversations, judge_single_conversation
 from judge.llm_judge import LLMJudge
 from judge.rubric_config import ConversationData, RubricConfig, load_conversations
-from judge.utils import (
-    build_judge_task_log_path,
-    build_single_conversation_judge_run_key,
-    parse_judge_models,
+from judge.utils import build_judge_task_log_path, parse_judge_models
+from utils.conversation_layout import resolve_conversation_input
+from utils.naming import (
+    build_single_conversation_run_folder_name,
+    is_judge_run_folder_basename,
 )
 from utils.utils import parse_key_value_list
 
@@ -36,7 +39,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--folder",
         "-f",
         help="Path to a conversation run folder "
-        "(e.g. conversations/p_model__a_model__t6__r1__timestamp/)",
+        "(nested: p_*__/conversations/, or legacy flat folder of .txt files)",
     )
 
     # rubrics
@@ -89,10 +92,12 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output",
         "-o",
-        default="evaluations",
+        default=None,
         help=(
-            "Output root for evaluation results (default: evaluations). "
-            "With --resume, must be an existing evaluation run folder."
+            "Batch: parent directory for a new j_*__* folder (default: "
+            "<gen_run>/evaluations/ when -f points at a nested p_* run, else "
+            "evaluations/). With --resume, must be the existing j_* run folder. "
+            "Single-file (-c): parent for single_<ts>__<stem>/ (default: output/adhoc)."
         ),
     )
     parser.add_argument(
@@ -156,16 +161,25 @@ async def main(args) -> Optional[str]:
         # Load single conversation
         conversation = await ConversationData.load(args.conversation)
 
-        run_key = build_single_conversation_judge_run_key(args.conversation)
+        stem = Path(args.conversation).stem
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+        single_name = build_single_conversation_run_folder_name(stem, ts)
+        if args.output is None:
+            parent = os.path.join("output", "adhoc")
+        else:
+            parent = args.output
+        os.makedirs(parent, exist_ok=True)
+        out_run = os.path.join(parent, single_name)
+        os.makedirs(out_run, exist_ok=True)
+
         conv_filename = Path(args.conversation).name
         metadata = getattr(conversation, "metadata", None)
         if isinstance(metadata, dict):
             conv_filename = metadata.get("filename", conv_filename)
         log_file = build_judge_task_log_path(
-            run_key,
             conv_filename,
             first_model,
-            None,
+            output_folder=out_run,
         )
 
         # Create judge with rubric config
@@ -175,44 +189,65 @@ async def main(args) -> Optional[str]:
             judge_model_extra_params=args.judge_model_extra_params,
             log_file=log_file,
         )
-        await judge_single_conversation(judge, conversation, args.output)
-        # Single conversation mode doesn't need output folder for pipeline
-        print("ℹ️  Single conversation mode: output folder not needed for pipeline")
-        return None
+        await judge_single_conversation(judge, conversation, out_run)
+        print(f"Evaluation output: {out_run}/")
+        return out_run
+
+    transcripts_dir, gen_run, conv_basename = resolve_conversation_input(args.folder)
+
+    print(f"📂 Loading conversations from {transcripts_dir}...")
+    conversations = await load_conversations(transcripts_dir, limit=args.limit)
+    print(f"✅ Loaded {len(conversations)} conversations")
+
+    judge_kwargs = dict(
+        judge_models=judge_models,
+        conversations=conversations,
+        rubric_config=rubric_config,
+        max_concurrent=args.max_concurrent,
+        conversation_folder_name=conv_basename,
+        verbose=True,
+        judge_model_extra_params=args.judge_model_extra_params,
+        per_judge=args.per_judge,
+        verbose_workers=args.verbose_workers,
+        resume=args.resume,
+    )
+    if args.resume:
+        if not args.output:
+            raise ValueError(
+                "Resume mode requires --output to point to an existing evaluation "
+                "run folder (j_*__*)."
+            )
+        if not os.path.isdir(args.output):
+            raise ValueError(
+                "Resume mode requires --output to point to an existing "
+                "evaluation run folder."
+            )
+        base = os.path.basename(os.path.normpath(args.output))
+        if not is_judge_run_folder_basename(base):
+            raise ValueError(
+                "Resume mode requires --output to be a judge run folder "
+                f"(basename like j_*__*), got {base!r}"
+            )
+        judge_kwargs["output_folder"] = args.output
     else:
-        # Load all conversations at startup
-        print(f"📂 Loading conversations from {args.folder}...")
-        conversations = await load_conversations(args.folder, limit=args.limit)
-        print(f"✅ Loaded {len(conversations)} conversations")
-
-        # Batch evaluation with multiple judges
-        folder_name = Path(args.folder).name
-
-        judge_kwargs = dict(
-            judge_models=judge_models,
-            conversations=conversations,
-            rubric_config=rubric_config,
-            max_concurrent=args.max_concurrent,
-            conversation_folder_name=folder_name,
-            verbose=True,
-            judge_model_extra_params=args.judge_model_extra_params,
-            per_judge=args.per_judge,
-            verbose_workers=args.verbose_workers,
-            resume=args.resume,
-        )
-        if args.resume:
-            if not os.path.isdir(args.output):
-                raise ValueError(
-                    "Resume mode requires --output to point to an existing "
-                    "evaluation run folder."
+        if args.output is None:
+            if gen_run is not None:
+                output_root = os.path.join(gen_run, "evaluations")
+            else:
+                output_root = "evaluations"
+                print(
+                    "Note: flat conversation folder; writing evaluations under "
+                    "evaluations/. New runs use output/p_*__/conversations/.",
+                    file=sys.stderr,
                 )
-            judge_kwargs["output_folder"] = args.output
         else:
-            judge_kwargs["output_root"] = args.output
+            output_root = args.output
+        judge_kwargs["output_root"] = output_root
 
-        _, output_folder = await judge_conversations(**judge_kwargs)
+    _, output_folder = await judge_conversations(**judge_kwargs)
 
-        return output_folder
+    print(f"Evaluation output: {output_folder}/")
+    return output_folder
 
 
 if __name__ == "__main__":

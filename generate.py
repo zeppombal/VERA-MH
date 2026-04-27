@@ -27,7 +27,7 @@ async def main(
     runs_per_prompt: int = 2,
     persona_names: Optional[List[str]] = None,
     verbose: bool = True,
-    folder_name: Optional[str] = None,
+    output_folder: Optional[str] = None,
     run_id: Optional[str] = None,
     max_concurrent: Optional[int] = None,
     max_total_words: Optional[int] = None,
@@ -48,8 +48,8 @@ async def main(
         runs_per_prompt: Number of runs per prompt
         persona_names: List of persona names to use. If None, uses all personas.
         verbose: Whether to print status messages
-        folder_name: Custom folder name for saving conversations. If None, uses
-            default format.
+        output_folder: Parent directory for new runs (default ``output/``), or the
+            existing ``p_*`` run folder when ``resume`` is True.
         max_total_words: Optional maximum total words across all responses
         max_concurrent: Maximum number of concurrent conversations. If None, runs all
             conversations concurrently.
@@ -74,7 +74,7 @@ async def main(
         print(f"  - Max turns: {max_turns}")
         print(f"  - Runs per prompt: {runs_per_prompt}")
         print(f"  - Persona names: {persona_names}")
-        print(f"  - Folder name: {folder_name}")
+        print(f"  - Output folder: {output_folder}")
         print(f"  - Run ID: {run_id}")
         print(f"  - Max concurrent: {max_concurrent}")
         print(f"  - Max total words: {max_total_words}")
@@ -83,15 +83,15 @@ async def main(
         print(f"  - Resume: {resume}")
 
     # Generate default folder name if not provided
-    if folder_name is None:
-        folder_name = "conversations"
+    if output_folder is None:
+        output_folder = "output"
 
     if resume:
-        if not os.path.isdir(folder_name):
+        if not os.path.isdir(output_folder):
             raise ValueError(
-                "Resume mode requires --folder-name to point to an existing run folder."
+                "Resume mode requires --output to point to an existing run folder."
             )
-        run_folder_name = os.path.basename(os.path.normpath(folder_name))
+        run_folder_name = os.path.basename(os.path.normpath(output_folder))
         run_meta = parse_generation_run_folder_name(run_folder_name)
         expected_persona = model_token_for_run_folder(persona_model_config["model"])
         expected_agent = model_token_for_run_folder(agent_model_config["model"])
@@ -131,9 +131,9 @@ async def main(
             runs_per_prompt,
             timestamp,
         )
-        folder_name = f"{folder_name}/{run_id}"
+        output_folder = f"{output_folder}/{run_id}"
         # TODO: do we want to give a message if the folder already exists?
-        os.makedirs(folder_name, exist_ok=True)
+        os.makedirs(output_folder, exist_ok=True)
 
     # Configuration
     runner = ConversationRunner(
@@ -141,7 +141,7 @@ async def main(
         agent_model_config=agent_model_config,
         max_turns=max_turns,
         runs_per_prompt=runs_per_prompt,
-        folder_name=folder_name,
+        folder_name=output_folder,
         run_id=run_id,
         max_concurrent=max_concurrent,
         max_total_words=max_total_words,
@@ -156,12 +156,12 @@ async def main(
     if verbose:
         skipped_n = sum(1 for r in results if r.get("skipped"))
         ok_n = len(results) - skipped_n
-        msg = f"✅ Generated {ok_n} conversations → {folder_name}/"
+        msg = f"✅ Generated {ok_n} conversations → {output_folder}/"
         if skipped_n:
             msg += f" ({skipped_n} skipped)"
         print(msg)
 
-    return results, folder_name
+    return results, output_folder
 
 
 if __name__ == "__main__":
@@ -244,14 +244,15 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--folder-name",
-        "-f",
+        "--output",
+        "-o",
+        default=None,
         help=(
-            "Folder name containing the conversations for this run. "
-            "Default is 'conversations'."
+            "Parent directory where a new p_*__a_*__t*__r*__* run folder is created "
+            "(default: output). With --resume, must be the existing run folder path."
         ),
-        default="conversations",
     )
+
     parser.add_argument(
         "--resume",
         help=(
@@ -342,7 +343,8 @@ if __name__ == "__main__":
 
     agent_model_config = {
         "model": args.provider_agent,
-        # TODO: why does agent need a name, but not persona?
+        # TODO: does provider need a name?
+        # persona "name" (e.g., "Avery") is set later when creating conversations
         "name": args.provider_agent,
         **args.provider_agent_extra_params,
     }
@@ -383,7 +385,7 @@ if __name__ == "__main__":
                     "top_p",
                 ]
             },
-            folder_name=args.folder_name,
+            output_folder=args.output or "output",
             max_concurrent=args.max_concurrent,
             max_total_words=args.max_total_words,
             max_personas=args.max_personas,

@@ -65,12 +65,12 @@ def build_single_conversation_judge_run_key(
     now: Optional[datetime] = None,
 ) -> str:
     """
-    ``run_key`` for :func:`build_judge_task_log_path` in ``judge.py`` single-file
-    (``-c``) mode.
+    Human-readable folder basename for ``judge.py`` single-file (``-c``) mode.
 
     Format: ``single_<timestamp_ms>__<conversation_stem>``. Batch judging uses the
     evaluation folder basename instead; this gives a stable, unique folder name
-    per CLI run.
+    per CLI run. Per-task logs use :func:`build_judge_task_log_path` with
+    ``output_folder`` set, so no ``run_key`` is involved.
     """
     dt = datetime.now() if now is None else now
     ts = dt.strftime("%Y%m%d_%H%M%S_%f")[:-3]
@@ -80,7 +80,8 @@ def build_single_conversation_judge_run_key(
 
 def get_judge_logs_root() -> str:
     """
-    Root directory for per-task judge LLM logs.
+    Root directory for legacy per-task judge LLM logs (when ``output_folder`` is
+    omitted from :func:`build_judge_task_log_path`).
 
     Override with env ``VERA_JUDGE_LOGS_ROOT`` (e.g. set by pytest to a temp dir).
     Default: ``judge_logs`` in the current working directory.
@@ -89,26 +90,33 @@ def get_judge_logs_root() -> str:
 
 
 def build_judge_task_log_path(
-    run_key: str,
     conversation_filename: str,
     judge_model: str,
     judge_instance: Optional[int] = None,
+    *,
+    run_key: Optional[str] = None,
     logs_root: Optional[str] = None,
+    output_folder: Optional[str] = None,
 ) -> str:
     """
     Path to the per-task judge LLM log file, parallel to judge_evaluation_tsv_filename.
 
-    Layout: {logs_root}/{run_key}/{same_stem_as_tsv}.log
+    With ``output_folder``: ``{output_folder}/logs/{stem}.log`` (``run_key`` unused).
 
-    ``logs_root`` defaults to :func:`get_judge_logs_root`.
+    Legacy layout (no ``output_folder``): ``{logs_root}/{run_key}/{stem}.log``
+    (``logs_root`` defaults to :func:`get_judge_logs_root`). ``run_key`` is required
+    for this branch.
     """
-    root = logs_root if logs_root is not None else get_judge_logs_root()
     tsv_name = judge_evaluation_tsv_filename(
         conversation_filename, judge_model, judge_instance
     )
     stem = Path(tsv_name).stem
-    # Parent dirs are created in LLMJudge when the log file is opened (avoids empty
-    # judge_logs/... folders when tests mock LLMJudge after this returns).
+    if output_folder is not None:
+        return str(Path(output_folder) / "logs" / f"{stem}.log")
+    if not run_key:
+        raise ValueError("run_key is required when output_folder is not set")
+    # Legacy layout: {logs_root}/{run_key}/{stem}.log
+    root = logs_root if logs_root is not None else get_judge_logs_root()
     return str(Path(root) / run_key / f"{stem}.log")
 
 

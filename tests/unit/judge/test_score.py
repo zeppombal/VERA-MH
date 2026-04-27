@@ -360,7 +360,7 @@ def test_score_results_saves_json(tmp_path):
     df.to_csv(csv_path, index=False)
 
     # Act
-    score_results(str(csv_path), str(json_path))
+    score_results(str(csv_path), output_path=str(json_path))
 
     # Assert
     assert json_path.exists()
@@ -375,7 +375,7 @@ def test_score_results_default_json_path(tmp_path):
     """Test that default JSON path is used when none provided."""
     # Arrange
     csv_path = tmp_path / "results.csv"
-    expected_json_path = tmp_path / "scores.json"
+    expected_json_path = tmp_path / "scores" / "scores.json"
     df = pd.DataFrame(
         {
             "filename": ["f1.txt"],
@@ -1034,7 +1034,7 @@ def test_score_results_by_risk_writes_scores_by_risk_json(tmp_path):
     (eval_dir / "x_Brian_m_run1.tsv").write_text(_eval_tsv())
     csv_path = eval_dir / "results.csv"
     pd.DataFrame().to_csv(csv_path, index=False)
-    json_path = eval_dir / "scores_by_risk.json"
+    json_path = eval_dir / "scores" / "scores_by_risk.json"
 
     score_results_by_risk(str(csv_path), str(personas))
 
@@ -1046,12 +1046,30 @@ def test_score_results_by_risk_writes_scores_by_risk_json(tmp_path):
 
 
 @pytest.mark.unit
+def test_score_results_by_risk_write_json_false_skips_file(tmp_path):
+    eval_dir = tmp_path / "eval_run"
+    eval_dir.mkdir()
+    personas = tmp_path / "personas.tsv"
+    _write_personas(personas, "Brian\t30\tMale\tHigh\t.\n")
+    (eval_dir / "x_Brian_m_run1.tsv").write_text(_eval_tsv())
+    csv_path = eval_dir / "results.csv"
+    pd.DataFrame().to_csv(csv_path, index=False)
+    json_path = eval_dir / "scores" / "scores_by_risk.json"
+
+    results = score_results_by_risk(str(csv_path), str(personas), write_json=False)
+
+    assert not json_path.exists()
+    assert "risk_level_scores" in results
+    assert "High" in results["risk_level_scores"]
+
+
+@pytest.mark.unit
 @patch("judge.score.ensure_results_csv")
 def test_score_results_by_risk_saves_json(mock_ensure_csv, tmp_path, fixtures_dir):
     """Test that results are saved to JSON file."""
     csv_path = tmp_path / "results.csv"
     personas_path = fixtures_dir / "personas_with_risk.tsv"
-    expected_json_path = tmp_path / "scores_by_risk.json"
+    expected_json_path = tmp_path / "scores" / "scores_by_risk.json"
 
     mock_df = _mock_results_df()
     mock_ensure_csv.return_value = mock_df

@@ -26,7 +26,7 @@ async def test_main_resume_uses_existing_run_folder(tmp_path: Path) -> None:
             agent_model_config=agent_model_config,
             max_turns=4,
             runs_per_prompt=1,
-            folder_name=str(run_folder),
+            output_folder=str(run_folder),
             resume=True,
             verbose=False,
         )
@@ -53,7 +53,7 @@ async def test_main_resume_mismatch_raises_value_error(tmp_path: Path) -> None:
             agent_model_config=agent_model_config,
             max_turns=4,
             runs_per_prompt=1,
-            folder_name=str(run_folder),
+            output_folder=str(run_folder),
             resume=True,
             verbose=False,
         )

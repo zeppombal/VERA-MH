@@ -66,7 +66,7 @@ class TestJudgeExtraParams:
 
         rubric_config = await rubric_config_factory(rubric_file="rubric_simple.tsv")
         judge = LLMJudge(
-            judge_model="claude-3-7-sonnet",
+            judge_model="claude-sonnet-4-5",
             judge_model_extra_params=extra_params,
             rubric_config=rubric_config,
         )
@@ -78,7 +78,7 @@ class TestJudgeExtraParams:
         assert judge.judge_model_extra_params["top_p"] == 0.9
 
         # Verify standard model param is still accessible
-        assert judge.judge_model == "claude-3-7-sonnet"
+        assert judge.judge_model == "claude-sonnet-4-5"
 
     @pytest.mark.asyncio
     async def test_llm_judge_passes_extra_params_in_async_evaluation(
@@ -145,7 +145,7 @@ class TestJudgeExtraParams:
             )
 
             judge = LLMJudge(
-                judge_model="claude-3-7-sonnet",
+                judge_model="claude-sonnet-4-5",
                 judge_model_extra_params=extra_params,
                 rubric_config=rubric_config,
             )
@@ -184,7 +184,7 @@ class TestJudgeExtraParams:
             assert (
                 captured_kwargs["max_tokens"] == 1000
             ), f"Expected max_tokens=1000, got {captured_kwargs.get('max_tokens')}"
-            assert captured_kwargs["model_name"] == "claude-3-7-sonnet"
+            assert captured_kwargs["model_name"] == "claude-sonnet-4-5"
 
     async def test_llm_judge_extra_params_with_none(self, rubric_config_factory):
         """Test that passing None for extra_params sets default temperature=0."""
@@ -203,13 +203,13 @@ class TestJudgeExtraParams:
 
         rubric_config = await rubric_config_factory(rubric_file="rubric_simple.tsv")
         judge = LLMJudge(
-            judge_model="claude-3-7-sonnet",
+            judge_model="claude-sonnet-4-5",
             judge_model_extra_params=extra_params,
             rubric_config=rubric_config,
         )
 
         # Standard params should still be accessible
-        assert judge.judge_model == "claude-3-7-sonnet"
+        assert judge.judge_model == "claude-sonnet-4-5"
         assert judge.judge_model_extra_params == extra_params
 
     async def test_multiple_extra_params_types(self, rubric_config_factory):
