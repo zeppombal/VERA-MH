@@ -7,12 +7,12 @@ import pytest
 
 from llm_clients import Role
 from llm_clients.gemini_llm import GeminiLLM
+from llm_clients.llm_interface import LLMGenerationFailed
 
 from .test_base_llm import TestJudgeLLMBase
 from .test_helpers import (
-    assert_error_metadata,
-    assert_error_response,
     assert_iso_timestamp,
+    assert_llm_generation_failed,
     assert_metadata_copy_behavior,
     assert_metadata_structure,
     assert_response_timing,
@@ -274,13 +274,14 @@ class TestGeminiLLM(TestJudgeLLMBase):
         mock_chat_gemini.return_value = mock_llm
 
         llm = GeminiLLM(name="TestGemini", role=Role.PERSONA)
-        response = await llm.generate_response(conversation_history=mock_system_message)
+        with pytest.raises(LLMGenerationFailed) as exc_info:
+            await llm.generate_response(conversation_history=mock_system_message)
 
-        # Should return error message instead of raising
-        assert_error_response(response, "API quota exceeded")
-
-        # Verify error metadata was stored
-        assert_error_metadata(llm, "gemini", "API quota exceeded")
+        assert_llm_generation_failed(
+            exc_info.value,
+            "API quota exceeded",
+            mock_ainvoke=mock_llm.ainvoke,
+        )
 
     @pytest.mark.asyncio
     @patch("llm_clients.gemini_llm.Config.GOOGLE_API_KEY", "test-key")
@@ -702,16 +703,14 @@ class TestGeminiLLM(TestJudgeLLMBase):
 
             llm = GeminiLLM(name="TestGemini", role=Role.JUDGE)
 
-            with pytest.raises(RuntimeError) as exc_info:
+            with pytest.raises(LLMGenerationFailed) as exc_info:
                 await llm.generate_structured_response("Test", TestResponse)
 
-            assert "Error generating structured response" in str(exc_info.value)
-            assert "Structured output failed" in str(exc_info.value)
-
-            # Verify error metadata was stored
-            metadata = llm.last_response_metadata
-            assert "error" in metadata
-            assert "Structured output failed" in metadata["error"]
+            assert_llm_generation_failed(
+                exc_info.value,
+                "Structured output failed",
+                mock_ainvoke=mock_structured_llm.ainvoke,
+            )
 
     @pytest.mark.asyncio
     async def test_structured_response_metadata_fields(self):

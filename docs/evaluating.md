@@ -246,6 +246,17 @@ python3 generate.py -u your-model-name -p your-model-name -t 5 -r 1
 python3 judge.py -f conversations/{YOUR_FOLDER} -j your-model-name
 ```
 
+## Prompt caching (by provider)
+
+Provider APIs differ in how prompt/context caching works. The built-in clients behave as follows:
+
+| Provider | Behavior in this repo |
+|----------|------------------------|
+| **Claude** (`ClaudeLLM`) | Anthropic prompt caching is **opt-in** per request. The client passes `cache_control` (default: ephemeral TTL, typically 5 minutes). Set `caching=False` on `ClaudeLLM` to disable. For TTL or other API shapes, pass `anthropic_cache_control=...` (set to `None` to omit `cache_control` while keeping other constructor behavior). |
+| **OpenAI** (`OpenAILLM`) | OpenAI applies **automatic** prompt caching for eligible models/prefixes. The client passes `prompt_cache_key` (per conversation) on each call to improve cache routing; there is no separate on/off flag in this wrapper. |
+| **Azure** (`AzureLLM`) | Follows the underlying Azure/OpenAI-compatible API. This wrapper does not set Anthropic-style `cache_control` or OpenAI-style `prompt_cache_key`. |
+| **Gemini** (`GeminiLLM`) | For **eligible models** (e.g. Gemini 2.5+), the Google GenAI API applies **implicit (automatic) prompt caching** when requests share a common prefix—no extra parameters in this client. **Explicit** context caching (`cached_content` resources) is **not** wired in `GeminiLLM`; that path needs a separate create/update lifecycle and is unrelated to implicit caching. |
+
 ## Important Notes
 
 - **Async Support**: The current implementation uses `async` to avoid blocking when multiple conversations are being generated

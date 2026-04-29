@@ -83,11 +83,15 @@ class EndpointLLM(LLMInterface):
             self._set_response_metadata("endpoint", static_first_message=True)
             return self.first_message
         elif self._start_url is not None:
-            start_time = time.time()
-            resp_data = await self._ainvoke(self._start_url, self.start_prompt)
-            return self._process_chat_response(
-                resp_data, round(time.time() - start_time, 3)
-            )
+
+            async def _start_invoke() -> str:
+                start_time = time.time()
+                resp_data = await self._ainvoke(self._start_url, self.start_prompt)
+                return self._process_chat_response(
+                    resp_data, round(time.time() - start_time, 3)
+                )
+
+            return await self._run_with_retry(_start_invoke, provider="endpoint")
         else:
             return await self.generate_response(self.get_initial_prompt_turns())
 
@@ -178,16 +182,14 @@ class EndpointLLM(LLMInterface):
         messages = build_langchain_messages(self.role, conversation_history)
         last_message = messages[-1].text  # no system_prompt in payload by design
 
-        try:
+        async def _invoke() -> str:
             start_time = time.time()
             resp_data = await self._ainvoke(self._base_url, last_message)
             return self._process_chat_response(
                 resp_data, round(time.time() - start_time, 3)
             )
-        except Exception as e:
-            self._set_response_metadata("endpoint", error=str(e))
-            self._update_conversation_id_from_metadata()
-            return f"Error generating response: {str(e)}"
+
+        return await self._run_with_retry(_invoke, provider="endpoint")
 
     def set_system_prompt(self, system_prompt: str) -> None:
         """Set or update the system prompt."""

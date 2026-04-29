@@ -7,12 +7,12 @@ import pytest
 
 from llm_clients import Role
 from llm_clients.claude_llm import ClaudeLLM
+from llm_clients.llm_interface import LLMGenerationFailed
 
 from .test_base_llm import TestJudgeLLMBase
 from .test_helpers import (
-    assert_error_metadata,
-    assert_error_response,
     assert_iso_timestamp,
+    assert_llm_generation_failed,
     assert_metadata_copy_behavior,
     assert_metadata_structure,
     assert_response_timing,
@@ -156,6 +156,114 @@ class TestClaudeLLM(TestJudgeLLMBase):
     @pytest.mark.asyncio
     @patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key")
     @patch("llm_clients.claude_llm.ChatAnthropic")
+    async def test_generate_response_propagates_cache_usage_tokens(
+        self, mock_chat_anthropic, mock_response_factory, mock_system_message
+    ):
+        """Copy cache_creation_input_tokens and cache_read_input_tokens into usage."""
+        mock_response = mock_response_factory(
+            text="Cached context response",
+            response_id="msg_cache",
+            provider="claude",
+            metadata={
+                "model": "claude-sonnet-4-5-20250929",
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 20,
+                    "cache_creation_input_tokens": 100,
+                    "cache_read_input_tokens": 200,
+                },
+                "stop_reason": "end_turn",
+            },
+        )
+
+        mock_llm = MagicMock()
+        mock_llm.model = "claude-sonnet-4-5-20250929"
+        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+        mock_chat_anthropic.return_value = mock_llm
+
+        llm = ClaudeLLM(
+            name="TestClaude",
+            role=Role.PERSONA,
+            system_prompt="You are a helpful assistant.",
+        )
+        await llm.generate_response(conversation_history=mock_system_message)
+
+        usage = llm.last_response_metadata["usage"]
+        assert usage["cache_creation_input_tokens"] == 100
+        assert usage["cache_read_input_tokens"] == 200
+        assert usage["total_tokens"] == 30
+
+    @pytest.mark.asyncio
+    @patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key")
+    @patch("llm_clients.claude_llm.ChatAnthropic")
+    async def test_caching_false_omits_cache_control_on_invoke(
+        self, mock_chat_anthropic, mock_response_factory, mock_system_message
+    ):
+        """When caching=False, ainvoke receives no cache_control kwarg."""
+        mock_response = mock_response_factory(
+            text="No cache",
+            response_id="msg_nocache",
+            provider="claude",
+            metadata={
+                "model": "claude-sonnet-4-5-20250929",
+                "usage": {"input_tokens": 1, "output_tokens": 2},
+                "stop_reason": "end_turn",
+            },
+        )
+
+        mock_llm = MagicMock()
+        mock_llm.model = "claude-sonnet-4-5-20250929"
+        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+        mock_chat_anthropic.return_value = mock_llm
+
+        llm = ClaudeLLM(
+            name="TestClaude",
+            role=Role.PERSONA,
+            system_prompt="You are a helpful assistant.",
+            caching=False,
+        )
+        await llm.generate_response(conversation_history=mock_system_message)
+
+        mock_llm.ainvoke.assert_called_once()
+        assert "cache_control" not in mock_llm.ainvoke.call_args.kwargs
+
+    @pytest.mark.asyncio
+    @patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key")
+    @patch("llm_clients.claude_llm.ChatAnthropic")
+    async def test_generate_response_omits_none_cache_usage_keys(
+        self, mock_chat_anthropic, mock_response_factory, mock_system_message
+    ):
+        """None cache token values are not copied into last_response_metadata usage."""
+        mock_response = mock_response_factory(
+            text="Response",
+            response_id="msg_cache_none",
+            provider="claude",
+            metadata={
+                "model": "claude-sonnet-4-5-20250929",
+                "usage": {
+                    "input_tokens": 5,
+                    "output_tokens": 5,
+                    "cache_creation_input_tokens": None,
+                    "cache_read_input_tokens": None,
+                },
+            },
+        )
+
+        mock_llm = MagicMock()
+        mock_llm.model = "claude-sonnet-4-5-20250929"
+        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+        mock_chat_anthropic.return_value = mock_llm
+
+        llm = ClaudeLLM(name="TestClaude", role=Role.PERSONA)
+        await llm.generate_response(conversation_history=mock_system_message)
+
+        usage = llm.last_response_metadata["usage"]
+        assert "cache_creation_input_tokens" not in usage
+        assert "cache_read_input_tokens" not in usage
+
+    @pytest.mark.asyncio
+    @patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key")
+    @patch("llm_clients.claude_llm.ChatAnthropic")
     async def test_generate_response_without_system_prompt(
         self, mock_chat_anthropic, mock_response_factory, mock_system_message
     ):
@@ -248,13 +356,14 @@ class TestClaudeLLM(TestJudgeLLMBase):
         mock_chat_anthropic.return_value = mock_llm
 
         llm = ClaudeLLM(name="TestClaude", role=Role.PERSONA)
-        response = await llm.generate_response(conversation_history=mock_system_message)
+        with pytest.raises(LLMGenerationFailed) as exc_info:
+            await llm.generate_response(conversation_history=mock_system_message)
 
-        # Should return error message instead of raising
-        assert_error_response(response, "API rate limit exceeded")
-
-        # Verify error metadata was stored
-        assert_error_metadata(llm, "claude", "API rate limit exceeded")
+        assert_llm_generation_failed(
+            exc_info.value,
+            "API rate limit exceeded",
+            mock_ainvoke=mock_llm.ainvoke,
+        )
 
     @pytest.mark.asyncio
     @patch("llm_clients.claude_llm.Config.ANTHROPIC_API_KEY", "test-key")
@@ -677,16 +786,14 @@ class TestClaudeLLM(TestJudgeLLMBase):
 
             llm = ClaudeLLM(name="TestClaude", role=Role.JUDGE)
 
-            with pytest.raises(RuntimeError) as exc_info:
+            with pytest.raises(LLMGenerationFailed) as exc_info:
                 await llm.generate_structured_response("Test", TestResponse)
 
-            assert "Error generating structured response" in str(exc_info.value)
-            assert "Structured output failed" in str(exc_info.value)
-
-            # Verify error metadata was stored
-            metadata = llm.last_response_metadata
-            assert "error" in metadata
-            assert "Structured output failed" in metadata["error"]
+            assert_llm_generation_failed(
+                exc_info.value,
+                "Structured output failed",
+                mock_ainvoke=mock_structured_llm.ainvoke,
+            )
 
     @pytest.mark.asyncio
     async def test_structured_response_metadata_fields(self):

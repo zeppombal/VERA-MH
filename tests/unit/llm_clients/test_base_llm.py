@@ -33,12 +33,11 @@ import pytest
 from pydantic import BaseModel, Field
 
 from llm_clients import Role
-from llm_clients.llm_interface import JudgeLLM, LLMInterface
+from llm_clients.llm_interface import JudgeLLM, LLMGenerationFailed, LLMInterface
 
 from .test_helpers import (
-    assert_error_metadata,
-    assert_error_response,
     assert_iso_timestamp,
+    assert_llm_generation_failed,
     assert_metadata_copy_behavior,
     assert_metadata_structure,
     assert_response_timing,
@@ -219,18 +218,13 @@ class TestLLMBase(ABC):
             llm = self.create_llm(role=Role.PROVIDER, name="TestLLM")
             llm.llm = mock_llm_client  # pyright: ignore[reportAttributeAccessIssue]
 
-            response = await llm.generate_response(
-                conversation_history=mock_system_message
-            )
+            with pytest.raises(LLMGenerationFailed) as exc_info:
+                await llm.generate_response(conversation_history=mock_system_message)
 
-            # Should return error message, not raise exception
-            assert_error_response(response, "API Error")
-
-            # Should have error metadata
-            assert_error_metadata(
-                llm,
-                expected_provider=self.get_provider_name(),
-                expected_error_substring="API Error",
+            assert_llm_generation_failed(
+                exc_info.value,
+                "API Error",
+                mock_ainvoke=mock_llm_client.ainvoke,
             )
 
 
@@ -374,18 +368,14 @@ class TestJudgeLLMBase(TestLLMBase):
             llm = self.create_llm(role=Role.JUDGE, name="TestLLM")
             llm.llm = mock_llm_client  # pyright: ignore[reportAttributeAccessIssue]
 
-            # Should raise RuntimeError
-            with pytest.raises(RuntimeError) as exc_info:
+            with pytest.raises(LLMGenerationFailed) as exc_info:
                 await llm.generate_structured_response("Test", TestResponse)
 
-            assert "Error generating structured response" in str(exc_info.value)
-            assert "Structured output failed" in str(exc_info.value)
-
-            # Verify error metadata was stored
-            metadata = llm.last_response_metadata
-            assert "error" in metadata
-            assert "Structured output failed" in metadata["error"]
-            assert metadata["provider"] == self.get_provider_name()
+            assert_llm_generation_failed(
+                exc_info.value,
+                "Structured output failed",
+                mock_ainvoke=mock_structured_llm.ainvoke,
+            )
 
     @pytest.mark.asyncio
     async def test_structured_response_invalid_type_raises_error(self):
@@ -407,8 +397,11 @@ class TestJudgeLLMBase(TestLLMBase):
             llm = self.create_llm(role=Role.JUDGE, name="TestLLM")
             llm.llm = mock_llm_client  # pyright: ignore[reportAttributeAccessIssue]
 
-            # Should raise error about wrong type
-            with pytest.raises(RuntimeError) as exc_info:
+            with pytest.raises(LLMGenerationFailed) as exc_info:
                 await llm.generate_structured_response("Test", TestResponse)
 
-            assert "Error generating structured response" in str(exc_info.value)
+            assert_llm_generation_failed(
+                exc_info.value,
+                "TestResponse",
+                mock_ainvoke=mock_structured_llm.ainvoke,
+            )

@@ -22,6 +22,7 @@ from judge.runner import (
     judge_conversations,
     judge_single_conversation,
 )
+from judge.score_utils import build_dataframe_from_tsv_files
 from tests.mocks.mock_llm import MockLLM
 
 
@@ -479,6 +480,62 @@ class TestJudgeConversations:
         assert "run_id" in df.columns
         assert "judge_model" in df.columns
         assert "judge_instance" in df.columns
+
+    async def test_results_csv_matches_tsv_reconstruction(
+        self,
+        tmp_path: Path,
+        mock_rubric_files: str,
+        mock_llm_factory_for_judge,
+    ):
+        """Written results.csv matches an independent rebuild from the same TSVs."""
+        conv_folder = tmp_path / "conversations"
+        conv_folder.mkdir()
+        (conv_folder / "conv1.txt").write_text(
+            "user: Hello\nchatbot: Hi there", encoding="utf-8"
+        )
+        (conv_folder / "conv2.txt").write_text(
+            "user: How are you?\nchatbot: I'm well", encoding="utf-8"
+        )
+
+        output_root = str(tmp_path / "evaluation_output")
+        conversations = await load_conversations(str(conv_folder))
+        rubric_config = await RubricConfig.load(
+            rubric_folder=mock_rubric_files,
+            rubric_file="rubric.tsv",
+            rubric_prompt_beginning_file="rubric_prompt_beginning.txt",
+            question_prompt_file="question_prompt.txt",
+        )
+
+        _, output_folder = await judge_conversations(
+            judge_models={"mock-judge": 1},
+            conversations=conversations,
+            rubric_config=rubric_config,
+            output_root=output_root,
+            conversation_folder_name="conversations",
+            verbose=False,
+            save_aggregated_results=True,
+        )
+
+        eval_dir = Path(output_folder)
+        assert len(list(eval_dir.glob("*.tsv"))) == 2
+
+        # Match str handling in DataFrame builds (empty cells vs NaN from read_csv).
+        df_from_csv = pd.read_csv(
+            eval_dir / "results.csv",
+            keep_default_na=False,
+        )
+        df_from_tsv = build_dataframe_from_tsv_files(eval_dir)
+
+        sort_cols = ["filename", "judge_model", "judge_instance"]
+        df_from_csv = df_from_csv.sort_values(sort_cols).reset_index(drop=True)
+        df_from_tsv = df_from_tsv.sort_values(sort_cols).reset_index(drop=True)
+        df_from_csv = df_from_csv[df_from_tsv.columns]
+
+        pd.testing.assert_frame_equal(
+            df_from_csv,
+            df_from_tsv,
+            check_dtype=False,
+        )
 
     async def test_judge_conversations_custom_output_folder(
         self,
@@ -1830,28 +1887,26 @@ class TestErrorHandlingAndCoverage:
 
             output_folder = str(tmp_path / "output")
 
-            # Load conversations and rubric config
-        conversations = await load_conversations(str(conv_folder))
-        rubric_config = await RubricConfig.load(
-            rubric_folder=mock_rubric_files,
-            rubric_file="rubric.tsv",
-            rubric_prompt_beginning_file="rubric_prompt_beginning.txt",
-            question_prompt_file="question_prompt.txt",
-        )
+            conversations = await load_conversations(str(conv_folder))
+            rubric_config = await RubricConfig.load(
+                rubric_folder=mock_rubric_files,
+                rubric_file="rubric.tsv",
+                rubric_prompt_beginning_file="rubric_prompt_beginning.txt",
+                question_prompt_file="question_prompt.txt",
+            )
 
-        results, _ = await judge_conversations(
-            judge_models={"mock-judge": 1},
-            conversations=conversations,
-            rubric_config=rubric_config,
-            conversation_folder_name=conv_folder.name,
-            output_folder=output_folder,
-            save_aggregated_results=True,
-        )
+            results, _ = await judge_conversations(
+                judge_models={"mock-judge": 1},
+                conversations=conversations,
+                rubric_config=rubric_config,
+                conversation_folder_name=conv_folder.name,
+                output_folder=output_folder,
+                save_aggregated_results=True,
+            )
 
-        # Should handle empty results without crashing
-        assert results == []
-        # results.csv should not be created for empty results
-        assert not (Path(output_folder) / "results.csv").exists()
+            # should handle empty results without crashing
+            assert results == []
+            assert not (Path(output_folder) / "results.csv").exists()
 
 
 @pytest.mark.unit
@@ -2060,3 +2115,52 @@ class TestRunnerHelperFunctions:
         )
 
         assert len(jobs) == 0
+
+    def test_filter_jobs_skip_existing_tsv(self, tmp_path):
+        """Resume skip omits jobs when matching evaluation TSV already exists."""
+        from judge.rubric_config import ConversationData, RubricConfig
+        from judge.runner import (
+            _create_evaluation_jobs,
+            _list_existing_evaluation_tsv_basenames,
+        )
+        from judge.utils import judge_evaluation_tsv_filename
+
+        conversations = [
+            ConversationData(
+                content="user: hi\nchatbot: hello",
+                metadata={"filename": "a.txt", "run_id": "run1"},
+            ),
+        ]
+        rubric_config = RubricConfig(
+            dimensions=["safety"],
+            question_flow_data={"1": {"question": "test"}},
+            question_order=["1"],
+            rubric_prompt_beginning="test",
+            question_prompt_template="test",
+        )
+        out = tmp_path / "eval"
+        out.mkdir()
+        judge_models = {"gpt-4o": 2}
+        jobs = _create_evaluation_jobs(
+            conversations, judge_models, str(out), rubric_config
+        )
+        assert len(jobs) == 2
+
+        existing_name = judge_evaluation_tsv_filename(
+            conversations[0].metadata["filename"], "gpt-4o", 1
+        )
+        (out / existing_name).write_text(
+            "Dimension\tScore\tReasoning\n", encoding="utf-8"
+        )
+
+        existing_basenames = _list_existing_evaluation_tsv_basenames(str(out))
+        kept = _create_evaluation_jobs(
+            conversations,
+            judge_models,
+            str(out),
+            rubric_config,
+            existing_tsv_basenames=existing_basenames,
+        )
+        assert len(kept) == 1
+        assert kept[0][2] == 2
+        assert kept[0][1] == "gpt-4o"

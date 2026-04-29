@@ -12,16 +12,32 @@ from utils.conversation_utils import build_langchain_messages
 from utils.debug import debug_print
 
 from .config import Config
-from .llm_interface import JudgeLLM
+from .llm_interface import JudgeLLM, LLMGenerationFailed
 
 # Define type variable for Pydantic models
 T = TypeVar("T", bound=BaseModel)
 
 
 class AzureLLM(JudgeLLM):
-    """Azure OpenAI implementation using LangChain."""
+    """Azure OpenAI implementation using LangChain.
+
+    Caching follows the underlying Azure/OpenAI-compatible API. This client does not set
+    Anthropic ``cache_control`` or OpenAI ``prompt_cache_key`` (not on this wrapper).
+    """
 
     DEFAULT_API_VERSION = "2024-05-01-preview"
+
+    def _no_retry_substrings(self) -> tuple[str, ...]:
+        # Azure OpenAI / Foundry: overlaps OpenAI-style errors plus Azure-specific text.
+        return (
+            "insufficient_quota",
+            "billing_hard_limit",
+            "Your account is not active",
+            "invalid_api_key",
+            "DeploymentNotFound",
+            "ResourceNotFound",
+            "ResponsibleAIPolicyViolation",
+        )
 
     def __init__(
         self,
@@ -160,7 +176,6 @@ class AzureLLM(JudgeLLM):
             messages.append(SystemMessage(content=self.system_prompt))
 
         # Build messages from history
-        # Role reminder is automatically added for personas by build_langchain_messages
         messages.extend(build_langchain_messages(self.role, conversation_history))
 
         # Debug: Print messages being sent to LLM
@@ -169,19 +184,51 @@ class AzureLLM(JudgeLLM):
             msg_type = type(msg).__name__
             preview = msg.text[:100]
             content_preview = preview + "..." if len(msg.text) > 100 else msg.text
-            debug_print(f"  {i+1}. {msg_type}: {content_preview}")
+            debug_print(f"  {i + 1}. {msg_type}: {content_preview}")
 
-        try:
-            # Debug: Print what we're about to send
+        async def _invoke() -> str:
             debug_print(f"\n[DEBUG {self.name} - {self.role.value}] Calling Azure:")
             debug_print(f"  Model: {self.model_name}")
             debug_print(f"  Endpoint: {self.endpoint}")
             debug_print(f"  API Version: {self.api_version}")
             debug_print(f"  Number of messages: {len(messages)}")
 
-            start_time = time.time()
-            response = await self.llm.ainvoke(messages)
-            end_time = time.time()
+            try:
+                start_time = time.time()
+                response = await self.llm.ainvoke(messages)
+                end_time = time.time()
+            except Exception as e:
+                error_msg = str(e)
+                self._set_response_metadata("azure", error=error_msg)
+                # 404 / not-found: explain deployment name, endpoint, API version.
+                if "404" in error_msg or "Resource not found" in error_msg:
+                    error_details = str(e)
+                    if hasattr(e, "response"):
+                        err_response = getattr(e, "response", None)
+                        if err_response and hasattr(err_response, "url"):
+                            error_details += f"\n  Request URL: {err_response.url}"
+                    if hasattr(e, "status_code"):
+                        status = getattr(e, "status_code", "N/A")
+                        error_details += f"\n  Status Code: {status}"
+
+                    helpful_msg = (
+                        "Azure 404 Error - Resource not found. Common causes:\n"
+                        f"  1. Model name '{self.model_name}' doesn't match "
+                        "deployment name in Azure portal (check case sensitivity)\n"
+                        f"     → Check Azure portal → Deployments for exact name\n"
+                        f"  2. Endpoint '{self.endpoint}' is incorrect "
+                        "or resource doesn't exist\n"
+                        f"     → Original config: {Config.AZURE_ENDPOINT}\n"
+                        f"  3. API version '{self.api_version}' not supported\n"
+                        "  4. Deployment not active or not accessible "
+                        "with current credentials\n"
+                        f"\n  Error details: {error_details}"
+                    )
+                    debug_print(
+                        f"\n[DEBUG {self.name} - {self.role.value}] {helpful_msg}"
+                    )
+                    raise LLMGenerationFailed(helpful_msg) from e
+                raise
 
             model = (
                 getattr(response.response_metadata, "model", self.model_name)
@@ -200,7 +247,6 @@ class AzureLLM(JudgeLLM):
             if hasattr(response, "response_metadata") and response.response_metadata:
                 metadata = response.response_metadata
 
-                # Extract token usage
                 if "token_usage" in metadata:
                     usage = metadata["token_usage"]
                     self._last_response_metadata["usage"] = {
@@ -209,51 +255,15 @@ class AzureLLM(JudgeLLM):
                         "total_tokens": usage.get("total_tokens", 0),
                     }
 
-                # Extract finish reason
                 self._last_response_metadata["finish_reason"] = metadata.get(
                     "finish_reason"
                 )
 
-                # Store raw metadata
                 self._last_response_metadata["raw_metadata"] = dict(metadata)
 
             return response.text
-        except Exception as e:
-            error_msg = str(e)
-            self._set_response_metadata("azure", error=error_msg)
 
-            # Provide helpful error message for 404 errors
-            if "404" in error_msg or "Resource not found" in error_msg:
-                # Try to get more details from the error
-                error_details = str(e)
-                # Check if it's an Azure SDK error with more details
-                if hasattr(e, "response"):
-                    response = getattr(e, "response", None)
-                    if response and hasattr(response, "url"):
-                        error_details += f"\n  Request URL: {response.url}"
-                if hasattr(e, "status_code"):
-                    status = getattr(e, "status_code", "N/A")
-                    error_details += f"\n  Status Code: {status}"
-
-                helpful_msg = (
-                    "Azure 404 Error - Resource not found. Common causes:\n"
-                    f"  1. Model name '{self.model_name}' doesn't match "
-                    "deployment name in Azure portal (check case sensitivity)\n"
-                    f"     → Check Azure portal → Deployments for exact name\n"
-                    f"  2. Endpoint '{self.endpoint}' is incorrect "
-                    "or resource doesn't exist\n"
-                    f"     → Original config: {Config.AZURE_ENDPOINT}\n"
-                    f"  3. API version '{self.api_version}' not supported\n"
-                    "  4. Deployment not active or not accessible "
-                    "with current credentials\n"
-                    f"\n  Error details: {error_details}"
-                )
-                debug_print(
-                    f"\n[DEBUG {self.name} - {self.role.value}] " f"{helpful_msg}"
-                )
-                return f"Error generating response: {helpful_msg}"
-
-            return f"Error generating response: {error_msg}"
+        return await self._run_with_retry(_invoke, provider="azure")
 
     async def generate_structured_response(
         self, message: Optional[str], response_model: Type[T]
@@ -274,13 +284,21 @@ class AzureLLM(JudgeLLM):
 
         messages.append(HumanMessage(content=message))
 
-        try:
-            # Create a structured LLM using with_structured_output
+        async def _invoke() -> T:
             structured_llm = self.llm.with_structured_output(response_model)
 
-            start_time = time.time()
-            response = await structured_llm.ainvoke(messages)
-            end_time = time.time()
+            try:
+                start_time = time.time()
+                response = await structured_llm.ainvoke(messages)
+                end_time = time.time()
+            except Exception as e:
+                error_msg = str(e)
+                self._set_response_metadata("azure", error=error_msg)
+                if "404" in error_msg or "Resource not found" in error_msg:
+                    raise LLMGenerationFailed(
+                        f"Azure structured call failed (404 / not found): {error_msg}"
+                    ) from e
+                raise
 
             self._set_response_metadata(
                 "azure",
@@ -288,16 +306,14 @@ class AzureLLM(JudgeLLM):
                 structured_output=True,
             )
 
-            # Ensure response is the correct type
             if not isinstance(response, response_model):
                 raise ValueError(
                     f"Response is not an instance of {response_model.__name__}"
                 )
 
             return response  # type: ignore[return-value]
-        except Exception as e:
-            self._set_response_metadata("azure", error=str(e))
-            raise RuntimeError(f"Error generating structured response: {str(e)}") from e
+
+        return await self._run_with_retry(_invoke, provider="azure")
 
     def set_system_prompt(self, system_prompt: str) -> None:
         """Set or update the system prompt."""

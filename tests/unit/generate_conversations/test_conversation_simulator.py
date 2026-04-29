@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from generate_conversations.conversation_simulator import ConversationSimulator
-from llm_clients.llm_interface import DEFAULT_START_PROMPT, Role
+from llm_clients.llm_interface import DEFAULT_START_PROMPT, LLMGenerationFailed, Role
 from tests.mocks.mock_llm import MockLLM
 
 
@@ -180,8 +180,7 @@ class TestConversationSimulator:
         )
         simulator = ConversationSimulator(persona=persona, agent=agent)
 
-        # Act & Assert
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(LLMGenerationFailed) as exc_info:
             await simulator.generate_conversation(max_turns=2)
 
         assert "Simulated API error" in str(exc_info.value)

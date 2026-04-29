@@ -8,12 +8,12 @@ from pydantic import BaseModel, Field
 
 from llm_clients import Role
 from llm_clients.azure_llm import AzureLLM
+from llm_clients.llm_interface import LLMGenerationFailed
 
 from .test_base_llm import TestJudgeLLMBase
 from .test_helpers import (
-    assert_error_metadata,
-    assert_error_response,
     assert_iso_timestamp,
+    assert_llm_generation_failed,
     assert_metadata_copy_behavior,
     assert_metadata_structure,
     assert_response_timing,
@@ -415,13 +415,14 @@ class TestAzureLLM(TestJudgeLLMBase):
         mock_azure_model.return_value = mock_llm
 
         llm = AzureLLM(name="TestAzure", role=Role.PERSONA)
-        response = await llm.generate_response(conversation_history=mock_system_message)
+        with pytest.raises(LLMGenerationFailed) as exc_info:
+            await llm.generate_response(conversation_history=mock_system_message)
 
-        # Should return error message instead of raising
-        assert_error_response(response, "API rate limit exceeded")
-
-        # Verify error metadata was stored
-        assert_error_metadata(llm, "azure", "API rate limit exceeded")
+        assert_llm_generation_failed(
+            exc_info.value,
+            "API rate limit exceeded",
+            mock_ainvoke=mock_llm.ainvoke,
+        )
 
     @pytest.mark.asyncio
     async def test_generate_response_404_error_with_helpful_message(
@@ -445,12 +446,13 @@ class TestAzureLLM(TestJudgeLLMBase):
         mock_azure_model.return_value = mock_llm
 
         llm = AzureLLM(name="TestAzure", role=Role.PERSONA)
-        response = await llm.generate_response(conversation_history=mock_system_message)
+        with pytest.raises(LLMGenerationFailed) as exc_info:
+            await llm.generate_response(conversation_history=mock_system_message)
 
-        # Should contain helpful error message
-        assert "Error generating response" in response
-        assert "404" in response or "Resource not found" in response
-        assert "Model name" in response or "deployment name" in response
+        msg = str(exc_info.value)
+        assert "404" in msg or "Resource not found" in msg
+        assert "Model name" in msg or "deployment name" in msg
+        assert mock_llm.ainvoke.call_count == 1
 
     @pytest.mark.asyncio
     async def test_generate_response_tracks_timing(
@@ -553,13 +555,14 @@ class TestAzureLLM(TestJudgeLLMBase):
 
             llm = AzureLLM(name="TestAzure", role=Role.PERSONA)
 
-            with pytest.raises(RuntimeError) as exc_info:
+            with pytest.raises(LLMGenerationFailed) as exc_info:
                 await llm.generate_structured_response("Test", TestResponse)
 
-            assert "Error generating structured response" in str(exc_info.value)
-            assert "Structured output failed" in str(exc_info.value)
-
-            # Verify error metadata was stored
+            assert_llm_generation_failed(
+                exc_info.value,
+                "Structured output failed",
+                mock_ainvoke=mock_structured_llm.ainvoke,
+            )
             metadata = llm.last_response_metadata
             assert "error" in metadata
             assert "Structured output failed" in metadata["error"]

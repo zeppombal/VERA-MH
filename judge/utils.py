@@ -1,6 +1,8 @@
 """Utility functions for the judge module."""
 
+import os
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -28,6 +30,98 @@ def parse_judge_models(model_arg):
             judge_models[model_spec] = 1
 
     return judge_models
+
+
+def build_evaluation_run_folder_path(
+    output_root: str,
+    judge_info: str,
+    timestamp: str,
+    conversation_run_basename: str,
+) -> str:
+    """
+    Build the folder path for a judge evaluation run.
+    """
+    folder_name = f"j_{judge_info}_{timestamp}__{conversation_run_basename}"
+    return str(Path(output_root) / folder_name)
+
+
+def judge_evaluation_tsv_filename(
+    conversation_filename: str,
+    judge_model: str,
+    judge_instance: Optional[int] = None,
+) -> str:
+    """
+    Basename of the per-evaluation TSV written by LLMJudge._save_results.
+
+    When judge_instance is set (batch runner), suffix is _i{instance}. When None
+    (e.g. single-conversation CLI), there is no _i suffix — matches historical behavior.
+    """
+    conversation_name = Path(conversation_filename).stem
+    judge_suffix = judge_model.replace("/", "_").replace(":", "_")
+    if judge_instance is not None:
+        judge_suffix += f"_i{judge_instance}"
+    return f"{conversation_name}_{judge_suffix}.tsv"
+
+
+def build_single_conversation_judge_run_key(
+    conversation_path: str | Path,
+    *,
+    now: Optional[datetime] = None,
+) -> str:
+    """
+    Human-readable folder basename for ``judge.py`` single-file (``-c``) mode.
+
+    Format: ``single_<timestamp_ms>__<conversation_stem>``. Batch judging uses the
+    evaluation folder basename instead; this gives a stable, unique folder name
+    per CLI run. Per-task logs use :func:`build_judge_task_log_path` with
+    ``output_folder`` set, so no ``run_key`` is involved.
+    """
+    dt = datetime.now() if now is None else now
+    ts = dt.strftime("%Y%m%d_%H%M%S_%f")[:-3]
+    stem = Path(conversation_path).stem
+    return f"single_{ts}__{stem}"
+
+
+def get_judge_logs_root() -> str:
+    """
+    Root directory for legacy per-task judge LLM logs (when ``output_folder`` is
+    omitted from :func:`build_judge_task_log_path`).
+
+    Override with env ``VERA_JUDGE_LOGS_ROOT`` (e.g. set by pytest to a temp dir).
+    Default: ``judge_logs`` in the current working directory.
+    """
+    return os.environ.get("VERA_JUDGE_LOGS_ROOT", "judge_logs")
+
+
+def build_judge_task_log_path(
+    conversation_filename: str,
+    judge_model: str,
+    judge_instance: Optional[int] = None,
+    *,
+    run_key: Optional[str] = None,
+    logs_root: Optional[str] = None,
+    output_folder: Optional[str] = None,
+) -> str:
+    """
+    Path to the per-task judge LLM log file, parallel to judge_evaluation_tsv_filename.
+
+    With ``output_folder``: ``{output_folder}/logs/{stem}.log`` (``run_key`` unused).
+
+    Legacy layout (no ``output_folder``): ``{logs_root}/{run_key}/{stem}.log``
+    (``logs_root`` defaults to :func:`get_judge_logs_root`). ``run_key`` is required
+    for this branch.
+    """
+    tsv_name = judge_evaluation_tsv_filename(
+        conversation_filename, judge_model, judge_instance
+    )
+    stem = Path(tsv_name).stem
+    if output_folder is not None:
+        return str(Path(output_folder) / "logs" / f"{stem}.log")
+    if not run_key:
+        raise ValueError("run_key is required when output_folder is not set")
+    # Legacy layout: {logs_root}/{run_key}/{stem}.log
+    root = logs_root if logs_root is not None else get_judge_logs_root()
+    return str(Path(root) / run_key / f"{stem}.log")
 
 
 def load_rubric_structure(
@@ -153,3 +247,12 @@ def extract_persona_name_from_filename(filename: str) -> Optional[str]:
     except Exception as e:
         print(f"Error extracting persona name from filename {filename}: {e}")
         return None
+
+
+def default_adhoc_parent() -> str:
+    """
+    Parent directory for single-file judge runs and unscoped LLMJudge log dirs.
+
+    Set VERA_ADHOC_PARENT to override (tests use a temp directory).
+    """
+    return os.environ.get("VERA_ADHOC_PARENT") or os.path.join("output", "adhoc")

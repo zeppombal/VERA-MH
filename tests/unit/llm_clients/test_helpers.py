@@ -24,7 +24,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from llm_clients import Role
-from llm_clients.llm_interface import LLMInterface
+from llm_clients.llm_interface import LLMGenerationFailed, LLMInterface
 
 # ============================================================================
 # Metadata Assertions
@@ -212,6 +212,36 @@ def assert_error_response(response: str, expected_error_substring: str) -> None:
     assert (
         expected_error_substring in response
     ), f"Expected error to contain '{expected_error_substring}', got: {response}"
+
+
+def expected_retry_call_count(max_retries: int = 3) -> int:
+    """Number of LLM attempts after retries are exhausted (inclusive of first)."""
+    return max_retries + 1
+
+
+def assert_llm_generation_failed(
+    exc: Exception,
+    expected_substring: str,
+    *,
+    mock_ainvoke: Any = None,
+    expected_calls: int | None = None,
+) -> None:
+    """Assert LLMGenerationFailed wraps the underlying error; optional ainvoke count."""
+    assert isinstance(
+        exc, LLMGenerationFailed
+    ), f"Expected LLMGenerationFailed, got {type(exc)}"
+    assert expected_substring in str(exc), str(exc)
+    assert exc.__cause__ is not None
+    assert expected_substring in str(exc.__cause__), str(exc.__cause__)
+    if mock_ainvoke is not None:
+        want = (
+            expected_calls
+            if expected_calls is not None
+            else expected_retry_call_count()
+        )
+        assert (
+            mock_ainvoke.call_count == want
+        ), f"Expected {want} ainvoke calls, got {mock_ainvoke.call_count}"
 
 
 # ============================================================================

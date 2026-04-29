@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from llm_clients import Role
-from llm_clients.llm_interface import LLMInterface
+from llm_clients.llm_interface import LLMGenerationFailed, LLMInterface
 
 
 class ConcreteLLM(LLMInterface):
@@ -35,6 +35,76 @@ class IncompleteLLM(LLMInterface):
     """Incomplete implementation to test abstract method enforcement."""
 
     pass
+
+
+class RetryHarness(LLMInterface):
+    """Concrete LLM for testing _run_with_retry."""
+
+    def __init__(self) -> None:
+        super().__init__("harness", Role.PROVIDER)
+        self._call_n = 0
+        self.fail_count = 0
+
+    async def start_conversation(self) -> str:
+        return ""
+
+    async def generate_response(self, conversation_history=None):
+        return ""
+
+    def set_system_prompt(self, system_prompt: str) -> None:
+        pass
+
+    async def flaky_ok_on_third(self) -> str:
+        async def inner() -> str:
+            self._call_n += 1
+            if self._call_n < 3:
+                raise RuntimeError("transient")
+            return "done"
+
+        return await self._run_with_retry(inner, provider="harness")
+
+    async def always_fail(self) -> None:
+        async def inner() -> str:
+            self.fail_count += 1
+            raise RuntimeError("always")
+
+        await self._run_with_retry(inner, provider="harness")
+
+
+@pytest.mark.unit
+class TestErrorMatchesNoRetrySubstrings:
+    """Tests for _error_matches_no_retry_substrings."""
+
+    def test_true_when_single_substring_present(self):
+        err = RuntimeError("Error 429: insufficient_quota")
+        assert LLMInterface._error_matches_no_retry_substrings(
+            err, ("insufficient_quota",)
+        )
+
+    def test_true_when_second_of_multiple_substrings_matches(self):
+        err = ValueError("Your credit balance is too low")
+        assert LLMInterface._error_matches_no_retry_substrings(
+            err, ("insufficient_quota", "credit balance is too low")
+        )
+
+    def test_false_when_no_substring_matches(self):
+        err = RuntimeError("timeout connecting to host")
+        assert not LLMInterface._error_matches_no_retry_substrings(
+            err, ("insufficient_quota", "invalid_api_key")
+        )
+
+    def test_false_when_substrings_tuple_empty(self):
+        err = RuntimeError("insufficient_quota")
+        assert not LLMInterface._error_matches_no_retry_substrings(err, ())
+
+    def test_uses_str_of_exception(self):
+        class CustomErr(Exception):
+            def __str__(self):
+                return "billing_hard_limit exceeded"
+
+        assert LLMInterface._error_matches_no_retry_substrings(
+            CustomErr(), ("billing_hard_limit",)
+        )
 
 
 @pytest.mark.unit
@@ -269,3 +339,129 @@ class TestLLMInterface:
         llm = ConcreteLLM(name="TestLLM", role=Role.PROVIDER)
         await llm.start_conversation()
         assert llm.conversation_id is not None
+
+    @pytest.mark.asyncio
+    async def test_run_with_retry_succeeds_after_transient_failures(self):
+        h = RetryHarness()
+        assert await h.flaky_ok_on_third() == "done"
+        assert h._call_n == 3
+
+    @pytest.mark.asyncio
+    async def test_run_with_retry_raises_after_max_attempts(self):
+        h = RetryHarness()
+        with pytest.raises(LLMGenerationFailed) as exc:
+            await h.always_fail()
+        assert "always" in str(exc.value)
+        assert exc.value.__cause__ is not None
+        assert h.fail_count == 4
+
+    @pytest.mark.asyncio
+    async def test_run_with_retry_no_retry_substrings_wraps_without_extra_attempts(
+        self,
+    ):
+        h = RetryHarness()
+        attempts = 0
+
+        async def inner() -> str:
+            nonlocal attempts
+            attempts += 1
+            raise RuntimeError("stop: insufficient_quota exceeded")
+
+        with pytest.raises(LLMGenerationFailed) as exc:
+            await h._run_with_retry(
+                inner,
+                no_retry_substrings=("insufficient_quota",),
+            )
+        assert attempts == 1
+        assert "insufficient_quota" in str(exc.value)
+        assert exc.value.__cause__ is not None
+        assert "insufficient_quota" in str(exc.value.__cause__)
+
+    @pytest.mark.asyncio
+    async def test_run_with_retry_llm_generation_failed_propagates(self):
+        h = RetryHarness()
+
+        async def inner() -> str:
+            raise LLMGenerationFailed("fatal")
+
+        with pytest.raises(LLMGenerationFailed) as exc:
+            await h._run_with_retry(inner)
+        assert str(exc.value) == "fatal"
+
+    @pytest.mark.asyncio
+    async def test_run_with_retry_clears_stale_metadata_on_failure(self):
+        h = RetryHarness()
+        h.last_response_metadata = {"provider": "stale", "response_id": "old"}
+
+        with pytest.raises(LLMGenerationFailed):
+            await h.always_fail()
+
+        metadata = h.last_response_metadata
+        assert metadata["provider"] == "harness"
+        assert metadata["error"] == "always"
+        assert metadata["attempt"] == 4
+        assert metadata["max_attempts"] == 4
+        assert metadata["retryable"] is True
+        assert metadata["will_retry"] is False
+        assert metadata.get("response_id") is None
+
+    @pytest.mark.asyncio
+    async def test_run_with_retry_on_error_callback_updates_metadata(self):
+        h = RetryHarness()
+
+        async def inner() -> str:
+            raise RuntimeError("boom")
+
+        def _on_error(
+            err: BaseException,
+            attempt: int,
+            max_attempts: int,
+            retryable: bool,
+            will_retry: bool,
+        ) -> dict[str, object]:
+            return {
+                "provider_error_type": type(err).__name__,
+                "observed_attempt": attempt,
+                "attempts_total": max_attempts,
+                "observed_retryable": retryable,
+                "observed_will_retry": will_retry,
+            }
+
+        with pytest.raises(LLMGenerationFailed):
+            await h._run_with_retry(inner, provider="harness", on_error=_on_error)
+
+        metadata = h.last_response_metadata
+        assert metadata["provider"] == "harness"
+        assert metadata["provider_error_type"] == "RuntimeError"
+        assert metadata["observed_attempt"] == 4
+        assert metadata["attempts_total"] == 4
+        assert metadata["observed_retryable"] is True
+        assert metadata["observed_will_retry"] is False
+
+    @pytest.mark.asyncio
+    async def test_run_with_retry_waits_between_retryable_attempts(self, monkeypatch):
+        h = RetryHarness()
+        delays = [0.11, 0.22, 0.33]
+        observed_sleep_calls: list[float] = []
+        observed_metadata_delay_values: list[float] = []
+
+        def fake_compute(self, _attempt_number: int) -> float:
+            return delays[len(observed_sleep_calls)]
+
+        async def fake_sleep(delay: float) -> None:
+            observed_metadata_delay_values.append(
+                h.last_response_metadata["retry_delay_seconds"]
+            )
+            observed_sleep_calls.append(delay)
+
+        monkeypatch.setattr(LLMInterface, "_compute_retry_delay_seconds", fake_compute)
+        monkeypatch.setattr("llm_clients.llm_interface.asyncio.sleep", fake_sleep)
+
+        with pytest.raises(LLMGenerationFailed):
+            await h.always_fail()
+
+        assert observed_sleep_calls == delays
+        assert observed_metadata_delay_values == [round(d, 3) for d in delays]
+        metadata = h.last_response_metadata
+        assert metadata["attempt"] == 4
+        assert metadata["will_retry"] is False

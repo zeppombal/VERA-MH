@@ -1,13 +1,19 @@
 .env
 __pycache__
 .venv
-conversations*/
-evaluations*/
-# Track publication_data (overrides conversations*/ and evaluations*/ above)
-!publication_data/
-!publication_data/**
+
+# Default output (p_* runs, nested evaluations, scores)
+output/
+
+# Legacy output folders
+conversations/
+evaluations/
 logging/
 logs/
+
+# Track publication_data
+!publication_data/
+!publication_data/**
 tmp_tests/
 **/.DS_Store
 .ipynb_checkpoints/

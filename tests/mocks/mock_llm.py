@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Type, TypeVar
 
-from llm_clients.llm_interface import JudgeLLM, Role
+from llm_clients.llm_interface import JudgeLLM, LLMGenerationFailed, Role
 
 T = TypeVar("T")
 
@@ -70,7 +70,7 @@ class MockLLM(JudgeLLM):
 
         if self.simulate_error:
             self._set_response_metadata("mock", error="Simulated API error")
-            raise Exception("Simulated API error")
+            raise LLMGenerationFailed("Simulated API error")
 
         if self.response_index >= len(self.responses):
             response = f"Mock response {self.response_index + 1}"

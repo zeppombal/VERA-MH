@@ -2,9 +2,11 @@
 
 import importlib.util
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
+
+from utils.conversation_layout import resolve_conversation_input
 
 # Load judge.py script (project root) so we can test get_parser and main
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -46,21 +48,22 @@ class TestJudgeParser:
     def test_conversation_with_judge_model(self):
         """Single conversation mode: -c and -j parse correctly."""
         parser = get_parser()
-        args = parser.parse_args(["-c", "path/to/conv.txt", "-j", "claude-3-7-sonnet"])
+        args = parser.parse_args(["-c", "path/to/conv.txt", "-j", "claude-sonnet-4-5"])
         assert args.conversation == "path/to/conv.txt"
         assert args.folder is None
-        assert args.judge_model == ["claude-3-7-sonnet"]
+        assert args.judge_model == ["claude-sonnet-4-5"]
 
     def test_defaults(self):
         """Optional args have expected defaults."""
         parser = get_parser()
         args = parser.parse_args(["-f", "folder", "-j", "gpt-4o"])
         assert args.rubrics == ["data/rubric.tsv"]
-        assert args.output == "evaluations"
+        assert args.output is None
         assert args.limit is None
         assert args.max_concurrent is None
         assert args.per_judge is False
         assert args.verbose_workers is False
+        assert args.resume is False
         assert args.judge_model_extra_params == {}
 
     def test_short_flags(self):
@@ -153,11 +156,16 @@ class TestJudgeMain:
                 judge_model="gpt-4o",
                 rubric_config="rubric_config",
                 judge_model_extra_params={},
+                log_file=ANY,
             )
-            judge_single.assert_awaited_once_with(
-                "judge_instance", "conversation_data", "evaluations"
-            )
-            assert result is None
+            judge_single.assert_awaited_once()
+            ja = judge_single.await_args[0]
+            assert ja[0] == "judge_instance"
+            assert ja[1] == "conversation_data"
+            out_run = Path(ja[2])
+            assert out_run.name.startswith("single_")
+            assert out_run.name.endswith("__conv")
+            assert result == ja[2]
 
     @pytest.mark.asyncio
     async def test_main_folder_calls_judge_conversations(self):
@@ -199,7 +207,8 @@ class TestJudgeMain:
             result = await main(args)
 
             RubricConfig.load.assert_called_once_with(rubric_folder="data")
-            load_convos.assert_called_once_with("conversations/run1", limit=10)
+            expected_dir, _, _ = resolve_conversation_input("conversations/run1")
+            load_convos.assert_called_once_with(expected_dir, limit=10)
             judge_convos.assert_awaited_once()
             assert judge_convos.await_args is not None
             call_kw = judge_convos.await_args[1]
@@ -212,4 +221,44 @@ class TestJudgeMain:
             assert call_kw["judge_model_extra_params"] == {}
             assert call_kw["per_judge"] is True
             assert call_kw["verbose_workers"] is True
+            assert call_kw["resume"] is False
             assert result == "evaluations/run1_timestamp"
+
+    @pytest.mark.asyncio
+    async def test_main_folder_resume_uses_output_folder(self, tmp_path: Path):
+        """main() with --resume passes output_folder instead of output_root."""
+        eval_folder = tmp_path / "j_eval__run1"
+        eval_folder.mkdir(parents=True, exist_ok=True)
+
+        parser = get_parser()
+        args = parser.parse_args(
+            [
+                "-f",
+                "conversations/run1",
+                "-j",
+                "gpt-4o:2",
+                "-o",
+                str(eval_folder),
+                "--resume",
+            ]
+        )
+        with (
+            patch.object(_judge_script, "RubricConfig") as RubricConfig,
+            patch.object(
+                _judge_script, "load_conversations", new_callable=AsyncMock
+            ) as load_convos,
+            patch.object(
+                _judge_script, "judge_conversations", new_callable=AsyncMock
+            ) as judge_convos,
+        ):
+            RubricConfig.load = AsyncMock(return_value="rubric_config")
+            load_convos.return_value = []
+            judge_convos.return_value = ([], str(eval_folder))
+
+            result = await main(args)
+
+            call_kw = judge_convos.await_args[1]
+            assert "output_root" not in call_kw
+            assert call_kw["output_folder"] == str(eval_folder)
+            assert call_kw["resume"] is True
+            assert result == str(eval_folder)

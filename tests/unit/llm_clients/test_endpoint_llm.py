@@ -7,13 +7,12 @@ import pytest
 
 from llm_clients import Role
 from llm_clients.endpoint_llm import EndpointLLM
-from llm_clients.llm_interface import DEFAULT_START_PROMPT
+from llm_clients.llm_interface import DEFAULT_START_PROMPT, LLMGenerationFailed
 
 from .test_base_llm import TestLLMBase
 from .test_helpers import (
-    assert_error_metadata,
-    assert_error_response,
     assert_iso_timestamp,
+    assert_llm_generation_failed,
     assert_metadata_copy_behavior,
     assert_metadata_structure,
     assert_response_timing,
@@ -117,25 +116,26 @@ class TestEndpointLLM(TestLLMBase):
     async def test_generate_response_handles_errors(
         self, mock_llm_factory, mock_system_message
     ):
+        session_cm = MagicMock()
+        session_cm.__aenter__ = AsyncMock(side_effect=Exception("API Error"))
+        session_cm.__aexit__ = AsyncMock(return_value=None)
+        mock_session_class = MagicMock(return_value=session_cm)
+
         with self.get_mock_patches():
             with patch(
-                "llm_clients.endpoint_llm.aiohttp.ClientSession"
-            ) as mock_session_class:
-                session_cm = MagicMock()
-                session_cm.__aenter__ = AsyncMock(side_effect=Exception("API Error"))
-                session_cm.__aexit__ = AsyncMock(return_value=None)
-                mock_session_class.return_value = session_cm
-
+                "llm_clients.endpoint_llm.aiohttp.ClientSession",
+                new_callable=lambda: mock_session_class,
+            ):
                 llm = self.create_llm(role=Role.PROVIDER, name="TestLLM")
-                response = await llm.generate_response(
-                    conversation_history=mock_system_message
-                )
+                with pytest.raises(LLMGenerationFailed) as exc_info:
+                    await llm.generate_response(
+                        conversation_history=mock_system_message
+                    )
 
-        assert_error_response(response, "API Error")
-        assert_error_metadata(
-            llm,
-            expected_provider=self.get_provider_name(),
-            expected_error_substring="API Error",
+        assert_llm_generation_failed(
+            exc_info.value,
+            "API Error",
+            mock_ainvoke=session_cm.__aenter__,
         )
 
     # -------------------------------------------------------------------------

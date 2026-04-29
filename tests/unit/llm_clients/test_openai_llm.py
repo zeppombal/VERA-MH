@@ -6,13 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from llm_clients import Role
+from llm_clients.llm_interface import LLMGenerationFailed
 from llm_clients.openai_llm import OpenAILLM
 
 from .test_base_llm import TestJudgeLLMBase
 from .test_helpers import (
-    assert_error_metadata,
-    assert_error_response,
     assert_iso_timestamp,
+    assert_llm_generation_failed,
     assert_metadata_copy_behavior,
     assert_metadata_structure,
     assert_response_timing,
@@ -139,9 +139,13 @@ class TestOpenAILLM(TestJudgeLLMBase):
             role=Role.PERSONA,
             system_prompt="You are a helpful assistant.",
         )
+        expected_cache_key = llm.conversation_id
         response = await llm.generate_response(conversation_history=mock_system_message)
 
         assert response == "This is an OpenAI response"
+        assert (
+            mock_llm.ainvoke.call_args.kwargs["prompt_cache_key"] == expected_cache_key
+        )
 
         # Verify comprehensive metadata extraction
         metadata = assert_metadata_structure(
@@ -278,18 +282,66 @@ class TestOpenAILLM(TestJudgeLLMBase):
     async def test_generate_response_api_error(
         self, mock_chat_openai, mock_llm_factory, mock_system_message
     ):
-        """Test error handling when API call fails."""
+        """Test error handling when API call fails after retries."""
         mock_llm = mock_llm_factory(side_effect=Exception("API rate limit exceeded"))
         mock_chat_openai.return_value = mock_llm
 
         llm = OpenAILLM(name="TestOpenAI", role=Role.PERSONA)
+        with pytest.raises(LLMGenerationFailed) as exc_info:
+            await llm.generate_response(conversation_history=mock_system_message)
+
+        assert_llm_generation_failed(
+            exc_info.value,
+            "API rate limit exceeded",
+            mock_ainvoke=mock_llm.ainvoke,
+        )
+
+    @pytest.mark.asyncio
+    @patch("llm_clients.openai_llm.Config.OPENAI_API_KEY", "test-key")
+    @patch("llm_clients.openai_llm.ChatOpenAI")
+    async def test_generate_response_retries_then_succeeds(
+        self, mock_chat_openai, mock_response_factory, mock_system_message
+    ):
+        mock_response = mock_response_factory(
+            text="OK after flaky",
+            response_id="chatcmpl-retry",
+            provider="openai",
+            metadata={"model_name": "gpt-4o"},
+        )
+        mock_llm = MagicMock()
+        mock_llm.ainvoke = AsyncMock(
+            side_effect=[
+                Exception("transient"),
+                Exception("transient"),
+                mock_response,
+            ]
+        )
+        mock_chat_openai.return_value = mock_llm
+
+        llm = OpenAILLM(name="TestOpenAI", role=Role.PERSONA)
         response = await llm.generate_response(conversation_history=mock_system_message)
+        assert response == "OK after flaky"
+        assert mock_llm.ainvoke.call_count == 3
+        assert llm.last_response_metadata["response_id"] == "chatcmpl-retry"
 
-        # Should return error message instead of raising
-        assert_error_response(response, "API rate limit exceeded")
+    @pytest.mark.asyncio
+    @patch("llm_clients.openai_llm.Config.OPENAI_API_KEY", "test-key")
+    @patch("llm_clients.openai_llm.ChatOpenAI")
+    async def test_generate_response_no_retry_on_quota_substring(
+        self, mock_chat_openai, mock_llm_factory, mock_system_message
+    ):
+        mock_llm = mock_llm_factory(
+            side_effect=Exception("Error 429: insufficient_quota")
+        )
+        mock_chat_openai.return_value = mock_llm
 
-        # Verify error metadata was stored
-        assert_error_metadata(llm, "openai", "API rate limit exceeded")
+        llm = OpenAILLM(name="TestOpenAI", role=Role.PERSONA)
+        with pytest.raises(LLMGenerationFailed) as exc_info:
+            await llm.generate_response(conversation_history=mock_system_message)
+
+        assert "insufficient_quota" in str(exc_info.value)
+        assert exc_info.value.__cause__ is not None
+        assert mock_llm.ainvoke.call_count == 1
 
     @pytest.mark.asyncio
     @patch("llm_clients.openai_llm.Config.OPENAI_API_KEY", "test-key")
@@ -647,10 +699,15 @@ class TestOpenAILLM(TestJudgeLLMBase):
             llm = OpenAILLM(
                 name="TestOpenAI", role=Role.JUDGE, system_prompt="Test prompt"
             )
+            expected_cache_key = llm.conversation_id
             response = await llm.generate_structured_response(
                 "What is the answer?", TestResponse
             )
 
+            assert (
+                mock_structured_llm.ainvoke.call_args.kwargs["prompt_cache_key"]
+                == expected_cache_key
+            )
             assert isinstance(response, TestResponse)
             assert response.answer == "Yes"
             assert response.reasoning == "Because it's correct"
@@ -738,16 +795,14 @@ class TestOpenAILLM(TestJudgeLLMBase):
 
             llm = OpenAILLM(name="TestOpenAI", role=Role.JUDGE)
 
-            with pytest.raises(RuntimeError) as exc_info:
+            with pytest.raises(LLMGenerationFailed) as exc_info:
                 await llm.generate_structured_response("Test", TestResponse)
 
-            assert "Error generating structured response" in str(exc_info.value)
-            assert "Structured output failed" in str(exc_info.value)
-
-            # Verify error metadata was stored
-            metadata = llm.last_response_metadata
-            assert "error" in metadata
-            assert "Structured output failed" in metadata["error"]
+            assert_llm_generation_failed(
+                exc_info.value,
+                "Structured output failed",
+                mock_ainvoke=mock_structured_llm.ainvoke,
+            )
 
     @pytest.mark.asyncio
     async def test_structured_response_metadata_fields(self):

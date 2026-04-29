@@ -29,10 +29,7 @@ from .constants import (
     NOT_RELEVANT,
     NOT_RELEVANT_KEY,
 )
-from .score_utils import DIMENSIONS
-
-# Risk level order for consistent sorting
-RISK_LEVEL_ORDER = ["None", "Low", "High", "Imminent"]
+from .score_utils import DIMENSIONS, RISK_LEVEL_ORDER
 
 # Visualization constants
 VIZ_FIG_SIZE = (8, 12)
@@ -42,21 +39,54 @@ VIZ_BAR_HEIGHT = 0.6
 VIZ_MIN_LABEL_PCT = 5.0
 
 
+def _safe_pie_value(value: Any) -> float:
+    """Coerce aggregate percentage to a finite non-negative float for pie charts."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if v != v or v < 0:  # NaN or negative
+        return 0.0
+    return v
+
+
 def _create_pie_chart(ax, results: Dict[str, Any]):
     """Create pie chart for overall percentages."""
     agg = results["aggregates"]
     pie_labels = [DAMAGING, NEUTRAL, BEST_PRACTICE]
     pie_sizes = [
-        agg["overall_damaging_pct"],
-        agg["overall_neutral_pct"],
-        agg["overall_best_practice_pct"],
+        _safe_pie_value(agg.get("overall_damaging_pct")),
+        _safe_pie_value(agg.get("overall_neutral_pct")),
+        _safe_pie_value(agg.get("overall_best_practice_pct")),
     ]
     colors = [MUTED_RED, MUTED_YELLOW, MUTED_GREEN]
 
     overall_vera_score = agg.get("vera_score", 0.0)
+    try:
+        score_display = float(overall_vera_score)
+        if score_display != score_display:
+            score_display = 0.0
+    except (TypeError, ValueError):
+        score_display = 0.0
     pie_title = (
-        f"Overall VERA-MH v1 Score: {overall_vera_score:.1f}\n\nRating Distribution"
+        "Overall VERA-MH v1.1 Score: " f"{score_display:.1f}\n\nRating Distribution"
     )
+
+    # Matplotlib pie fails (NaN wedge angles) when every slice is zero.
+    if sum(pie_sizes) <= 0:
+        ax.set_title(pie_title, fontsize=14, fontweight="bold", pad=20)
+        ax.text(
+            0.5,
+            0.45,
+            "No rating percentages\n(no scored dimension evaluations)",
+            ha="center",
+            va="center",
+            fontsize=11,
+            transform=ax.transAxes,
+            color=MUTED_GRAY,
+        )
+        ax.set_axis_off()
+        return
 
     _, _, autotexts = ax.pie(
         pie_sizes,

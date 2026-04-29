@@ -3,15 +3,14 @@ Unit tests for judge/score.py data processing functions.
 
 Tests focus on testable data processing functions:
 - score_results()
-- score_results_by_risk()
+- score_results_by_risk() (TSV + personas.tsv → full pipeline)
 - OPTION_MAP and constant handling
 
-
-Visualization functions are mocked and skipped as they are low-value for unit
-testing.
+Visualization in score.py main is not exercised here.
 """
 
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
@@ -26,6 +25,13 @@ from judge.constants import (
     NEUTRAL_KEY,
     NOT_RELEVANT,
     NOT_RELEVANT_KEY,
+)
+from judge.rubric_config import (
+    CONFIRMS_RISK,
+    DETECTS_POTENTIAL_RISK,
+    FOLLOWS_AI_BOUNDARIES,
+    GUIDES_TO_HUMAN_CARE,
+    SUPPORTIVE_CONVERSATION,
 )
 from judge.score import (
     OPTION_MAP,
@@ -67,11 +73,16 @@ def test_reverse_option_map():
 
 
 @pytest.mark.unit
-def test_risk_level_order():
-    """Test RISK_LEVEL_ORDER contains expected risk levels in order."""
-    expected_order = ["None", "Low", "High", "Imminent"]
+def test_risk_level_order_matches_personas_file():
+    """Test the personas file contains the expected unique risk levels."""
+    personas_path = Path(__file__).resolve().parents[3] / "data" / "personas.tsv"
+    df = pd.read_csv(personas_path, sep="\t", keep_default_na=False)
+    unique_levels = df["Short Current Suicide Risk Level"].unique().tolist()
 
-    assert RISK_LEVEL_ORDER == expected_order
+    # make sure "None" is loaded correctly
+    assert "None" in unique_levels
+    # make sure the unique levels match the expected order
+    assert set(unique_levels) == set(RISK_LEVEL_ORDER)
 
 
 # ============================================================================
@@ -88,11 +99,11 @@ def test_score_results_basic(tmp_path):
         {
             "filename": ["file1.txt"],
             "run_id": ["test_run"],
-            "Detects Risk": [BEST_PRACTICE],
-            "Clarifies Risk": [NEUTRAL],
-            "Guides to Human Support": [BEST_PRACTICE],
-            "Collaborates and Validates Appropriately": [NOT_RELEVANT],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
+            CONFIRMS_RISK: [NEUTRAL],
+            GUIDES_TO_HUMAN_CARE: [BEST_PRACTICE],
+            SUPPORTIVE_CONVERSATION: [NOT_RELEVANT],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -116,21 +127,21 @@ def test_score_results_dimension_scores(tmp_path):
         {
             "filename": ["f1.txt", "f2.txt", "f3.txt", "f4.txt"],
             "run_id": ["run1"] * 4,
-            "Detects Risk": [BEST_PRACTICE, BEST_PRACTICE, DAMAGING, NEUTRAL],
-            "Clarifies Risk": [NEUTRAL, NEUTRAL, NEUTRAL, NEUTRAL],
-            "Guides to Human Support": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, BEST_PRACTICE, DAMAGING, NEUTRAL],
+            CONFIRMS_RISK: [NEUTRAL, NEUTRAL, NEUTRAL, NEUTRAL],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 DAMAGING,
                 BEST_PRACTICE,
                 NOT_RELEVANT,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Maintains Safe Boundaries": [
+            FOLLOWS_AI_BOUNDARIES: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
@@ -144,7 +155,7 @@ def test_score_results_dimension_scores(tmp_path):
     results = score_results(str(csv_path))
 
     # Assert
-    detects_risk = results["dimensions"]["Detects Risk"]
+    detects_risk = results["dimensions"][DETECTS_POTENTIAL_RISK]
     # 2 Best Practice, 1 Damaging, 1 Neutral out of 4
     assert detects_risk["total_count"] == 4
     assert detects_risk[BEST_PRACTICE_KEY + "_pct"] == 50.0
@@ -161,19 +172,19 @@ def test_score_results_excludes_not_relevant(tmp_path):
         {
             "filename": ["f1.txt", "f2.txt", "f3.txt"],
             "run_id": ["run1"] * 3,
-            "Detects Risk": [BEST_PRACTICE, NOT_RELEVANT, DAMAGING],
-            "Clarifies Risk": [BEST_PRACTICE, BEST_PRACTICE, BEST_PRACTICE],
-            "Guides to Human Support": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, NOT_RELEVANT, DAMAGING],
+            CONFIRMS_RISK: [BEST_PRACTICE, BEST_PRACTICE, BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Maintains Safe Boundaries": [
+            FOLLOWS_AI_BOUNDARIES: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
@@ -186,7 +197,7 @@ def test_score_results_excludes_not_relevant(tmp_path):
     results = score_results(str(csv_path))
 
     # Assert
-    detects_risk = results["dimensions"]["Detects Risk"]
+    detects_risk = results["dimensions"][DETECTS_POTENTIAL_RISK]
     # We have 3 entries: BEST_PRACTICE (f1), NOT_RELEVANT (f2), DAMAGING (f3)
     # But NOT_RELEVANT should be excluded from counts, so total_count should be 2
     assert detects_risk["total_count"] == 2  # NOT_RELEVANT excluded
@@ -205,11 +216,11 @@ def test_score_results_aggregate_calculations(tmp_path):
         {
             "filename": ["f1.txt"],
             "run_id": ["run1"],
-            "Detects Risk": [BEST_PRACTICE],
-            "Clarifies Risk": [DAMAGING],
-            "Guides to Human Support": [NEUTRAL],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
+            CONFIRMS_RISK: [DAMAGING],
+            GUIDES_TO_HUMAN_CARE: [NEUTRAL],
+            SUPPORTIVE_CONVERSATION: [BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -234,11 +245,11 @@ def test_score_results_worst_band_determination(tmp_path):
         {
             "filename": ["f1.txt"],
             "run_id": ["run1"],
-            "Detects Risk": [DAMAGING],
-            "Clarifies Risk": [NEUTRAL],
-            "Guides to Human Support": [BEST_PRACTICE],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [DAMAGING],
+            CONFIRMS_RISK: [NEUTRAL],
+            GUIDES_TO_HUMAN_CARE: [BEST_PRACTICE],
+            SUPPORTIVE_CONVERSATION: [BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -262,18 +273,18 @@ def test_score_results_min_max_dimensions(tmp_path):
             "filename": ["f1.txt", "f2.txt"],
             "run_id": ["run1"] * 2,
             # Detects Risk: 100% Best Practice
-            "Detects Risk": [BEST_PRACTICE, BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, BEST_PRACTICE],
             # Clarifies Risk: 0% Best Practice, 100% Damaging
-            "Clarifies Risk": [DAMAGING, DAMAGING],
-            "Guides to Human Support": [
+            CONFIRMS_RISK: [DAMAGING, DAMAGING],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 NEUTRAL,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Maintains Safe Boundaries": [BEST_PRACTICE, BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE, BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -283,8 +294,8 @@ def test_score_results_min_max_dimensions(tmp_path):
 
     # Assert
     agg = results["aggregates"]
-    assert "Clarifies Risk" in agg["min_best_practice_dimensions"]
-    assert "Clarifies Risk" in agg["max_damaging_dimensions"]
+    assert CONFIRMS_RISK in agg["min_best_practice_dimensions"]
+    assert CONFIRMS_RISK in agg["max_damaging_dimensions"]
 
 
 @pytest.mark.unit
@@ -297,19 +308,19 @@ def test_score_results_conversation_level_metrics(tmp_path):
             "filename": ["f1.txt", "f2.txt", "f3.txt"],
             "run_id": ["run1"] * 3,
             # f1: All Best Practice
-            "Detects Risk": [BEST_PRACTICE, DAMAGING, BEST_PRACTICE],
-            "Clarifies Risk": [BEST_PRACTICE, BEST_PRACTICE, BEST_PRACTICE],
-            "Guides to Human Support": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, DAMAGING, BEST_PRACTICE],
+            CONFIRMS_RISK: [BEST_PRACTICE, BEST_PRACTICE, BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Maintains Safe Boundaries": [
+            FOLLOWS_AI_BOUNDARIES: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
@@ -339,17 +350,17 @@ def test_score_results_saves_json(tmp_path):
         {
             "filename": ["f1.txt"],
             "run_id": ["run1"],
-            "Detects Risk": [BEST_PRACTICE],
-            "Clarifies Risk": [BEST_PRACTICE],
-            "Guides to Human Support": [BEST_PRACTICE],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
+            CONFIRMS_RISK: [BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [BEST_PRACTICE],
+            SUPPORTIVE_CONVERSATION: [BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
 
     # Act
-    score_results(str(csv_path), str(json_path))
+    score_results(str(csv_path), output_path=str(json_path))
 
     # Assert
     assert json_path.exists()
@@ -364,16 +375,16 @@ def test_score_results_default_json_path(tmp_path):
     """Test that default JSON path is used when none provided."""
     # Arrange
     csv_path = tmp_path / "results.csv"
-    expected_json_path = tmp_path / "scores.json"
+    expected_json_path = tmp_path / "scores" / "scores.json"
     df = pd.DataFrame(
         {
             "filename": ["f1.txt"],
             "run_id": ["run1"],
-            "Detects Risk": [BEST_PRACTICE],
-            "Clarifies Risk": [BEST_PRACTICE],
-            "Guides to Human Support": [BEST_PRACTICE],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
+            CONFIRMS_RISK: [BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [BEST_PRACTICE],
+            SUPPORTIVE_CONVERSATION: [BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -396,11 +407,11 @@ def test_score_results_extracts_model_names(tmp_path):
         {
             "filename": ["f1.txt"],
             "run_id": ["run1"],
-            "Detects Risk": [BEST_PRACTICE],
-            "Clarifies Risk": [BEST_PRACTICE],
-            "Guides to Human Support": [BEST_PRACTICE],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
+            CONFIRMS_RISK: [BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [BEST_PRACTICE],
+            SUPPORTIVE_CONVERSATION: [BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -423,19 +434,19 @@ def test_score_results_dimension_percentage_rounding(tmp_path):
         {
             "filename": ["f1.txt", "f2.txt", "f3.txt"],
             "run_id": ["run1", "run1", "run1"],
-            "Detects Risk": [BEST_PRACTICE, BEST_PRACTICE, NEUTRAL],
-            "Clarifies Risk": [BEST_PRACTICE, BEST_PRACTICE, BEST_PRACTICE],
-            "Guides to Human Support": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, BEST_PRACTICE, NEUTRAL],
+            CONFIRMS_RISK: [BEST_PRACTICE, BEST_PRACTICE, BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Maintains Safe Boundaries": [BEST_PRACTICE, BEST_PRACTICE, BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE, BEST_PRACTICE, BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -444,7 +455,7 @@ def test_score_results_dimension_percentage_rounding(tmp_path):
     results = score_results(str(csv_path))
 
     # Assert
-    dimension = results["dimensions"]["Detects Risk"]
+    dimension = results["dimensions"][DETECTS_POTENTIAL_RISK]
     assert dimension["best_practice_pct"] == 66.67
     assert dimension["neutral_pct"] == 33.33
     assert dimension["damaging_pct"] == 0.0
@@ -459,7 +470,7 @@ def test_score_results_missing_dimension_column_skipped(tmp_path, capsys):
         {
             "filename": ["f1.txt"],
             "run_id": ["run1"],
-            "Detects Risk": [BEST_PRACTICE],
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -468,12 +479,12 @@ def test_score_results_missing_dimension_column_skipped(tmp_path, capsys):
     results = score_results(str(csv_path))
 
     # Assert
-    assert "Detects Risk" in results["dimensions"]
-    assert "Clarifies Risk" not in results["dimensions"]
+    assert DETECTS_POTENTIAL_RISK in results["dimensions"]
+    assert CONFIRMS_RISK not in results["dimensions"]
 
     # Should print warning
     captured = capsys.readouterr()
-    assert "Warning: Dimension 'Clarifies Risk' not found" in captured.out
+    assert f"Warning: Dimension '{CONFIRMS_RISK}' not found" in captured.out
 
 
 @pytest.mark.unit
@@ -484,26 +495,26 @@ def test_score_results_dimension_counts_match_percentages(tmp_path):
         {
             "filename": ["f1.txt", "f2.txt", "f3.txt", "f4.txt"],
             "run_id": ["run1", "run1", "run1", "run1"],
-            "Detects Risk": [BEST_PRACTICE, BEST_PRACTICE, NEUTRAL, DAMAGING],
-            "Clarifies Risk": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, BEST_PRACTICE, NEUTRAL, DAMAGING],
+            CONFIRMS_RISK: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Guides to Human Support": [
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Maintains Safe Boundaries": [
+            FOLLOWS_AI_BOUNDARIES: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
@@ -517,7 +528,7 @@ def test_score_results_dimension_counts_match_percentages(tmp_path):
     results = score_results(str(csv_path))
 
     # Assert
-    dimension = results["dimensions"]["Detects Risk"]
+    dimension = results["dimensions"][DETECTS_POTENTIAL_RISK]
     total = dimension["total_count"]
     counts = dimension["counts"]
 
@@ -540,14 +551,14 @@ def test_score_results_multiple_dimensions_tied_for_min_max(tmp_path):
         {
             "filename": ["f1.txt", "f2.txt"],
             "run_id": ["run1", "run1"],
-            "Detects Risk": [BEST_PRACTICE, DAMAGING],
-            "Clarifies Risk": [BEST_PRACTICE, DAMAGING],
-            "Guides to Human Support": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, DAMAGING],
+            CONFIRMS_RISK: [BEST_PRACTICE, DAMAGING],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE, BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE, BEST_PRACTICE],
+            SUPPORTIVE_CONVERSATION: [BEST_PRACTICE, BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE, BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -560,13 +571,13 @@ def test_score_results_multiple_dimensions_tied_for_min_max(tmp_path):
 
     # Both should be in min best practice (50% each)
     assert len(agg["min_best_practice_dimensions"]) == 2
-    assert "Detects Risk" in agg["min_best_practice_dimensions"]
-    assert "Clarifies Risk" in agg["min_best_practice_dimensions"]
+    assert DETECTS_POTENTIAL_RISK in agg["min_best_practice_dimensions"]
+    assert CONFIRMS_RISK in agg["min_best_practice_dimensions"]
 
     # Both should be in max damaging (50% each)
     assert len(agg["max_damaging_dimensions"]) == 2
-    assert "Detects Risk" in agg["max_damaging_dimensions"]
-    assert "Clarifies Risk" in agg["max_damaging_dimensions"]
+    assert DETECTS_POTENTIAL_RISK in agg["max_damaging_dimensions"]
+    assert CONFIRMS_RISK in agg["max_damaging_dimensions"]
 
 
 @pytest.mark.unit
@@ -577,19 +588,19 @@ def test_score_results_conversation_metrics_exclude_all_not_relevant(tmp_path):
         {
             "filename": ["f1.txt", "f2.txt", "f3.txt"],
             "run_id": ["run1", "run1", "run1"],
-            "Detects Risk": [BEST_PRACTICE, NOT_RELEVANT, DAMAGING],
-            "Clarifies Risk": [BEST_PRACTICE, NOT_RELEVANT, BEST_PRACTICE],
-            "Guides to Human Support": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, NOT_RELEVANT, DAMAGING],
+            CONFIRMS_RISK: [BEST_PRACTICE, NOT_RELEVANT, BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 NOT_RELEVANT,
                 BEST_PRACTICE,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 NOT_RELEVANT,
                 BEST_PRACTICE,
             ],
-            "Maintains Safe Boundaries": [BEST_PRACTICE, NOT_RELEVANT, BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE, NOT_RELEVANT, BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -616,26 +627,31 @@ def test_score_results_pct_all_best_practice_or_not_relevant(tmp_path):
         {
             "filename": ["f1.txt", "f2.txt", "f3.txt", "f4.txt"],
             "run_id": ["run1", "run1", "run1", "run1"],
-            "Detects Risk": [BEST_PRACTICE, BEST_PRACTICE, DAMAGING, NOT_RELEVANT],
-            "Clarifies Risk": [
+            DETECTS_POTENTIAL_RISK: [
+                BEST_PRACTICE,
+                BEST_PRACTICE,
+                DAMAGING,
+                NOT_RELEVANT,
+            ],
+            CONFIRMS_RISK: [
                 BEST_PRACTICE,
                 NOT_RELEVANT,
                 BEST_PRACTICE,
                 NOT_RELEVANT,
             ],
-            "Guides to Human Support": [
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 NOT_RELEVANT,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 NOT_RELEVANT,
             ],
-            "Maintains Safe Boundaries": [
+            FOLLOWS_AI_BOUNDARIES: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
@@ -667,21 +683,21 @@ def test_score_results_pct_with_at_least_one_high_harm(tmp_path):
         {
             "filename": ["f1.txt", "f2.txt", "f3.txt", "f4.txt"],
             "run_id": ["run1", "run1", "run1", "run1"],
-            "Detects Risk": [BEST_PRACTICE, DAMAGING, BEST_PRACTICE, NEUTRAL],
-            "Clarifies Risk": [BEST_PRACTICE, BEST_PRACTICE, DAMAGING, BEST_PRACTICE],
-            "Guides to Human Support": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, DAMAGING, BEST_PRACTICE, NEUTRAL],
+            CONFIRMS_RISK: [BEST_PRACTICE, BEST_PRACTICE, DAMAGING, BEST_PRACTICE],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Collaborates and Validates Appropriately": [
+            SUPPORTIVE_CONVERSATION: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Maintains Safe Boundaries": [
+            FOLLOWS_AI_BOUNDARIES: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
                 BEST_PRACTICE,
@@ -713,11 +729,11 @@ def test_score_results_empty_dataframe_handles_gracefully(tmp_path):
         {
             "filename": [],
             "run_id": [],
-            "Detects Risk": [],
-            "Clarifies Risk": [],
-            "Guides to Human Support": [],
-            "Collaborates and Validates Appropriately": [],
-            "Maintains Safe Boundaries": [],
+            DETECTS_POTENTIAL_RISK: [],
+            CONFIRMS_RISK: [],
+            GUIDES_TO_HUMAN_CARE: [],
+            SUPPORTIVE_CONVERSATION: [],
+            FOLLOWS_AI_BOUNDARIES: [],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -739,14 +755,14 @@ def test_score_results_dimension_all_not_relevant_returns_zero_scores(tmp_path, 
         {
             "filename": ["f1.txt", "f2.txt"],
             "run_id": ["run1", "run1"],
-            "Detects Risk": [BEST_PRACTICE, BEST_PRACTICE],
-            "Clarifies Risk": [NOT_RELEVANT, NOT_RELEVANT],
-            "Guides to Human Support": [
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, BEST_PRACTICE],
+            CONFIRMS_RISK: [NOT_RELEVANT, NOT_RELEVANT],
+            GUIDES_TO_HUMAN_CARE: [
                 BEST_PRACTICE,
                 BEST_PRACTICE,
             ],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE, BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE, BEST_PRACTICE],
+            SUPPORTIVE_CONVERSATION: [BEST_PRACTICE, BEST_PRACTICE],
+            FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE, BEST_PRACTICE],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -756,7 +772,7 @@ def test_score_results_dimension_all_not_relevant_returns_zero_scores(tmp_path, 
 
     # Assert
     # Clarifies Risk should have zero counts
-    clarifies = results["dimensions"]["Clarifies Risk"]
+    clarifies = results["dimensions"][CONFIRMS_RISK]
     assert clarifies["total_count"] == 0
     assert clarifies["best_practice_pct"] == 0.0
     assert clarifies["neutral_pct"] == 0.0
@@ -765,48 +781,103 @@ def test_score_results_dimension_all_not_relevant_returns_zero_scores(tmp_path, 
 
 
 # ============================================================================
-# score_results_by_risk() Tests
+# score_results_by_risk() Tests (full pipeline: TSVs + personas → score)
 # ============================================================================
+
+
+def _personas_tsv_header() -> str:
+    return (
+        "Name\tAge\tGender\tShort Current Suicide Risk Level\t"
+        "Remote Crisis History of Suicidal Thoughts and Behaviors\n"
+    )
+
+
+def _mock_results_df(**kwargs):
+    """Build a minimal results DataFrame with full rubric dimension column names."""
+    filename = kwargs.pop("filename", ["abc123_Brian_model_run1.txt"])
+    n = len(filename)
+    run_id = kwargs.pop("run_id", ["run1"] * n)
+    data = {
+        "filename": filename,
+        "run_id": run_id,
+        DETECTS_POTENTIAL_RISK: [BEST_PRACTICE] * n,
+        CONFIRMS_RISK: [BEST_PRACTICE] * n,
+        GUIDES_TO_HUMAN_CARE: [BEST_PRACTICE] * n,
+        SUPPORTIVE_CONVERSATION: [BEST_PRACTICE] * n,
+        FOLLOWS_AI_BOUNDARIES: [BEST_PRACTICE] * n,
+    }
+    data.update(kwargs)
+    return pd.DataFrame(data)
 
 
 @pytest.mark.unit
 @patch("judge.score.ensure_results_csv")
 def test_score_results_by_risk_basic(mock_ensure_csv, tmp_path, fixtures_dir):
     """Test basic scoring by risk level."""
-    # Arrange
     csv_path = tmp_path / "results.csv"
     personas_path = fixtures_dir / "personas_with_risk.tsv"
 
-    # Mock the CSV dataframe (already has data, no risk levels yet)
-    mock_df = pd.DataFrame(
-        {
-            "filename": ["abc123_Brian_model_run1.txt", "def456_Sarah_model_run2.txt"],
-            "run_id": ["run1", "run1"],
-            "Detects Risk": [BEST_PRACTICE, DAMAGING],
-            "Clarifies Risk": [NEUTRAL, BEST_PRACTICE],
-            "Guides to Human Support": [
-                BEST_PRACTICE,
-                BEST_PRACTICE,
-            ],
-            "Collaborates and Validates Appropriately": [
-                BEST_PRACTICE,
-                BEST_PRACTICE,
-            ],
-            "Maintains Safe Boundaries": [BEST_PRACTICE, BEST_PRACTICE],
-        }
+    mock_df = _mock_results_df(
+        filename=["abc123_Brian_model_run1.txt", "def456_Sarah_model_run2.txt"],
+        **{
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, DAMAGING],
+            CONFIRMS_RISK: [NEUTRAL, BEST_PRACTICE],
+        },
     )
     mock_ensure_csv.return_value = mock_df
-
-    # Create CSV file
     mock_df.to_csv(csv_path, index=False)
 
-    # Act
     results = score_results_by_risk(str(csv_path), str(personas_path))
 
-    # Assert
     assert "risk_level_scores" in results
     assert "High" in results["risk_level_scores"]
     assert "Low" in results["risk_level_scores"]
+
+
+def _write_personas(path, *rows: str) -> None:
+    path.write_text(_personas_tsv_header() + "".join(rows))
+
+
+def _eval_tsv(
+    *,
+    detects: str = BEST_PRACTICE,
+    confirms: str = BEST_PRACTICE,
+    guides: str = BEST_PRACTICE,
+    supportive: str = BEST_PRACTICE,
+    boundaries: str = BEST_PRACTICE,
+) -> str:
+    return (
+        "Dimension\tScore\tJustification\n"
+        f"{DETECTS_POTENTIAL_RISK}\t{detects}\t.\n"
+        f"{CONFIRMS_RISK}\t{confirms}\t.\n"
+        f"{GUIDES_TO_HUMAN_CARE}\t{guides}\t.\n"
+        f"{SUPPORTIVE_CONVERSATION}\t{supportive}\t.\n"
+        f"{FOLLOWS_AI_BOUNDARIES}\t{boundaries}\t.\n"
+    )
+
+
+@pytest.mark.unit
+def test_score_results_by_risk_groups_by_risk_from_tsv(tmp_path):
+    """Risk buckets match personas.tsv; dataframe built from eval TSVs."""
+    eval_dir = tmp_path / "eval_run"
+    eval_dir.mkdir()
+    personas = tmp_path / "personas.tsv"
+    _write_personas(
+        personas,
+        "Brian\t30\tMale\tHigh\t.\n",
+        "Sarah\t25\tFemale\tLow\t.\n",
+    )
+    (eval_dir / "a_Brian_m_run1.tsv").write_text(_eval_tsv(confirms=NEUTRAL))
+    (eval_dir / "b_Sarah_m_run2.tsv").write_text(_eval_tsv(confirms=BEST_PRACTICE))
+    csv_path = eval_dir / "results.csv"
+    pd.DataFrame().to_csv(csv_path, index=False)
+
+    results = score_results_by_risk(str(csv_path), str(personas))
+
+    assert results["risk_level_scores"]["High"]["total_conversations"] == 1
+    assert results["risk_level_scores"]["Low"]["total_conversations"] == 1
+    high_dims = results["risk_level_scores"]["High"]["dimensions"][CONFIRMS_RISK]
+    assert high_dims[NEUTRAL_KEY + "_pct"] == 100.0
 
 
 @pytest.mark.unit
@@ -815,40 +886,51 @@ def test_score_results_by_risk_dimension_scores(
     mock_ensure_csv, tmp_path, fixtures_dir
 ):
     """Test dimension scoring within risk levels."""
-    # Arrange
     csv_path = tmp_path / "results.csv"
     personas_path = fixtures_dir / "personas_with_risk.tsv"
 
-    mock_df = pd.DataFrame(
-        {
-            "filename": ["abc123_Brian_model_run1.txt", "def456_Brian_model_run2.txt"],
-            "run_id": ["run1", "run1"],
-            "Detects Risk": [BEST_PRACTICE, DAMAGING],
-            "Clarifies Risk": [NEUTRAL, NEUTRAL],
-            "Guides to Human Support": [
-                BEST_PRACTICE,
-                BEST_PRACTICE,
-            ],
-            "Collaborates and Validates Appropriately": [
-                BEST_PRACTICE,
-                BEST_PRACTICE,
-            ],
-            "Maintains Safe Boundaries": [BEST_PRACTICE, BEST_PRACTICE],
-        }
+    mock_df = _mock_results_df(
+        filename=["abc123_Brian_model_run1.txt", "def456_Brian_model_run2.txt"],
+        **{
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE, DAMAGING],
+            CONFIRMS_RISK: [NEUTRAL, NEUTRAL],
+        },
     )
     mock_ensure_csv.return_value = mock_df
-
     mock_df.to_csv(csv_path, index=False)
 
-    # Act
     results = score_results_by_risk(str(csv_path), str(personas_path))
 
-    # Assert
     high_risk = results["risk_level_scores"]["High"]
     assert high_risk["total_conversations"] == 2
-    detects_risk_scores = high_risk["dimensions"]["Detects Risk"]
+    detects_risk_scores = high_risk["dimensions"][DETECTS_POTENTIAL_RISK]
     assert detects_risk_scores[BEST_PRACTICE_KEY + "_pct"] == 50.0
     assert detects_risk_scores[DAMAGING_KEY + "_pct"] == 50.0
+
+
+@pytest.mark.unit
+def test_score_results_by_risk_dimension_percentages_same_risk_bucket(tmp_path):
+    """Multiple rows in one risk level aggregate dimension % from real TSVs."""
+    eval_dir = tmp_path / "eval_run"
+    eval_dir.mkdir()
+    personas = tmp_path / "personas.tsv"
+    _write_personas(personas, "Brian\t30\tMale\tHigh\t.\n")
+    (eval_dir / "a_Brian_m_run1.tsv").write_text(
+        _eval_tsv(detects=BEST_PRACTICE, confirms=NEUTRAL)
+    )
+    (eval_dir / "b_Brian_m_run2.tsv").write_text(
+        _eval_tsv(detects=DAMAGING, confirms=NEUTRAL)
+    )
+    csv_path = eval_dir / "results.csv"
+    pd.DataFrame().to_csv(csv_path, index=False)
+
+    results = score_results_by_risk(str(csv_path), str(personas))
+
+    high = results["risk_level_scores"]["High"]
+    assert high["total_conversations"] == 2
+    det = high["dimensions"][DETECTS_POTENTIAL_RISK]
+    assert det[BEST_PRACTICE_KEY + "_pct"] == 50.0
+    assert det[DAMAGING_KEY + "_pct"] == 50.0
 
 
 @pytest.mark.unit
@@ -857,33 +939,70 @@ def test_score_results_by_risk_includes_not_relevant(
     mock_ensure_csv, tmp_path, fixtures_dir
 ):
     """Test that 'Not Relevant' is included in risk-level scoring."""
-    # Arrange
     csv_path = tmp_path / "results.csv"
     personas_path = fixtures_dir / "personas_with_risk.tsv"
 
-    mock_df = pd.DataFrame(
-        {
-            "filename": ["abc123_Emma_model_run1.txt"],
-            "run_id": ["run1"],
-            "Detects Risk": [BEST_PRACTICE],
-            "Clarifies Risk": [NOT_RELEVANT],
-            "Guides to Human Support": [BEST_PRACTICE],
-            "Collaborates and Validates Appropriately": [NOT_RELEVANT],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
-        }
+    mock_df = _mock_results_df(
+        filename=["abc123_Emma_model_run1.txt"],
+        **{
+            DETECTS_POTENTIAL_RISK: [BEST_PRACTICE],
+            CONFIRMS_RISK: [NOT_RELEVANT],
+            SUPPORTIVE_CONVERSATION: [NOT_RELEVANT],
+        },
     )
     mock_ensure_csv.return_value = mock_df
-
     mock_df.to_csv(csv_path, index=False)
 
-    # Act
     results = score_results_by_risk(str(csv_path), str(personas_path))
 
-    # Assert
     none_risk = results["risk_level_scores"]["None"]
-    probes_risk_scores = none_risk["dimensions"]["Clarifies Risk"]
-    # Should have NOT_RELEVANT in counts
-    assert NOT_RELEVANT_KEY + "_pct" in probes_risk_scores
+    clarifies = none_risk["dimensions"][CONFIRMS_RISK]
+    assert NOT_RELEVANT_KEY + "_pct" in clarifies
+
+
+@pytest.mark.unit
+def test_score_results_by_risk_not_relevant_from_tsv(tmp_path):
+    """Not Relevant scores appear in dimension breakdown for None risk."""
+    eval_dir = tmp_path / "eval_run"
+    eval_dir.mkdir()
+    personas = tmp_path / "personas.tsv"
+    _write_personas(personas, "Emma\t28\tFemale\tNone\t.\n")
+    (eval_dir / "a_Emma_m_run1.tsv").write_text(
+        _eval_tsv(
+            confirms=NOT_RELEVANT,
+            supportive=NOT_RELEVANT,
+        )
+    )
+    csv_path = eval_dir / "results.csv"
+    pd.DataFrame().to_csv(csv_path, index=False)
+
+    results = score_results_by_risk(str(csv_path), str(personas))
+
+    none_risk = results["risk_level_scores"]["None"]
+    clarifies = none_risk["dimensions"][CONFIRMS_RISK]
+    assert NOT_RELEVANT_KEY + "_pct" in clarifies
+    assert clarifies[NOT_RELEVANT_KEY + "_pct"] == 100.0
+
+
+@pytest.mark.unit
+def test_score_results_by_risk_rewrites_results_csv_from_tsv(tmp_path):
+    """results.csv is replaced with merged persona + risk columns from TSVs."""
+    eval_dir = tmp_path / "eval_run"
+    eval_dir.mkdir()
+    personas = tmp_path / "personas.tsv"
+    _write_personas(personas, "Brian\t30\tMale\tHigh\t.\n")
+    (eval_dir / "x_Brian_m_run1.tsv").write_text(_eval_tsv())
+    csv_path = eval_dir / "results.csv"
+    pd.DataFrame().to_csv(csv_path, index=False)
+
+    score_results_by_risk(str(csv_path), str(personas))
+
+    updated = pd.read_csv(csv_path)
+    assert "persona_name" in updated.columns
+    assert "risk_level" in updated.columns
+    assert len(updated) == 1
+    assert updated.iloc[0]["persona_name"] == "Brian"
+    assert updated.iloc[0]["risk_level"] == "High"
 
 
 @pytest.mark.unit
@@ -892,66 +1011,94 @@ def test_score_results_by_risk_saves_updated_csv(
     mock_ensure_csv, tmp_path, fixtures_dir
 ):
     """Test that updated dataframe is saved to CSV."""
-    # Arrange
     csv_path = tmp_path / "results.csv"
     personas_path = fixtures_dir / "personas_with_risk.tsv"
 
-    mock_df = pd.DataFrame(
-        {
-            "filename": ["abc123_Brian_model_run1.txt"],
-            "run_id": ["run1"],
-            "Detects Risk": [BEST_PRACTICE],
-            "Clarifies Risk": [BEST_PRACTICE],
-            "Guides to Human Support": [BEST_PRACTICE],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
-        }
-    )
+    mock_df = _mock_results_df()
     mock_ensure_csv.return_value = mock_df
-
     mock_df.to_csv(csv_path, index=False)
 
-    # Act
     score_results_by_risk(str(csv_path), str(personas_path))
 
-    # Assert
-    updated_df = pd.read_csv(csv_path)
-    assert "persona_name" in updated_df.columns
-    assert "risk_level" in updated_df.columns
+    updated = pd.read_csv(csv_path)
+    assert "persona_name" in updated.columns
+    assert "risk_level" in updated.columns
+
+
+@pytest.mark.unit
+def test_score_results_by_risk_writes_scores_by_risk_json(tmp_path):
+    eval_dir = tmp_path / "eval_run"
+    eval_dir.mkdir()
+    personas = tmp_path / "personas.tsv"
+    _write_personas(personas, "Brian\t30\tMale\tHigh\t.\n")
+    (eval_dir / "x_Brian_m_run1.tsv").write_text(_eval_tsv())
+    csv_path = eval_dir / "results.csv"
+    pd.DataFrame().to_csv(csv_path, index=False)
+    json_path = eval_dir / "scores" / "scores_by_risk.json"
+
+    score_results_by_risk(str(csv_path), str(personas))
+
+    assert json_path.exists()
+    with open(json_path) as f:
+        saved = json.load(f)
+    assert "risk_level_scores" in saved
+    assert "High" in saved["risk_level_scores"]
+
+
+@pytest.mark.unit
+def test_score_results_by_risk_write_json_false_skips_file(tmp_path):
+    eval_dir = tmp_path / "eval_run"
+    eval_dir.mkdir()
+    personas = tmp_path / "personas.tsv"
+    _write_personas(personas, "Brian\t30\tMale\tHigh\t.\n")
+    (eval_dir / "x_Brian_m_run1.tsv").write_text(_eval_tsv())
+    csv_path = eval_dir / "results.csv"
+    pd.DataFrame().to_csv(csv_path, index=False)
+    json_path = eval_dir / "scores" / "scores_by_risk.json"
+
+    results = score_results_by_risk(str(csv_path), str(personas), write_json=False)
+
+    assert not json_path.exists()
+    assert "risk_level_scores" in results
+    assert "High" in results["risk_level_scores"]
 
 
 @pytest.mark.unit
 @patch("judge.score.ensure_results_csv")
 def test_score_results_by_risk_saves_json(mock_ensure_csv, tmp_path, fixtures_dir):
     """Test that results are saved to JSON file."""
-    # Arrange
     csv_path = tmp_path / "results.csv"
     personas_path = fixtures_dir / "personas_with_risk.tsv"
-    expected_json_path = tmp_path / "scores_by_risk.json"
+    expected_json_path = tmp_path / "scores" / "scores_by_risk.json"
 
-    mock_df = pd.DataFrame(
-        {
-            "filename": ["abc123_Brian_model_run1.txt"],
-            "run_id": ["run1"],
-            "Detects Risk": [BEST_PRACTICE],
-            "Clarifies Risk": [BEST_PRACTICE],
-            "Guides to Human Support": [BEST_PRACTICE],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
-        }
-    )
+    mock_df = _mock_results_df()
     mock_ensure_csv.return_value = mock_df
-
     mock_df.to_csv(csv_path, index=False)
 
-    # Act
     score_results_by_risk(str(csv_path), str(personas_path))
 
-    # Assert
     assert expected_json_path.exists()
-    with open(expected_json_path, "r") as f:
+    with open(expected_json_path) as f:
         saved_results = json.load(f)
     assert "risk_level_scores" in saved_results
+
+
+@pytest.mark.unit
+def test_score_results_by_risk_model_names_from_eval_dir(tmp_path):
+    """Model names parsed from standard evaluation directory name."""
+    eval_dir = tmp_path / "j_claude__p_gpt__a_gemini__t10__r5__12345"
+    eval_dir.mkdir()
+    personas = tmp_path / "personas.tsv"
+    _write_personas(personas, "Brian\t30\tMale\tHigh\t.\n")
+    (eval_dir / "x_Brian_m_run1.tsv").write_text(_eval_tsv())
+    csv_path = eval_dir / "results.csv"
+    pd.DataFrame().to_csv(csv_path, index=False)
+
+    results = score_results_by_risk(str(csv_path), str(personas))
+
+    assert results["judge_model"] == "claude"
+    assert results["persona_model"] == "gpt"
+    assert results["agent_model"] == "gemini"
 
 
 @pytest.mark.unit
@@ -960,31 +1107,17 @@ def test_score_results_by_risk_extracts_model_names(
     mock_ensure_csv, tmp_path, fixtures_dir
 ):
     """Test extraction of model names in risk-level scoring."""
-    # Arrange
     eval_dir = tmp_path / "j_claude__p_gpt__a_gemini__t10__r5__12345"
     eval_dir.mkdir()
     csv_path = eval_dir / "results.csv"
     personas_path = fixtures_dir / "personas_with_risk.tsv"
 
-    mock_df = pd.DataFrame(
-        {
-            "filename": ["abc123_Brian_model_run1.txt"],
-            "run_id": ["run1"],
-            "Detects Risk": [BEST_PRACTICE],
-            "Clarifies Risk": [BEST_PRACTICE],
-            "Guides to Human Support": [BEST_PRACTICE],
-            "Collaborates and Validates Appropriately": [BEST_PRACTICE],
-            "Maintains Safe Boundaries": [BEST_PRACTICE],
-        }
-    )
+    mock_df = _mock_results_df()
     mock_ensure_csv.return_value = mock_df
-
     mock_df.to_csv(csv_path, index=False)
 
-    # Act
     results = score_results_by_risk(str(csv_path), str(personas_path))
 
-    # Assert
-    assert "judge_model" in results
-    assert "persona_model" in results
-    assert "agent_model" in results
+    assert results["judge_model"] == "claude"
+    assert results["persona_model"] == "gpt"
+    assert results["agent_model"] == "gemini"

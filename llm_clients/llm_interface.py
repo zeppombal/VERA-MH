@@ -1,13 +1,48 @@
+import asyncio
 import copy
+import random
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Type, TypeVar
+from typing import Any, Dict, List, Optional, Protocol, Type, TypeVar
 
 from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
+R = TypeVar("R")
+
+
+class RetryOnErrorCallback(Protocol):
+    """Hook invoked by :meth:`LLMInterface._run_with_retry` after a failed attempt.
+
+    Must match the positional contract of ``on_error`` in that method. Return
+    values are merged into ``last_response_metadata`` when non-empty.
+
+    Args:
+        error: The exception from the failed attempt.
+        attempt_number: 1-based index of this attempt (``1 .. max_attempts``).
+        max_attempts: Total tries allowed (``max_llm_retries + 1`` for the first
+            try plus each retry).
+        retryable: ``False`` if the error matched no-retry substrings (call will
+            raise ``LLMGenerationFailed`` without sleeping for another attempt).
+        will_retry: ``True`` only if another attempt will run after backoff;
+            ``False`` on non-retryable errors or on the last failed attempt.
+    """
+
+    def __call__(
+        self,
+        error: BaseException,
+        attempt_number: int,
+        max_attempts: int,
+        retryable: bool,
+        will_retry: bool,
+    ) -> Optional[Dict[str, Any]]: ...
+
+
+class LLMGenerationFailed(Exception):
+    """Raised when an LLM call fails after all retry attempts are exhausted."""
 
 
 class Role(Enum):
@@ -41,6 +76,10 @@ class LLMInterface(ABC):
         system_prompt: Optional[str] = None,
         first_message: Optional[str] = None,
         start_prompt: Optional[str] = None,
+        *,
+        max_llm_retries: int = 3,
+        retry_base_delay_seconds: float = 0.75,
+        retry_max_delay_seconds: float = 8.0,
     ):
         self.name = name
         self.role = role
@@ -49,6 +88,10 @@ class LLMInterface(ABC):
         self.start_prompt = (
             start_prompt if start_prompt is not None else DEFAULT_START_PROMPT
         )
+        # Retries after the first attempt (max_llm_retries=3 => 4 total attempts).
+        self.max_llm_retries = max_llm_retries
+        self.retry_base_delay_seconds = retry_base_delay_seconds
+        self.retry_max_delay_seconds = retry_max_delay_seconds
         self._last_response_metadata: Dict[str, Any] = {}
         self.conversation_id = self.create_conversation_id()
 
@@ -82,6 +125,105 @@ class LLMInterface(ABC):
         cid = (self._last_response_metadata or {}).get("conversation_id")
         if cid is not None and cid != self.conversation_id and cid != "":
             self.conversation_id = cid
+
+    def _no_retry_substrings(self) -> tuple[str, ...]:
+        """Substrings checked against str(exception); if any match, do not retry.
+
+        Override on concrete LLMs with provider-specific quota/billing/auth phrases.
+        """
+        return ()
+
+    @staticmethod
+    def _error_matches_no_retry_substrings(
+        err: BaseException, substrings: tuple[str, ...]
+    ) -> bool:
+        """Return True if ``str(err)`` contains any entry in ``substrings``.
+
+        Used by :meth:`_run_with_retry` to classify errors as non-retryable when
+        the merged no-retry list (instance override plus per-call) matches part
+        of the exception message (e.g. quota or billing strings).
+        """
+        err_str = str(err)
+        return any(sub in err_str for sub in substrings)
+
+    def _compute_retry_delay_seconds(self, attempt_number: int) -> float:
+        """Compute full-jitter exponential backoff delay for next retry."""
+        raw_delay = self.retry_base_delay_seconds * (2 ** (attempt_number - 1))
+        capped_delay = min(raw_delay, self.retry_max_delay_seconds)
+        return random.uniform(0.0, capped_delay)
+
+    async def _run_with_retry(
+        self,
+        get_coro: Callable[[], Awaitable[R]],
+        *,
+        provider: Optional[str] = None,
+        no_retry_substrings: tuple[str, ...] = (),
+        on_error: Optional[RetryOnErrorCallback] = None,
+    ) -> R:
+        """Run an async call with retries.
+
+        If the error matches no_retry_substrings, do not retry; raise
+        LLMGenerationFailed from that error so callers (e.g. conversation runner)
+        can skip the job without crashing the batch. On exhaustion after retries,
+        raise LLMGenerationFailed from the last error.
+        """
+        max_attempts = self.max_llm_retries + 1
+        merged_no_retry = (*self._no_retry_substrings(), *no_retry_substrings)
+        last_exception: Optional[BaseException] = None
+        for attempt in range(max_attempts):
+            attempt_number = attempt + 1
+            # Clear stale metadata so failed calls cannot inherit prior success state.
+            self.last_response_metadata = {}
+            try:
+                return await get_coro()
+            except LLMGenerationFailed as e:
+                # If callers already set error metadata in _invoke, preserve it;
+                # otherwise write a standardized failure payload here.
+                if not self._last_response_metadata:
+                    self._set_response_metadata(
+                        provider or "unknown",
+                        error=str(e),
+                        attempt=attempt_number,
+                        max_attempts=max_attempts,
+                        retryable=False,
+                        will_retry=False,
+                    )
+                raise
+            except Exception as e:
+                last_exception = e
+                retryable = not self._error_matches_no_retry_substrings(
+                    e, merged_no_retry
+                )
+                will_retry = retryable and attempt < self.max_llm_retries
+
+                self._set_response_metadata(
+                    provider or "unknown",
+                    error=str(e),
+                    attempt=attempt_number,
+                    max_attempts=max_attempts,
+                    retryable=retryable,
+                    will_retry=will_retry,
+                )
+                if on_error is not None:
+                    extra = on_error(
+                        e, attempt_number, max_attempts, retryable, will_retry
+                    )
+                    if extra:
+                        self._last_response_metadata.update(extra)
+
+                if not retryable:
+                    raise LLMGenerationFailed(f"LLM error (non-retryable): {e}") from e
+                if attempt == self.max_llm_retries:
+                    break
+                retry_delay_seconds = self._compute_retry_delay_seconds(attempt_number)
+                self._last_response_metadata["retry_delay_seconds"] = round(
+                    retry_delay_seconds, 3
+                )
+                await asyncio.sleep(retry_delay_seconds)
+        assert last_exception is not None
+        raise LLMGenerationFailed(
+            f"LLM call failed after {max_attempts} attempts: {last_exception}"
+        ) from last_exception
 
     def _set_response_metadata(self, provider: str, **extra: Any) -> None:
         """Set last_response_metadata with common fields; pass extra keys as kwargs.
@@ -240,6 +382,6 @@ class JudgeLLM(LLMInterface):
             Instance of the response_model with structured data
 
         Raises:
-            RuntimeError: If structured output generation fails
+            LLMGenerationFailed: If structured output generation fails after retries
         """
         pass

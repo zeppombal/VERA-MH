@@ -3,10 +3,16 @@
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pandas as pd
 import pytest
 
 from judge.rubric_config import ConversationData
-from judge.runner import batch_evaluate_with_individual_judges, judge_conversations
+from judge.runner import (
+    _create_evaluation_jobs,
+    batch_evaluate_with_individual_judges,
+    judge_conversations,
+)
+from judge.utils import build_judge_task_log_path, judge_evaluation_tsv_filename
 
 MOCK_EVALUATION_RESULT = {
     "Safety": {
@@ -66,7 +72,7 @@ class TestRunnerExtraParams:
 
         results = await batch_evaluate_with_individual_judges(
             conversations=[_conversation(tmp_path)],
-            judge_models={"claude-3-7-sonnet": 1},
+            judge_models={"claude-sonnet-4-5": 1},
             output_folder=str(tmp_path),
             rubric_config=rubric_config,
             max_concurrent=None,
@@ -77,6 +83,8 @@ class TestRunnerExtraParams:
         mock_llm_judge_class.assert_called_once()
         call_kw = mock_llm_judge_class.call_args[1]
         assert call_kw["judge_model_extra_params"] == extra_params
+        assert "log_file" in call_kw
+        assert call_kw["log_file"].endswith(".log")
         assert len(results) == 1
 
     @pytest.mark.asyncio
@@ -88,7 +96,7 @@ class TestRunnerExtraParams:
 
         results = await batch_evaluate_with_individual_judges(
             conversations=[_conversation(tmp_path)],
-            judge_models={"claude-3-7-sonnet": 1},
+            judge_models={"claude-sonnet-4-5": 1},
             output_folder=str(tmp_path),
             rubric_config=rubric_config,
             max_concurrent=None,
@@ -98,6 +106,7 @@ class TestRunnerExtraParams:
         mock_llm_judge_class.assert_called_once()
         call_kw = mock_llm_judge_class.call_args[1]
         assert call_kw["judge_model_extra_params"] is None
+        assert "log_file" in call_kw
         assert len(results) == 1
 
     @pytest.mark.asyncio
@@ -117,7 +126,7 @@ class TestRunnerExtraParams:
                 }
             ]
             results, _ = await judge_conversations(
-                judge_models={"claude-3-7-sonnet": 1},
+                judge_models={"claude-sonnet-4-5": 1},
                 conversations=[_conversation(tmp_path)],
                 rubric_config=rubric_config,
                 output_root=str(tmp_path / "output"),
@@ -147,7 +156,7 @@ class TestRunnerExtraParams:
                 }
             ]
             results, _ = await judge_conversations(
-                judge_models={"claude-3-7-sonnet": 1},
+                judge_models={"claude-sonnet-4-5": 1},
                 conversations=[_conversation(tmp_path)],
                 rubric_config=rubric_config,
                 output_root=str(tmp_path / "output"),
@@ -176,7 +185,7 @@ class TestRunnerExtraParams:
 
         results = await batch_evaluate_with_individual_judges(
             conversations=conversations,
-            judge_models={"claude-3-7-sonnet": 1},
+            judge_models={"claude-sonnet-4-5": 1},
             output_folder=str(tmp_path),
             rubric_config=rubric_config,
             max_concurrent=None,
@@ -188,3 +197,121 @@ class TestRunnerExtraParams:
         for call in mock_llm_judge_class.call_args_list:
             assert call[1]["judge_model_extra_params"] == extra_params
         assert len(results) == conversation_count
+
+
+@pytest.mark.unit
+class TestRunnerResumeSkip:
+    """Test resume skip behavior for existing evaluation TSVs."""
+
+    def test_create_jobs_skips_existing_tsvs(self, tmp_path: Path):
+        """Jobs are omitted when matching conversation/judge-instance TSV exists."""
+        conversations = [_conversation(tmp_path, 0), _conversation(tmp_path, 1)]
+        judge_models = {"gpt-4o": 2}
+
+        existing = {
+            judge_evaluation_tsv_filename(
+                conversations[0].metadata["filename"], "gpt-4o", 1
+            ),
+            judge_evaluation_tsv_filename(
+                conversations[1].metadata["filename"], "gpt-4o", 2
+            ),
+        }
+
+        jobs = _create_evaluation_jobs(
+            conversations=conversations,
+            judge_models=judge_models,
+            output_folder=str(tmp_path),
+            rubric_config=MagicMock(),
+            judge_model_extra_params=None,
+            existing_tsv_basenames=existing,
+        )
+
+        # total combinations 2*2=4; 2 existing should be skipped
+        assert len(jobs) == 2
+        job_pairs = {(j[0].metadata["filename"], j[2]) for j in jobs}
+        assert ("test_conv.txt", 2) in job_pairs
+        assert ("conv_1.txt", 1) in job_pairs
+
+    @pytest.mark.asyncio
+    async def test_resume_rebuilds_results_csv_from_all_tsvs_when_batch_empty(
+        self, tmp_path: Path, rubric_config_factory
+    ):
+        """results.csv reflects every evaluation TSV, not only in-memory batch rows."""
+        eval_dir = tmp_path / "eval_resume"
+        eval_dir.mkdir()
+        tsv_line = "Detects Potential Risk\tBest Practice\tQ1: ok\n"
+        header = "Dimension\tScore\tReasoning\n"
+        for name in (
+            "a1b2c3_Alice_g4o_run1_mock-judge_i1.tsv",
+            "d4e5f6_Bob_g4o_run1_mock-judge_i1.tsv",
+        ):
+            (eval_dir / name).write_text(header + tsv_line, encoding="utf-8")
+
+        rubric_config = await rubric_config_factory(rubric_file="rubric_simple.tsv")
+
+        with patch("judge.runner.batch_evaluate_with_individual_judges") as mock_batch:
+            mock_batch.return_value = []
+            results, _ = await judge_conversations(
+                judge_models={"mock-judge": 1},
+                conversations=[_conversation(tmp_path)],
+                rubric_config=rubric_config,
+                output_folder=str(eval_dir),
+                resume=True,
+                save_aggregated_results=True,
+                verbose=False,
+            )
+
+        assert results == []
+        df = pd.read_csv(eval_dir / "results.csv")
+        assert len(df) == 2
+
+
+@pytest.mark.unit
+class TestJudgeTaskLogPath:
+    """Per-task log paths align with evaluation TSV basenames."""
+
+    def test_build_judge_task_log_path_matches_tsv_stem(self, tmp_path: Path) -> None:
+        """Log file stem matches TSV basename from judge_evaluation_tsv_filename."""
+        conv = "subdir/abc.txt"
+        model = "gpt-4o"
+        tsv_name = judge_evaluation_tsv_filename(conv, model, 3)
+        expected_stem = Path(tsv_name).stem
+
+        log_path = build_judge_task_log_path(
+            conv,
+            model,
+            3,
+            run_key="j_run__convfolder",
+            logs_root=str(tmp_path),
+        )
+
+        assert log_path == str(tmp_path / "j_run__convfolder" / f"{expected_stem}.log")
+
+    def test_build_judge_task_log_path_under_output_folder(
+        self, tmp_path: Path
+    ) -> None:
+        """Scoped layout: logs live under output_folder/logs/."""
+        eval_dir = tmp_path / "j_gpt4o__20250101_120000_000__p_foo__a_bar__t1__r1__ts"
+        conv = "subdir/abc.txt"
+        model = "gpt-4o"
+        tsv_name = judge_evaluation_tsv_filename(conv, model, 3)
+        expected_stem = Path(tsv_name).stem
+
+        log_path = build_judge_task_log_path(
+            conv,
+            model,
+            3,
+            output_folder=str(eval_dir),
+        )
+
+        assert log_path == str(eval_dir / "logs" / f"{expected_stem}.log")
+
+    def test_build_judge_task_log_path_requires_run_key_for_legacy_layout(
+        self, tmp_path: Path
+    ) -> None:
+        with pytest.raises(ValueError, match="run_key"):
+            build_judge_task_log_path(
+                "a.txt",
+                "gpt-4o",
+                logs_root=str(tmp_path),
+            )

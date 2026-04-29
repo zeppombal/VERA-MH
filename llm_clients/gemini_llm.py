@@ -15,7 +15,25 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class GeminiLLM(JudgeLLM):
-    """Gemini implementation using LangChain."""
+    """Gemini implementation using LangChain.
+
+    Newer Gemini models may use the API's **implicit** prompt caching automatically
+    (shared-prefix requests); this client does not add special flags for that.
+
+    **Explicit** Context Caching (``cached_content`` resource names) is not wired here;
+    it needs a separate cache create/update lifecycle. There is no Anthropic-style
+    ``cache_control`` on ``ChatGoogleGenerativeAI``.
+    """
+
+    def _no_retry_substrings(self) -> tuple[str, ...]:
+        # Google AI / Gemini API (ai.google.dev); LangChain may wrap HTTP/GRPC text.
+        return (
+            "API_KEY_INVALID",
+            "API key not valid",
+            "PERMISSION_DENIED",
+            "BILLING_NOT_ENABLED",
+            "billing has not been enabled",
+        )
 
     def __init__(
         self,
@@ -107,7 +125,7 @@ class GeminiLLM(JudgeLLM):
             content_preview = preview + "..." if len(msg.text) > 100 else msg.text
             debug_print(f"  {i + 1}. {msg_type}: {content_preview}")
 
-        try:
+        async def _invoke() -> str:
             start_time = time.time()
             response = await self.llm.ainvoke(messages)
             end_time = time.time()
@@ -129,7 +147,6 @@ class GeminiLLM(JudgeLLM):
             if hasattr(response, "response_metadata") and response.response_metadata:
                 metadata = response.response_metadata
 
-                # Extract token usage - Gemini may have different structure
                 if "usage_metadata" in metadata:
                     usage = metadata["usage_metadata"]
                     self._last_response_metadata["usage"] = {
@@ -140,7 +157,6 @@ class GeminiLLM(JudgeLLM):
                         "total_token_count": usage.get("total_token_count", 0),
                     }
                 elif "token_usage" in metadata:
-                    # Fallback structure
                     usage = metadata["token_usage"]
                     self._last_response_metadata["usage"] = {
                         "prompt_tokens": usage.get("prompt_tokens", 0),
@@ -148,18 +164,15 @@ class GeminiLLM(JudgeLLM):
                         "total_tokens": usage.get("total_tokens", 0),
                     }
 
-                # Extract finish reason
                 self._last_response_metadata["finish_reason"] = metadata.get(
                     "finish_reason"
                 )
 
-                # Store raw metadata
                 self._last_response_metadata["raw_metadata"] = dict(metadata)
 
             return response.text
-        except Exception as e:
-            self._set_response_metadata("gemini", error=str(e))
-            return f"Error generating response: {str(e)}"
+
+        return await self._run_with_retry(_invoke, provider="gemini")
 
     async def generate_structured_response(
         self, message: Optional[str], response_model: Type[T]
@@ -180,8 +193,7 @@ class GeminiLLM(JudgeLLM):
 
         messages.append(HumanMessage(content=message))
 
-        try:
-            # Create a structured LLM using with_structured_output
+        async def _invoke() -> T:
             structured_llm = self.llm.with_structured_output(response_model)
 
             start_time = time.time()
@@ -194,16 +206,14 @@ class GeminiLLM(JudgeLLM):
                 structured_output=True,
             )
 
-            # Ensure response is the correct type
             if not isinstance(response, response_model):
                 raise ValueError(
                     f"Response is not an instance of {response_model.__name__}"
                 )
 
             return response  # type: ignore[return-value]
-        except Exception as e:
-            self._set_response_metadata("gemini", error=str(e))
-            raise RuntimeError(f"Error generating structured response: {str(e)}") from e
+
+        return await self._run_with_retry(_invoke, provider="gemini")
 
     def set_system_prompt(self, system_prompt: str) -> None:
         """Set or update the system prompt."""

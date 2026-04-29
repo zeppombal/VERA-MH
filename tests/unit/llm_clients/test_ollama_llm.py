@@ -5,13 +5,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from llm_clients.llm_interface import Role
+from llm_clients.llm_interface import LLMGenerationFailed, Role
 
 from .test_base_llm import TestLLMBase
 from .test_helpers import (
-    assert_error_metadata,
-    assert_error_response,
     assert_iso_timestamp,
+    assert_llm_generation_failed,
     assert_metadata_copy_behavior,
     assert_metadata_structure,
     assert_response_timing,
@@ -125,15 +124,13 @@ class TestOllamaLLM(TestLLMBase):
             mock_ollama.return_value = mock_instance
 
             llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
-            response = await llm.generate_response(
-                conversation_history=mock_system_message
-            )
+            with pytest.raises(LLMGenerationFailed) as exc_info:
+                await llm.generate_response(conversation_history=mock_system_message)
 
-            assert_error_response(response, "Ollama Error")
-            assert_error_metadata(
-                llm,
-                expected_provider=self.get_provider_name(),
-                expected_error_substring="Ollama Error",
+            assert_llm_generation_failed(
+                exc_info.value,
+                "Ollama Error",
+                mock_ainvoke=mock_instance.ainvoke,
             )
 
     @patch("llm_clients.ollama_llm.LangChainOllamaLLM")
@@ -285,10 +282,14 @@ class TestOllamaLLM(TestLLMBase):
         mock_ollama.return_value = mock_instance
 
         llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
-        response = await llm.generate_response(conversation_history=mock_system_message)
+        with pytest.raises(LLMGenerationFailed) as exc_info:
+            await llm.generate_response(conversation_history=mock_system_message)
 
-        # Should return error message, not raise exception
-        assert_error_response(response, "Could not connect to Ollama server")
+        assert_llm_generation_failed(
+            exc_info.value,
+            "Could not connect to Ollama server",
+            mock_ainvoke=mock_instance.ainvoke,
+        )
 
     @pytest.mark.asyncio
     @patch("llm_clients.ollama_llm.LangChainOllamaLLM")
@@ -307,9 +308,15 @@ class TestOllamaLLM(TestLLMBase):
         llm = OllamaLLM(
             name="test-ollama", role=Role.PROVIDER, model_name="nonexistent:latest"
         )
-        response = await llm.generate_response(conversation_history=mock_system_message)
+        with pytest.raises(LLMGenerationFailed) as exc_info:
+            await llm.generate_response(conversation_history=mock_system_message)
 
-        assert_error_response(response, "Model 'nonexistent:latest' not found")
+        assert_llm_generation_failed(
+            exc_info.value,
+            "Model 'nonexistent:latest' not found",
+            mock_ainvoke=mock_instance.ainvoke,
+            expected_calls=1,
+        )
 
     @pytest.mark.asyncio
     @patch("llm_clients.ollama_llm.LangChainOllamaLLM")
@@ -326,9 +333,14 @@ class TestOllamaLLM(TestLLMBase):
         mock_ollama.return_value = mock_instance
 
         llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
-        response = await llm.generate_response(conversation_history=mock_system_message)
+        with pytest.raises(LLMGenerationFailed) as exc_info:
+            await llm.generate_response(conversation_history=mock_system_message)
 
-        assert_error_response(response, "Request timed out")
+        assert_llm_generation_failed(
+            exc_info.value,
+            "Request timed out",
+            mock_ainvoke=mock_instance.ainvoke,
+        )
 
     @pytest.mark.asyncio
     @patch("llm_clients.ollama_llm.LangChainOllamaLLM")
@@ -345,9 +357,14 @@ class TestOllamaLLM(TestLLMBase):
         mock_ollama.return_value = mock_instance
 
         llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER)
-        response = await llm.generate_response(conversation_history=mock_system_message)
+        with pytest.raises(LLMGenerationFailed) as exc_info:
+            await llm.generate_response(conversation_history=mock_system_message)
 
-        assert_error_response(response, "Unexpected error occurred")
+        assert_llm_generation_failed(
+            exc_info.value,
+            "Unexpected error occurred",
+            mock_ainvoke=mock_instance.ainvoke,
+        )
 
     @pytest.mark.asyncio
     @patch("llm_clients.ollama_llm.LangChainOllamaLLM")
@@ -624,7 +641,7 @@ class TestOllamaLLM(TestLLMBase):
     async def test_metadata_populated_after_error(
         self, mock_ollama, mock_system_message
     ):
-        """Test that metadata is populated correctly after error."""
+        """Test that repeated failures raise LLMGenerationFailed after retries."""
         from llm_clients.ollama_llm import OllamaLLM
 
         mock_instance = MagicMock()
@@ -634,13 +651,14 @@ class TestOllamaLLM(TestLLMBase):
         mock_ollama.return_value = mock_instance
 
         llm = OllamaLLM(name="test-ollama", role=Role.PROVIDER, model_name="llama3:8b")
-        response = await llm.generate_response(conversation_history=mock_system_message)
+        with pytest.raises(LLMGenerationFailed) as exc_info:
+            await llm.generate_response(conversation_history=mock_system_message)
 
-        # Should return error message instead of raising
-        assert_error_response(response, "Could not connect to Ollama server")
-
-        # Verify error metadata was stored
-        assert_error_metadata(llm, "ollama", "Could not connect to Ollama server")
+        assert_llm_generation_failed(
+            exc_info.value,
+            "Could not connect to Ollama server",
+            mock_ainvoke=mock_instance.ainvoke,
+        )
 
     @pytest.mark.asyncio
     @patch("llm_clients.ollama_llm.LangChainOllamaLLM")

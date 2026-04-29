@@ -29,13 +29,10 @@ class TestSetupConversationLogger:
         Assert: Logger is created with correct name and level
         """
         log_filename = "test_conversation"
-        run_id = "run_001"
-        log_folder = str(tmp_path / "logging")
 
         logger = setup_conversation_logger(
             log_filename=log_filename,
-            run_id=run_id,
-            log_folder=log_folder,
+            log_dir=str(tmp_path / "logging" / "run_001"),
         )
 
         assert logger is not None
@@ -51,17 +48,14 @@ class TestSetupConversationLogger:
         Act: Set up logger
         Assert: Log folder is created
         """
-        log_folder = str(tmp_path / "new_logging_folder")
-        run_id = "run_002"
+        log_dir = tmp_path / "new_logging_folder" / "run_002"
 
         setup_conversation_logger(
             log_filename="test",
-            run_id=run_id,
-            log_folder=log_folder,
+            log_dir=str(log_dir),
         )
 
-        assert Path(log_folder).exists()
-        assert Path(log_folder, run_id).exists()
+        assert log_dir.exists()
 
     def test_creates_log_file_with_correct_path(self, tmp_path):
         """Test that logger creates log file in correct location
@@ -71,18 +65,15 @@ class TestSetupConversationLogger:
         Assert: Log file exists in expected location
         """
         log_filename = "conversation_123"
-        run_id = "run_003"
-        log_folder = str(tmp_path / "logging")
 
         logger = setup_conversation_logger(
             log_filename=log_filename,
-            run_id=run_id,
-            log_folder=log_folder,
+            log_dir=str(tmp_path / "logging" / "run_003"),
         )
 
         logger.info("Test message")
 
-        expected_log_path = Path(log_folder) / run_id / f"{log_filename}.log"
+        expected_log_path = tmp_path / "logging" / "run_003" / f"{log_filename}.log"
         assert expected_log_path.exists()
 
     def test_custom_log_level(self, tmp_path):
@@ -93,9 +84,8 @@ class TestSetupConversationLogger:
         Assert: Logger has correct log level
         """
         logger = setup_conversation_logger(
-            log_filename="test",
-            run_id="run_004",
-            log_folder=str(tmp_path / "logging"),
+            "test",
+            log_dir=str(tmp_path / "logging" / "run_004"),
             level=logging.DEBUG,
         )
 
@@ -109,9 +99,8 @@ class TestSetupConversationLogger:
         Assert: Formatter has expected format string
         """
         logger = setup_conversation_logger(
-            log_filename="test",
-            run_id="run_005",
-            log_folder=str(tmp_path / "logging"),
+            "test",
+            log_dir=str(tmp_path / "logging" / "run_005"),
         )
 
         handler = logger.handlers[0]
@@ -130,20 +119,17 @@ class TestSetupConversationLogger:
         Assert: Old handlers are removed, only new handler exists
         """
         log_filename = "test_handler_clear"
-        run_id = "run_006"
-        log_folder = str(tmp_path / "logging")
+        log_dir = str(tmp_path / "logging" / "run_006")
 
         logger1 = setup_conversation_logger(
             log_filename=log_filename,
-            run_id=run_id,
-            log_folder=log_folder,
+            log_dir=log_dir,
         )
         handler_count_1 = len(logger1.handlers)
 
         logger2 = setup_conversation_logger(
             log_filename=log_filename,
-            run_id=run_id,
-            log_folder=log_folder,
+            log_dir=log_dir,
         )
         handler_count_2 = len(logger2.handlers)
 
@@ -159,19 +145,16 @@ class TestSetupConversationLogger:
         Assert: Message is written correctly to file
         """
         log_filename = "utf8_test"
-        run_id = "run_007"
-        log_folder = str(tmp_path / "logging")
 
         logger = setup_conversation_logger(
             log_filename=log_filename,
-            run_id=run_id,
-            log_folder=log_folder,
+            log_dir=str(tmp_path / "logging" / "run_007"),
         )
 
         unicode_message = "Testing unicode: 你好, مرحبا, Здравствуйте"
         logger.info(unicode_message)
 
-        log_file_path = Path(log_folder) / run_id / f"{log_filename}.log"
+        log_file_path = tmp_path / "logging" / "run_007" / f"{log_filename}.log"
         content = log_file_path.read_text(encoding="utf-8")
 
         assert unicode_message in content
@@ -189,9 +172,8 @@ class TestLogConversationStart:
         Assert: Log file contains start message and configuration
         """
         logger = setup_conversation_logger(
-            log_filename="start_test",
-            run_id="run_008",
-            log_folder=str(tmp_path / "logging"),
+            "start_test",
+            log_dir=str(tmp_path / "logging" / "run_008"),
         )
 
         llm1 = MockLLM(
@@ -236,9 +218,8 @@ class TestLogConversationStart:
         Assert: Temperature and max_tokens are logged
         """
         logger = setup_conversation_logger(
-            log_filename="config_test",
-            run_id="run_009",
-            log_folder=str(tmp_path / "logging"),
+            "config_test",
+            log_dir=str(tmp_path / "logging" / "run_009"),
         )
 
         llm1 = MockLLM(temperature=0.5, max_tokens=500)
@@ -273,9 +254,8 @@ class TestLogConversationStart:
         Assert: Function completes without error
         """
         logger = setup_conversation_logger(
-            log_filename="empty_dict_test",
-            run_id="run_010",
-            log_folder=str(tmp_path / "logging"),
+            "empty_dict_test",
+            log_dir=str(tmp_path / "logging" / "run_010"),
         )
 
         llm1 = MockLLM()
@@ -310,9 +290,8 @@ class TestLogConversationTurn:
         Assert: Log contains turn number, speaker, input, response
         """
         logger = setup_conversation_logger(
-            log_filename="turn_test",
-            run_id="run_011",
-            log_folder=str(tmp_path / "logging"),
+            "turn_test",
+            log_dir=str(tmp_path / "logging" / "run_011"),
         )
 
         log_conversation_turn(
@@ -338,9 +317,8 @@ class TestLogConversationTurn:
         Assert: Log contains early termination warning
         """
         logger = setup_conversation_logger(
-            log_filename="early_term_test",
-            run_id="run_012",
-            log_folder=str(tmp_path / "logging"),
+            "early_term_test",
+            log_dir=str(tmp_path / "logging" / "run_012"),
         )
 
         log_conversation_turn(
@@ -366,9 +344,8 @@ class TestLogConversationTurn:
         Assert: Log contains response_id
         """
         logger = setup_conversation_logger(
-            log_filename="metadata_test",
-            run_id="run_013",
-            log_folder=str(tmp_path / "logging"),
+            "metadata_test",
+            log_dir=str(tmp_path / "logging" / "run_013"),
         )
 
         metadata = {"response_id": "resp_123", "tokens": 150}
@@ -396,9 +373,8 @@ class TestLogConversationTurn:
         Assert: All turns are logged in order
         """
         logger = setup_conversation_logger(
-            log_filename="multi_turn_test",
-            run_id="run_014",
-            log_folder=str(tmp_path / "logging"),
+            "multi_turn_test",
+            log_dir=str(tmp_path / "logging" / "run_014"),
         )
 
         for i in range(1, 4):
@@ -430,9 +406,8 @@ class TestLogConversationEnd:
         Assert: Log contains completion message and turn count
         """
         logger = setup_conversation_logger(
-            log_filename="end_test",
-            run_id="run_015",
-            log_folder=str(tmp_path / "logging"),
+            "end_test",
+            log_dir=str(tmp_path / "logging" / "run_015"),
         )
 
         log_conversation_end(
@@ -456,9 +431,8 @@ class TestLogConversationEnd:
         Assert: Log contains duration in seconds
         """
         logger = setup_conversation_logger(
-            log_filename="duration_test",
-            run_id="run_016",
-            log_folder=str(tmp_path / "logging"),
+            "duration_test",
+            log_dir=str(tmp_path / "logging" / "run_016"),
         )
 
         log_conversation_end(
@@ -481,9 +455,8 @@ class TestLogConversationEnd:
         Assert: Log shows early termination
         """
         logger = setup_conversation_logger(
-            log_filename="early_end_test",
-            run_id="run_017",
-            log_folder=str(tmp_path / "logging"),
+            "early_end_test",
+            log_dir=str(tmp_path / "logging" / "run_017"),
         )
 
         log_conversation_end(
@@ -505,9 +478,8 @@ class TestLogConversationEnd:
         Assert: Log does not contain duration line
         """
         logger = setup_conversation_logger(
-            log_filename="no_duration_test",
-            run_id="run_018",
-            log_folder=str(tmp_path / "logging"),
+            "no_duration_test",
+            log_dir=str(tmp_path / "logging" / "run_018"),
         )
 
         log_conversation_end(
@@ -535,9 +507,8 @@ class TestLogError:
         Assert: Error message is in log
         """
         logger = setup_conversation_logger(
-            log_filename="error_test",
-            run_id="run_019",
-            log_folder=str(tmp_path / "logging"),
+            "error_test",
+            log_dir=str(tmp_path / "logging" / "run_019"),
         )
 
         log_error(logger=logger, error_message="Something went wrong")
@@ -555,9 +526,8 @@ class TestLogError:
         Assert: Exception details are logged
         """
         logger = setup_conversation_logger(
-            log_filename="exception_test",
-            run_id="run_020",
-            log_folder=str(tmp_path / "logging"),
+            "exception_test",
+            log_dir=str(tmp_path / "logging" / "run_020"),
         )
 
         try:
@@ -589,9 +559,8 @@ class TestCleanupLogger:
         Assert: Logger has no handlers
         """
         logger = setup_conversation_logger(
-            log_filename="cleanup_test",
-            run_id="run_021",
-            log_folder=str(tmp_path / "logging"),
+            "cleanup_test",
+            log_dir=str(tmp_path / "logging" / "run_021"),
         )
 
         assert len(logger.handlers) > 0
@@ -608,20 +577,17 @@ class TestCleanupLogger:
         Assert: File can be deleted (not locked)
         """
         log_filename = "close_test"
-        run_id = "run_022"
-        log_folder = str(tmp_path / "logging")
 
         logger = setup_conversation_logger(
             log_filename=log_filename,
-            run_id=run_id,
-            log_folder=log_folder,
+            log_dir=str(tmp_path / "logging" / "run_022"),
         )
 
         logger.info("Test message")
 
         cleanup_logger(logger)
 
-        log_file = Path(log_folder) / run_id / f"{log_filename}.log"
+        log_file = tmp_path / "logging" / "run_022" / f"{log_filename}.log"
         log_file.unlink()
 
         assert not log_file.exists()
@@ -653,15 +619,13 @@ class TestMultipleLoggers:
         Assert: Each has separate log file with correct content
         """
         logger1 = setup_conversation_logger(
-            log_filename="logger1",
-            run_id="run_023",
-            log_folder=str(tmp_path / "logging"),
+            "logger1",
+            log_dir=str(tmp_path / "logging" / "run_023"),
         )
 
         logger2 = setup_conversation_logger(
-            log_filename="logger2",
-            run_id="run_023",
-            log_folder=str(tmp_path / "logging"),
+            "logger2",
+            log_dir=str(tmp_path / "logging" / "run_023"),
         )
 
         logger1.info("Message from logger1")
@@ -687,15 +651,13 @@ class TestMultipleLoggers:
         Assert: Separate folders and files are created
         """
         logger1 = setup_conversation_logger(
-            log_filename="conv1",
-            run_id="run_024",
-            log_folder=str(tmp_path / "logging"),
+            "conv1",
+            log_dir=str(tmp_path / "logging" / "run_024"),
         )
 
         logger2 = setup_conversation_logger(
-            log_filename="conv2",
-            run_id="run_025",
-            log_folder=str(tmp_path / "logging"),
+            "conv2",
+            log_dir=str(tmp_path / "logging" / "run_025"),
         )
 
         logger1.info("Run 024 message")
@@ -722,13 +684,10 @@ class TestFullConversationWorkflow:
         Assert: All events are logged correctly in sequence
         """
         log_filename = "full_conversation"
-        run_id = "run_026"
-        log_folder = str(tmp_path / "logging")
 
         logger = setup_conversation_logger(
             log_filename=log_filename,
-            run_id=run_id,
-            log_folder=log_folder,
+            log_dir=str(tmp_path / "logging" / "run_026"),
         )
 
         llm1 = MockLLM(
@@ -781,7 +740,7 @@ class TestFullConversationWorkflow:
 
         cleanup_logger(logger)
 
-        log_file = Path(log_folder) / run_id / f"{log_filename}.log"
+        log_file = tmp_path / "logging" / "run_026" / f"{log_filename}.log"
         content = log_file.read_text()
 
         assert "CONVERSATION STARTED" in content

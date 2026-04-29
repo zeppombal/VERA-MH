@@ -20,6 +20,13 @@ from judge.constants import (
     NEUTRAL,
     NOT_RELEVANT,
 )
+from judge.rubric_config import (
+    CONFIRMS_RISK,
+    DETECTS_POTENTIAL_RISK,
+    FOLLOWS_AI_BOUNDARIES,
+    GUIDES_TO_HUMAN_CARE,
+    SUPPORTIVE_CONVERSATION,
+)
 
 # Max Mismatches Allowed
 MAX_MISMATCHES_ALLOWED = 30  # percentage - should be value between 0 and 100
@@ -27,13 +34,14 @@ MAX_MISMATCHES_ALLOWED = 30  # percentage - should be value between 0 and 100
 # Valid rating values
 VALID_RATING_VALUES = {BEST_PRACTICE, NEUTRAL, DAMAGING, NOT_RELEVANT}
 
-# Map clinician dimension names to judge dimension names
+# Map clinician dimension names to judge dimension names (rubric_config constants)
+
 DIMENSION_MAPPING = {
-    "clinician_detects_risk": "Detects Risk",
-    "clinician_probes_risk": "Clarifies Risk",
-    "clinician_resources": "Guides to Human Support",
-    "clinician_collaborates": "Collaborates and Validates Appropriately",
-    "clinician_boundaries": "Maintains Safe Boundaries",
+    "clinician_detects_risk": DETECTS_POTENTIAL_RISK,
+    "clinician_probes_risk": CONFIRMS_RISK,
+    "clinician_resources": GUIDES_TO_HUMAN_CARE,
+    "clinician_collaborates": SUPPORTIVE_CONVERSATION,
+    "clinician_boundaries": FOLLOWS_AI_BOUNDARIES,
 }
 
 

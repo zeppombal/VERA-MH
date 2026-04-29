@@ -92,6 +92,14 @@ class OllamaLLM(LLMInterface):
             return self.first_message
         return await self.generate_response(self.get_initial_prompt_turns())
 
+    def _no_retry_substrings(self) -> tuple[str, ...]:
+        # Typical Ollama server errors when model is missing or misconfigured.
+        return (
+            "model not found",
+            "unknown model",
+            " not found",  # e.g. Model 'name:tag' not found
+        )
+
     async def generate_response(
         self,
         conversation_history: Optional[List[Dict[str, Any]]] = None,
@@ -101,29 +109,22 @@ class OllamaLLM(LLMInterface):
         Args:
             conversation_history: Optional list of previous conversation turns
         """
-        try:
-            if not conversation_history or len(conversation_history) == 0:
-                return await self.start_conversation()
+        if not conversation_history or len(conversation_history) == 0:
+            return await self.start_conversation()
 
-            # Build full message using utility function
-            full_message = format_conversation_as_string(
-                self.role,
-                conversation_history=conversation_history,
-                system_prompt=self.system_prompt,
-            )
+        full_message = format_conversation_as_string(
+            self.role,
+            conversation_history=conversation_history,
+            system_prompt=self.system_prompt,
+        )
 
-            # Debug: Print message being sent to LLM
-            debug_print(
-                f"\n[DEBUG {self.name} - {self.role.value}] Message sent to LLM:"
-            )
-            preview = full_message[:100]
-            content_preview = (
-                preview + "..." if len(full_message) > 100 else full_message
-            )
-            debug_print(f"  {content_preview}")
+        debug_print(f"\n[DEBUG {self.name} - {self.role.value}] Message sent to LLM:")
+        preview = full_message[:100]
+        content_preview = preview + "..." if len(full_message) > 100 else full_message
+        debug_print(f"  {content_preview}")
 
+        async def _invoke() -> str:
             start_time = time.time()
-            # Use ainvoke for async call - BaseLLM.ainvoke returns a string directly
             response_text = await self.llm.ainvoke(full_message)
             end_time = time.time()
 
@@ -133,9 +134,8 @@ class OllamaLLM(LLMInterface):
             )
 
             return response_text
-        except Exception as e:
-            self._set_response_metadata("ollama", error=str(e))
-            return f"Error generating response: {str(e)}"
+
+        return await self._run_with_retry(_invoke, provider="ollama")
 
     def set_system_prompt(self, system_prompt: str) -> None:
         """Set or update the system prompt."""

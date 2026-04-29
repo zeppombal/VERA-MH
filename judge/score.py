@@ -6,9 +6,9 @@ Run with `python -m judge.score -r evaluations/[eval_folder]/results.csv`
 
 Reads results.csv, re-calculates the dataframe from the tsv files in the same
 folder if the results.csv is empty, calculates dimension-level and aggregate scores,
-and outputs to console, JSON file, and generates visualizations:
-- scores_visualization.png: Overall scores with pie chart and dimension breakdown
-- scores_by_risk_visualization.png: Scores broken down by persona risk level
+and outputs to console, JSON files under ``scores/``, and generates visualizations:
+- scores/scores_visualization.png: Overall scores with pie chart and dimension breakdown
+- scores/scores_by_risk_visualization.png: Scores broken down by persona risk level
 """
 
 import argparse
@@ -30,6 +30,7 @@ from .constants import (
 )
 from .score_utils import (
     DIMENSIONS,
+    RISK_LEVEL_ORDER,
     add_risk_levels_to_dataframe,
     build_dataframe_from_tsv_files,
     calculate_dimension_scores,
@@ -41,9 +42,6 @@ from .score_utils import (
 )
 from .score_viz import create_risk_level_visualizations, create_visualizations
 from .utils import extract_model_names_from_path
-
-# Risk level order for consistent sorting
-RISK_LEVEL_ORDER = ["None", "Low", "High", "Imminent"]
 
 # Map option names to shorter keys for analysis
 OPTION_MAP = {
@@ -130,27 +128,44 @@ def _calculate_conversation_metrics(df: pd.DataFrame) -> Tuple[int, float, float
     return total_relevant, pct_all_best, pct_high_harm
 
 
+def _scores_output_dir(csv_path: str, dir_name: str = "scores") -> Path:
+    """Directory for derived scoring artifacts (``<judge_run>/<dir_name>``)."""
+    d = Path(csv_path).parent / dir_name
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def _save_results_json(
-    results: Dict[str, Any], csv_path: str, output_path: Optional[str] = None
+    results: Dict[str, Any],
+    csv_path: str,
+    dir_name: str = "scores",
+    output_file_name: str = "scores.json",
+    output_path: Optional[str] = None,
 ):
     """Save results to JSON file."""
     if output_path is None:
-        output_path = str(Path(csv_path).parent / "scores.json")
+        output_path = str(_scores_output_dir(csv_path, dir_name) / output_file_name)
 
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
         json.dump(results, f, indent=2)
 
 
 def score_results(
-    results_csv_path: str, output_json_path: Optional[str] = None
+    results_csv_path: str,
+    dir_name: str = "scores",
+    output_file_name: str = "scores.json",
+    output_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Score evaluation results from a CSV file.
 
     Args:
         results_csv_path: Path to results.csv file
-        output_json_path: Optional path to save JSON output.
-            If None, saves to same directory as CSV.
+        dir_name: Subdirectory (under the judge run folder) for derived artifacts
+        output_file_name: Filename for the primary JSON inside that directory
+        output_path: Optional full path for the primary JSON. If set, overrides
+            ``dir_name`` / ``output_file_name`` for that file only.
 
     Returns:
         Dictionary containing all scores
@@ -201,7 +216,13 @@ def score_results(
         "dimensions": dimension_scores,
     }
 
-    _save_results_json(results, results_csv_path, output_json_path)
+    _save_results_json(
+        results,
+        results_csv_path,
+        dir_name,
+        output_file_name,
+        output_path,
+    )
     return results
 
 
@@ -220,11 +241,11 @@ def _print_summary(results: Dict[str, Any]):
     summary = results["summary"]
     print("\nSummary:")
     print(f"  Total Conversations: {summary['total_conversations']}")
-    print(f"  Total Dimension Evaluations: {summary['total_dimension_evaluations']}")
     print(
         f"  Total Relevant Conversations (excluding all 'Not Relevant'): "
         f"{summary['total_relevant_conversations']}"
     )
+    print(f"  Total Dimension Evaluations: {summary['total_dimension_evaluations']}")
     print(
         f"  % All Best Practice or Not Relevant: "
         f"{summary['pct_conversations_all_best_practice_or_not_relevant']}%"
@@ -336,7 +357,11 @@ def _calculate_risk_dimension_scores(
 def score_results_by_risk(
     results_csv_path: str,
     personas_tsv_path: str,
+    dir_name: str = "scores",
+    output_file_name: str = "scores_by_risk.json",
     output_json_path: Optional[str] = None,
+    *,
+    write_json: bool = True,
 ) -> Dict[str, Any]:
     """
     Score evaluation results grouped by risk level.
@@ -344,7 +369,13 @@ def score_results_by_risk(
     Args:
         results_csv_path: Path to results.csv file
         personas_tsv_path: Path to personas.tsv file
-        output_json_path: Optional path to save JSON output
+        dir_name: Subdirectory for risk JSON (when ``output_json_path`` is None)
+        output_file_name: Risk JSON filename inside ``dir_name``
+        output_json_path: Optional path to save JSON output (used only when
+            ``write_json`` is True; when None, writes under
+            ``<dir_name>/<output_file_name>`` beside the CSV).
+        write_json: When False, returns scores without writing JSON (callers
+            that post-process the dict should set this to avoid duplicate I/O).
 
     Returns:
         Dictionary containing all scores grouped by risk level
@@ -387,11 +418,14 @@ def score_results_by_risk(
         "risk_level_scores": risk_level_scores,
     }
 
-    if output_json_path is None:
-        output_json_path = str(Path(results_csv_path).parent / "scores_by_risk.json")
-
-    with open(output_json_path, "w") as f:
-        json.dump(results, f, indent=2)
+    if write_json:
+        out_path = output_json_path
+        if out_path is None:
+            scores_dir = _scores_output_dir(results_csv_path, dir_name)
+            out_path = str(scores_dir / output_file_name)
+        Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        with open(out_path, "w") as f:
+            json.dump(results, f, indent=2)
 
     return results
 
@@ -460,7 +494,8 @@ def main():
         "--output-json",
         "-o",
         default=None,
-        help="Path to save JSON output (default: scores.json in same directory as CSV)",
+        help="Path to save JSON output "
+        "(default: scores/scores.json next to results.csv)",
     )
     parser.add_argument(
         "--personas-tsv",
@@ -489,17 +524,16 @@ def main():
         if not has_dimension_data(pd.read_csv(results_csv_path)):
             return 1
 
-    results = score_results(str(results_csv_path), args.output_json)
+    results = score_results(str(results_csv_path), output_path=args.output_json)
     print_scores(results)
 
+    scores_dir = _scores_output_dir(str(results_csv_path))
     json_path = (
-        args.output_json
-        if args.output_json
-        else Path(args.results_csv).parent / "scores.json"
+        Path(args.output_json) if args.output_json else scores_dir / "scores.json"
     )
     print(f"\n✅ Scores saved to: {json_path}")
 
-    viz_path = Path(args.results_csv).parent / "scores_visualization.png"
+    viz_path = scores_dir / "scores_visualization.png"
     try:
         create_visualizations(results, viz_path)
     except Exception as e:
@@ -517,11 +551,9 @@ def main():
         else:
             try:
                 risk_results = score_results_by_risk(
-                    str(results_csv_path), str(personas_tsv_path), None
+                    str(results_csv_path), str(personas_tsv_path)
                 )
-                risk_viz_path = (
-                    Path(args.results_csv).parent / "scores_by_risk_visualization.png"
-                )
+                risk_viz_path = scores_dir / "scores_by_risk_visualization.png"
                 create_risk_level_visualizations(risk_results, risk_viz_path)
             except Exception as e:
                 print(f"⚠️  Warning: Could not create risk-level analysis: {e}")
