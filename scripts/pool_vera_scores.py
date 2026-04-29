@@ -303,9 +303,9 @@ def pool_evaluation_directories(
     )
 
     scores_json = out_eval / "scores" / "scores.json"
-    results = score_results(str(results_csv), str(scores_json))
+    results = score_results(str(results_csv), output_path=str(scores_json))
     results = _annotate_pooled_results(results, combined, eval_dirs, rows_per_source)
-    _save_results_json(results, str(results_csv), str(scores_json))
+    _save_results_json(results, str(results_csv), output_path=str(scores_json))
 
     print_scores(results)
 
