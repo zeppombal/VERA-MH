@@ -47,6 +47,12 @@ def _display_path(path: str | os.PathLike[str]) -> str:
         return str(Path(path).resolve())
 
 
+def _read_prompt_file(path: str | None) -> str | None:
+    if path is None:
+        return None
+    return Path(path).read_text(encoding="utf-8")
+
+
 def resolve_pipeline_resume_paths(args: argparse.Namespace) -> None:
     """
     Attach pipeline fields from ``--conversation-output`` / ``--judge-output``:
@@ -350,6 +356,11 @@ Example:
         default=DEFAULT_START_PROMPT,
     )
     parser.add_argument(
+        "--provider-system-prompt-file",
+        help="Path to a file whose contents are used as the provider system prompt.",
+        default=None,
+    )
+    parser.add_argument(
         "--debug", action="store_true", help="Enable debug logging for generation"
     )
     parser.add_argument(
@@ -467,6 +478,9 @@ async def main():
     if args.provider_first_message is not None:
         agent_model_config["first_message"] = args.provider_first_message
     agent_model_config["start_prompt"] = args.provider_start_prompt
+    provider_system_prompt = _read_prompt_file(args.provider_system_prompt_file)
+    if provider_system_prompt is not None:
+        agent_model_config["system_prompt"] = provider_system_prompt
 
     # Call generate.py's main function directly
     _, conversation_folder = await generate_main(

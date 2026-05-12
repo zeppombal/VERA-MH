@@ -21,8 +21,10 @@ from utils.logging_utils import (
 )
 from utils.naming import (
     TRANSCRIPT_RUN_SUFFIX_RE,
+    model_token_for_run_folder,
     persona_token_for_transcript_stem,
 )
+from progress_bar import ProgressBar
 
 from .conversation_simulator import ConversationSimulator
 from .utils import load_prompts_from_csv
@@ -171,6 +173,7 @@ class ConversationRunner:
         queue: Queue,
         results: List[Dict[str, Any]],
         total_jobs: int,
+        progress: Optional[ProgressBar] = None,
     ) -> None:
         """Worker that processes conversation generation jobs from a queue."""
         while True:
@@ -182,10 +185,11 @@ class ConversationRunner:
             try:
                 persona_config, max_turns, conversation_index, run_number = job
                 conversation_name = persona_config.get("name", "Unknown")
-                print(
-                    f"[Worker {worker_id}] ({len(results) + 1}/{total_jobs}) "
-                    f"{conversation_name} (run {run_number})"
-                )
+                if progress is None or not progress.enabled:
+                    print(
+                        f"[Worker {worker_id}] ({len(results) + 1}/{total_jobs}) "
+                        f"{conversation_name} (run {run_number})"
+                    )
                 result = await self.run_single_conversation(
                     persona_config=persona_config,
                     max_turns=max_turns,
@@ -213,11 +217,17 @@ class ConversationRunner:
                     "skipped": True,
                     "error": str(exc),
                 }
-                print(f"[Worker {worker_id}] Failed job: {result['error']}")
+                message = f"[Worker {worker_id}] Failed job: {result['error']}"
+                if progress is not None and progress.enabled:
+                    progress.write(message)
+                else:
+                    print(message)
             finally:
                 queue.task_done()
 
             results.append(result)
+            if progress is not None:
+                progress.update()
 
     async def run_single_conversation(
         self,
@@ -248,9 +258,11 @@ class ConversationRunner:
         system_prompt = persona_config["prompt"]
         persona_name = persona_config["name"]
 
-        # Generate filename base using persona name, model, and run number
+        # Generate a path-safe filename base using persona name, model, and run number.
         tag = uuid.uuid4().hex[:6]
-        filename_base = f"{tag}_{persona_name}_{model_name}_run{run_number}"
+        persona_token = persona_token_for_transcript_stem(persona_name)
+        model_token = model_token_for_run_folder(model_name)
+        filename_base = f"{tag}_{persona_token}_{model_token}_run{run_number}"
         os.makedirs(self.transcripts_dir, exist_ok=True)
         os.makedirs(self.logs_dir, exist_ok=True)
         log_file_path = os.path.join(self.logs_dir, f"{filename_base}.log")
@@ -496,11 +508,15 @@ class ConversationRunner:
             )
 
         results: List[Dict[str, Any]] = []
-        workers = [
-            asyncio.create_task(self._worker(i, queue, results, total_jobs))
-            for i in range(num_workers)
-        ]
-        await asyncio.gather(*workers)
+        if num_workers:
+            with ProgressBar(total_jobs, "Generating conversations") as progress:
+                workers = [
+                    asyncio.create_task(
+                        self._worker(i, queue, results, total_jobs, progress)
+                    )
+                    for i in range(num_workers)
+                ]
+                await asyncio.gather(*workers)
 
         results = skipped_results + results
 

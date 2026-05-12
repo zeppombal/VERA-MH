@@ -46,6 +46,15 @@ class LLMFactory:
             if k not in ["model", "name", "prompt_name", "system_prompt"]
         }
 
+        # LitellM provider-prefixed models must be checked first so strings like
+        # vertex_ai/claude-* do not route to the direct Claude client.
+        from .litellm_llm import LiteLLMLLM
+
+        if LiteLLMLLM.should_handle_model(model_name) or (
+            role == Role.PROVIDER and "api_base" in model_params
+        ):
+            return LiteLLMLLM(name, role, system_prompt, model_name, **model_params)
+
         # Check Azure first to avoid matching "gpt" in "azure-gpt-5.2"
         if "azure" in model_lower:
             from .azure_llm import AzureLLM

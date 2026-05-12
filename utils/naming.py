@@ -9,7 +9,9 @@ TRANSCRIPT_RUN_SUFFIX_RE = re.compile(r"_run(?P<run>\d+)\.txt$")
 
 def model_token_for_run_folder(model_name: str) -> str:
     """Normalize a model id for p_/a_ segments in generation run folder names."""
-    return model_name.replace("-", "_").replace(".", "_")
+    token = model_name.replace("-", "_").replace(".", "_")
+    token = re.sub(r"[^A-Za-z0-9_]+", "_", token)
+    return re.sub(r"_+", "_", token).strip("_")
 
 
 def build_generation_run_folder_name(

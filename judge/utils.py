@@ -32,6 +32,12 @@ def parse_judge_models(model_arg):
     return judge_models
 
 
+def _safe_path_token(value: str) -> str:
+    token = value.replace("-", "_").replace(".", "_")
+    token = re.sub(r"[^A-Za-z0-9_]+", "_", token)
+    return re.sub(r"_+", "_", token).strip("_")
+
+
 def build_evaluation_run_folder_path(
     output_root: str,
     judge_info: str,
@@ -41,7 +47,8 @@ def build_evaluation_run_folder_path(
     """
     Build the folder path for a judge evaluation run.
     """
-    folder_name = f"j_{judge_info}_{timestamp}__{conversation_run_basename}"
+    safe_judge_info = _safe_path_token(judge_info)
+    folder_name = f"j_{safe_judge_info}__{timestamp}"
     return str(Path(output_root) / folder_name)
 
 
@@ -182,37 +189,44 @@ def extract_model_names_from_path(path_input: str) -> Dict[str, str]:
     """
     path = Path(path_input)
 
-    # If it's a file (e.g., results.csv), get the parent directory name
-    # If it's a directory, use the directory name directly
+    # If it's a file (e.g., results.csv), get the parent directory name.
+    # If it's a directory, use the directory name directly.
     if path.is_file():
         dir_name = path.parent.name
+        parent_names = [parent.name for parent in path.parents]
     else:
         dir_name = path.name
+        parent_names = [parent.name for parent in path.parents]
 
     result = {"judge": "Unknown", "persona": "Unknown", "agent": "Unknown"}
 
     # Extract judge model: j_{judge}__p_...
     # Note: judge name may include a timestamp like _20251112_171754_380
     if dir_name.startswith("j_"):
-        parts = dir_name.split("__p_", 1)
-        if len(parts) > 0:
-            judge_part = parts[0][2:]  # Remove 'j_' prefix
-            # Remove timestamp pattern (YYYYMMDD_HHMMSS_milliseconds or similar)
-            # Look for pattern starting with underscore followed by 8 digits (date)
-            # Remove timestamp: _YYYYMMDD_HHMMSS_... or _YYYYMMDD_...
-            judge_part = re.sub(r"_\d{8}.*$", "", judge_part)
-            result["judge"] = judge_part.replace("_", " ").strip()
+        judge_part = dir_name[2:].split("__", 1)[0]
+        judge_part = re.sub(r"_\d{8}_\d{6}.*$", "", judge_part)
+        result["judge"] = judge_part.replace("_", " ").strip()
 
     # Extract persona model: ...__p_{persona}__a_...
-    if "__p_" in dir_name:
-        parts = dir_name.split("__p_")
+    generation_dir_name = dir_name
+    if "__p_" not in generation_dir_name:
+        for parent_name in parent_names:
+            if parent_name.startswith("p_") and "__a_" in parent_name:
+                generation_dir_name = parent_name
+                break
+
+    if generation_dir_name.startswith("p_") and "__a_" in generation_dir_name:
+        persona_part = generation_dir_name[2:].split("__a_")[0]
+        result["persona"] = persona_part.replace("_", " ").strip()
+    elif "__p_" in generation_dir_name:
+        parts = generation_dir_name.split("__p_")
         if len(parts) > 1:
             persona_part = parts[1].split("__a_")[0]
             result["persona"] = persona_part.replace("_", " ").strip()
 
     # Extract agent model: ...__a_{agent}__t...
-    if "__a_" in dir_name:
-        parts = dir_name.split("__a_")
+    if "__a_" in generation_dir_name:
+        parts = generation_dir_name.split("__a_")
         if len(parts) > 1:
             agent_part = parts[1].split("__t")[0]
             result["agent"] = agent_part.replace("_", " ").strip()

@@ -5,6 +5,7 @@ import asyncio
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from generate_conversations import ConversationRunner
@@ -16,6 +17,12 @@ from utils.naming import (
     parse_generation_run_folder_name,
 )
 from utils.utils import parse_key_value_list
+
+
+def _read_prompt_file(path: str | None) -> str | None:
+    if path is None:
+        return None
+    return Path(path).read_text(encoding="utf-8")
 
 
 async def main(
@@ -304,6 +311,11 @@ if __name__ == "__main__":
         help="Prompt sent to provider LLM when starting conversation (first turn).",
         default=DEFAULT_START_PROMPT,
     )
+    parser.add_argument(
+        "--provider-system-prompt-file",
+        help="Path to a file whose contents are used as the provider system prompt.",
+        default=None,
+    )
 
     parser.add_argument(
         "-usm",
@@ -351,6 +363,9 @@ if __name__ == "__main__":
     if args.provider_first_message is not None:
         agent_model_config["first_message"] = args.provider_first_message
     agent_model_config["start_prompt"] = args.provider_start_prompt
+    provider_system_prompt = _read_prompt_file(args.provider_system_prompt_file)
+    if provider_system_prompt is not None:
+        agent_model_config["system_prompt"] = provider_system_prompt
 
     # TODO: Do the run id here, so that it can be printed when starting
     results, output_folder = asyncio.run(

@@ -12,6 +12,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 import pandas as pd
 
+from progress_bar import ProgressBar
+
 from .llm_judge import LLMJudge
 from .rubric_config import ConversationData, RubricConfig
 from .score_utils import build_dataframe_from_tsv_files
@@ -185,6 +187,7 @@ async def _worker(
     results: List[Dict[str, Any]],
     total_jobs: int,
     verbose_workers: bool = False,
+    progress: Optional[ProgressBar] = None,
 ):
     """
     Worker that processes evaluation jobs from the queue.
@@ -195,6 +198,7 @@ async def _worker(
         results: Shared list to append results to
         total_jobs: Total number of jobs for progress tracking
         verbose_workers: Enable verbose logging for worker lifecycle
+        progress: Optional shared progress bar to update after each attempted job
     """
     import time
     from datetime import datetime
@@ -232,7 +236,7 @@ async def _worker(
                 f"for {judge_model} (judge {instance})"
             )
             job_start = time.time()
-        else:
+        elif progress is None or not progress.enabled:
             print(
                 f"[Worker {worker_id}] ({completed + 1}/{total_jobs}) "
                 f"{conversation_filename} | {judge_model} "
@@ -258,12 +262,19 @@ async def _worker(
                     f"({duration:.1f}s)"
                 )
         except Exception as e:
-            print(
+            message = (
                 f"[Worker {worker_id}] Failed to evaluate "
                 f"{conversation_filename} with {judge_model}: {e}"
             )
+            if progress is not None and progress.enabled:
+                progress.write(message)
+            else:
+                print(message)
 
-        queue.task_done()
+        finally:
+            queue.task_done()
+            if progress is not None:
+                progress.update()
 
     if verbose_workers:
         print(f"[Worker {worker_id}] Finished. Processed {job_count} jobs.")
@@ -315,8 +326,7 @@ async def _run_workers_with_queue(
                 jobs_by_model[judge_model] = []
             jobs_by_model[judge_model].append(job)
 
-        # Create a queue per judge model
-        all_workers = []
+        judge_queues = []
         for judge_model, model_jobs in jobs_by_model.items():
             queue = Queue()
             for job in model_jobs:
@@ -333,24 +343,31 @@ async def _run_workers_with_queue(
                 f"({model_job_n} jobs total) "
                 f"(max concurrent: {max_concurrent})"
             )
+            judge_queues.append((judge_model, queue, num_workers))
 
-            # Create workers for this judge model
-            workers = [
-                asyncio.create_task(
-                    _worker(
-                        f"{judge_model[:10]}-{i}",
-                        queue,
-                        results,
-                        total_jobs,
-                        verbose_workers,
+        def create_per_judge_workers(
+            progress: Optional[ProgressBar],
+        ) -> List[asyncio.Task[Any]]:
+            all_workers: List[asyncio.Task[Any]] = []
+            for judge_model, queue, num_workers in judge_queues:
+                workers = [
+                    asyncio.create_task(
+                        _worker(
+                            f"{judge_model[:10]}-{i}",
+                            queue,
+                            results,
+                            total_jobs,
+                            verbose_workers,
+                            progress,
+                        )
                     )
-                )
-                for i in range(num_workers)
-            ]
-            all_workers.extend(workers)
+                    for i in range(num_workers)
+                ]
+                all_workers.extend(workers)
+            return all_workers
 
-        # Print worker pool summary
         if verbose_workers:
+            all_workers = create_per_judge_workers(None)
             from datetime import datetime
 
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
@@ -362,8 +379,11 @@ async def _run_workers_with_queue(
             print(f"  - Max concurrent per judge: {max_str}")
             print(f"  - Started at: {timestamp}\n")
 
-        # Wait for all workers to complete
-        await asyncio.gather(*all_workers)
+            await asyncio.gather(*all_workers)
+        else:
+            with ProgressBar(total_jobs, "Judging conversations") as progress:
+                all_workers = create_per_judge_workers(progress)
+                await asyncio.gather(*all_workers)
 
     else:
         # Single queue for all jobs
@@ -381,14 +401,14 @@ async def _run_workers_with_queue(
             f"(max concurrent: {max_concurrent})"
         )
 
-        # Create workers
-        workers = [
-            asyncio.create_task(_worker(i, queue, results, total_jobs, verbose_workers))
-            for i in range(num_workers)
-        ]
-
-        # Print worker pool summary
         if verbose_workers:
+            workers = [
+                asyncio.create_task(
+                    _worker(i, queue, results, total_jobs, verbose_workers)
+                )
+                for i in range(num_workers)
+            ]
+
             from datetime import datetime
 
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
@@ -399,8 +419,24 @@ async def _run_workers_with_queue(
             print(f"  - Max concurrent: {max_str}")
             print(f"  - Started at: {timestamp}\n")
 
-        # Wait for all workers to complete
-        await asyncio.gather(*workers)
+            await asyncio.gather(*workers)
+        else:
+            with ProgressBar(total_jobs, "Judging conversations") as progress:
+                workers = [
+                    asyncio.create_task(
+                        _worker(
+                            i,
+                            queue,
+                            results,
+                            total_jobs,
+                            verbose_workers,
+                            progress,
+                        )
+                    )
+                    for i in range(num_workers)
+                ]
+
+                await asyncio.gather(*workers)
 
     return results
 
@@ -545,23 +581,9 @@ async def judge_conversations(
             f"{model}x{count}" for model, count in judge_models.items()
         )
 
-        # Build judge info string with extra parameters
-        judge_info = judges_str
-        if judge_model_extra_params:
-            # Add temperature if present
-            if "temperature" in judge_model_extra_params:
-                judge_info += f"_temp{judge_model_extra_params['temperature']}"
-            # Add max_tokens if present
-            if "max_tokens" in judge_model_extra_params:
-                judge_info += f"_maxtok{judge_model_extra_params['max_tokens']}"
-            # Add other extra params
-            for k, v in judge_model_extra_params.items():
-                if k not in ["temperature", "max_tokens"]:
-                    judge_info += f"_{k}{v}"
-
         folder_name = conversation_folder_name or "conversations"
         output_folder = build_evaluation_run_folder_path(
-            output_root, judge_info, timestamp, folder_name
+            output_root, judges_str, timestamp, folder_name
         )
 
     os.makedirs(output_folder, exist_ok=True)

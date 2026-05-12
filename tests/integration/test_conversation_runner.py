@@ -342,6 +342,44 @@ class TestConversationRunnerSingle:
         # Verify conversation file exists
         assert Path(result["filename"]).exists()
 
+    async def test_run_single_conversation_sanitizes_prefixed_model_filename(
+        self,
+        tmp_path: Path,
+        basic_agent_config: Dict[str, Any],
+        mock_llm_factory,
+    ) -> None:
+        """Provider-prefixed model names should not create nested log paths."""
+        conv_folder = tmp_path / "conversations"
+        persona_config = {
+            "model": "vertex_ai/claude-sonnet-4-5@20250929",
+            "temperature": 0.7,
+            "max_tokens": 1000,
+        }
+        runner = ConversationRunner(
+            persona_model_config=persona_config,
+            agent_model_config=basic_agent_config,
+            run_id="test_run_slash_model",
+            folder_name=str(conv_folder),
+        )
+
+        result = await runner.run_single_conversation(
+            persona_config={
+                "prompt": "Test persona prompt",
+                "name": "Test Persona",
+                "run": 1,
+            },
+            max_turns=2,
+            conversation_index=1,
+            run_number=1,
+        )
+
+        assert result["skipped"] is False
+        assert Path(result["filename"]).exists()
+        assert Path(result["log_file"]).exists()
+        assert "/" not in Path(result["filename"]).name
+        assert "/" not in Path(result["log_file"]).name
+        assert "vertex_ai_claude_sonnet_4_5_20250929" in Path(result["filename"]).stem
+
     async def test_persona_speaks_first_false_first_turn_is_provider(
         self,
         tmp_path: Path,
@@ -1015,9 +1053,9 @@ class TestConversationRunnerMultiple:
             for c in create_llm_calls
             if c.get("model_name") == basic_agent_config["model"]
         ]
-        assert (
-            len(agent_calls) == 4
-        ), "Expected 4 conversations => 4 agent create_llm calls"
+        assert len(agent_calls) == 4, (
+            "Expected 4 conversations => 4 agent create_llm calls"
+        )
         assert all(c.get("name") == expected_name for c in agent_calls)
         assert all(c.get("system_prompt") == expected_prompt for c in agent_calls)
 

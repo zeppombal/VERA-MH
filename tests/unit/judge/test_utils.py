@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from judge.utils import (
+    build_evaluation_run_folder_path,
     build_single_conversation_judge_run_key,
     extract_model_names_from_path,
     extract_persona_name_from_filename,
@@ -163,6 +164,24 @@ class TestExtractModelNamesFromPath:
         assert result["judge"] == "claude 3 5 opus"
         assert result["persona"] == "gpt 4 turbo"
         assert result["agent"] == "gemini 1 5 pro"
+
+    def test_extract_from_short_judge_dir_under_generation_dir(self, tmp_path):
+        """Short j_* folders inherit persona/agent names from their p_* parent."""
+        eval_dir = (
+            tmp_path
+            / "p_vertex_ai_claude__a_hosted_vllm_model__t30__r1__20260511_111305"
+            / "evaluations"
+            / "j_vertex_ai_claude_sonnet_4_5_20250929x1__20260511_112501_704"
+        )
+        eval_dir.mkdir(parents=True)
+        results_file = eval_dir / "results.csv"
+        results_file.write_text("dummy,data\n")
+
+        result = extract_model_names_from_path(str(results_file))
+
+        assert result["judge"] == "vertex ai claude sonnet 4 5 20250929x1"
+        assert result["persona"] == "vertex ai claude"
+        assert result["agent"] == "hosted vllm model"
 
 
 @pytest.mark.unit
@@ -380,3 +399,20 @@ class TestBuildSingleConversationJudgeRunKey:
             now=fixed,
         )
         assert key == "single_20260420_153045_123__Amelia_conv"
+
+
+@pytest.mark.unit
+class TestBuildEvaluationRunFolderPath:
+    """Tests for build_evaluation_run_folder_path."""
+
+    def test_uses_short_judge_folder_name(self, tmp_path):
+        path = build_evaluation_run_folder_path(
+            str(tmp_path),
+            "vertex_ai/claude-sonnet-4-5@20250929x1",
+            "20260511_112501_704",
+            "p_persona__a_agent__t30__r1__20260511_111305",
+        )
+
+        rel = str(path).removeprefix(str(tmp_path)).strip("/")
+        assert "/" not in rel
+        assert rel == "j_vertex_ai_claude_sonnet_4_5_20250929x1__20260511_112501_704"
